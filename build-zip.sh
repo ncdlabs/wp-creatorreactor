@@ -1,16 +1,16 @@
 #!/bin/bash
 set -e
 
-VERSION=$(grep -E "^ \* Version:" fanbridge.php | sed 's/.*Version: //')
-OUTPUT="fanbridge-${VERSION}.zip"
+VERSION=$(grep -E "^ \* Version:" creatorreactor.php | sed 's/.*Version: //')
+OUTPUT="creatorreactor-${VERSION}.zip"
 
-echo "Packaging FanBridge v${VERSION}..."
+echo "Packaging CreatorReactor v${VERSION}..."
 
 cd "$(dirname "$0")"
 
 rm -f "$OUTPUT"
 
-zip -r "$OUTPUT" fanbridge.php includes/ languages/ -x "*.DS_Store" "*/.git/*"
+zip -r "$OUTPUT" creatorreactor.php includes/ js/ languages/ -x "*.DS_Store" "*/.git/*"
 
 echo "Created: $OUTPUT"
 ls -lh "$OUTPUT"

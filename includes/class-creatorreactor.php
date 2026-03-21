@@ -1,20 +1,20 @@
 <?php
 /**
- * FanBridge - Unified Plugin
- * Supports both Direct and Broker modes
+ * Core plugin bootstrap (loaded from creatorreactor.php).
+ * Supports both Direct and Broker modes.
  *
- * @package FanBridge
+ * @package CreatorReactor
  * @author  ncdLabs
  * @company ncdLabs
  */
 
-namespace FanBridge;
+namespace CreatorReactor;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class FanBridge {
+class Plugin {
 
 	const MODE_BROKER = 'broker';
 	const MODE_DIRECT = 'direct';
@@ -25,31 +25,33 @@ class FanBridge {
 
 	public static function bootstrap() {
 		try {
-			require_once FANBRIDGE_PLUGIN_DIR . 'includes/class-entitlements.php';
-			require_once FANBRIDGE_PLUGIN_DIR . 'includes/class-admin-settings.php';
-			require_once FANBRIDGE_PLUGIN_DIR . 'includes/class-fanvue-oauth.php';
-			require_once FANBRIDGE_PLUGIN_DIR . 'includes/class-fanvue-client.php';
-			require_once FANBRIDGE_PLUGIN_DIR . 'includes/class-cron.php';
+			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-entitlements.php';
+			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-admin-settings.php';
+			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-creatorreactor-oauth.php';
+			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-creatorreactor-client.php';
+			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-cron.php';
+			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-broker-client.php';
 
-			Fanvue_OAuth::init();
+			Entitlements::maybe_migrate_fanvue_product_key();
+
+			CreatorReactor_OAuth::init();
 			Cron::init();
 			Admin_Settings::init();
 
-			if ( Admin_Settings::is_broker_mode() ) {
-				require_once FANBRIDGE_PLUGIN_DIR . 'includes/class-broker-client.php';
-				Broker_Client::init();
-			}
+			// Broker REST callback must register in all modes so OAuth redirects to
+			// .../broker-callback never hit rest_no_route (e.g. Fanvue app URI vs mode mismatch).
+			Broker_Client::init();
 		} catch ( \Throwable $e ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( 'FanBridge bootstrap error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
+				error_log( 'CreatorReactor bootstrap error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
 			}
 			try {
 				Admin_Settings::set_critical_error(
-					__( 'Bootstrap error:', 'fanbridge' ) . ' ' . $e->getMessage()
+					__( 'Bootstrap error:', 'creatorreactor' ) . ' ' . $e->getMessage()
 				);
 			} catch ( \Throwable $inner ) {
 				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-					error_log( 'FanBridge error logging failed: ' . $inner->getMessage() );
+					error_log( 'CreatorReactor error logging failed: ' . $inner->getMessage() );
 				}
 			}
 		}
@@ -71,7 +73,7 @@ class FanBridge {
 		if ( self::is_broker_mode() ) {
 			return Broker_Client::get_profile();
 		}
-		$client = new Fanvue_Client();
+		$client = new CreatorReactor_Client();
 		return $client->get_profile();
 	}
 
@@ -79,7 +81,7 @@ class FanBridge {
 		if ( self::is_broker_mode() ) {
 			return Broker_Client::get_subscribers( $page, $size );
 		}
-		$client = new Fanvue_Client();
+		$client = new CreatorReactor_Client();
 		return $client->list_subscribers( $page, $size );
 	}
 
@@ -87,7 +89,7 @@ class FanBridge {
 		if ( self::is_broker_mode() ) {
 			return Broker_Client::get_followers( $page, $size );
 		}
-		$client = new Fanvue_Client();
+		$client = new CreatorReactor_Client();
 		return $client->list_followers( $page, $size );
 	}
 }

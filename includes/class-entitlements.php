@@ -1,13 +1,13 @@
 <?php
 /**
- * Entitlements table and helpers for Fanvue subscribers and followers.
+ * Entitlements table and helpers for CreatorReactor subscribers and followers.
  *
- * @package FanBridge
+ * @package CreatorReactor
  * @author  ncdLabs
  * @company ncdLabs
  */
 
-namespace FanBridge;
+namespace CreatorReactor;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -19,23 +19,49 @@ class Entitlements {
 	const STATUS_INACTIVE = 'inactive';
 	const STATUS_UNKNOWN  = 'unknown';
 
-	const TIER_FOLLOWER = '__fanvue_follower__';
+	const TIER_FOLLOWER = '__creatorreactor_follower__';
 
-	const PRODUCT_FANVUE   = 'fanvue';
+	/** Canonical FanVue integration key (stored in entitlements and settings). */
+	const PRODUCT_FANVUE = 'fanvue';
+
+	/** @deprecated Legacy slug; normalized to {@see PRODUCT_FANVUE}. */
+	const PRODUCT_CREATORREACTOR = 'creatorreactor';
+
 	const PRODUCT_ONLYFANS = 'onlyfans';
 
-	const USERMETA_FANVUE_UUID = 'fanvue_user_uuid';
+	/** Set when entitlements/options were migrated from creatorreactor → fanvue. */
+	const OPTION_FANVUE_PRODUCT_KEY_MIGRATED = 'creatorreactor_fanvue_product_key_v1';
+
+	const USERMETA_CREATORREACTOR_UUID = 'creatorreactor_user_uuid';
 
 	private static $schema_checked = false;
 
 	public static function get_table_name() {
 		global $wpdb;
-		return $wpdb->prefix . FANBRIDGE_TABLE_ENTITLEMENTS;
+		return $wpdb->prefix . CREATORREACTOR_TABLE_ENTITLEMENTS;
+	}
+
+	/**
+	 * Rename the pre-rename entitlements table to the current name if present.
+	 */
+	private static function maybe_rename_table_from_before_rename() {
+		global $wpdb;
+		$old = $wpdb->prefix . 'fan' . 'bridge_entitlements';
+		$new = $wpdb->prefix . CREATORREACTOR_TABLE_ENTITLEMENTS;
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table names from trusted prefixes.
+		$old_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $old ) );
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared
+		$new_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $new ) );
+		if ( $old_exists && ! $new_exists ) {
+			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- identifiers from $wpdb->prefix only.
+			$wpdb->query( "RENAME TABLE `{$old}` TO `{$new}`" );
+		}
 	}
 
 	public static function create_table() {
 		try {
 			global $wpdb;
+			self::maybe_rename_table_from_before_rename();
 			$table   = self::get_table_name();
 			$charset = $wpdb->get_charset_collate();
 
@@ -45,7 +71,7 @@ class Entitlements {
 				product varchar(50) NOT NULL DEFAULT 'fanvue',
 				email varchar(255) DEFAULT NULL,
 				display_name varchar(255) DEFAULT NULL,
-				fanvue_user_uuid varchar(36) DEFAULT NULL,
+				creatorreactor_user_uuid varchar(36) DEFAULT NULL,
 				status varchar(20) NOT NULL DEFAULT 'unknown',
 				tier varchar(100) DEFAULT NULL,
 				updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
@@ -54,7 +80,7 @@ class Entitlements {
 				KEY wp_user_id (wp_user_id),
 				KEY product (product),
 				KEY email (email(191)),
-				KEY fanvue_user_uuid (fanvue_user_uuid),
+				KEY creatorreactor_user_uuid (creatorreactor_user_uuid),
 				KEY status_expires (status, expires_at)
 			) {$charset};";
 
@@ -65,7 +91,7 @@ class Entitlements {
 			self::$schema_checked = true;
 		} catch ( \Throwable $e ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( 'FanBridge create_table error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
+				error_log( 'CreatorReactor create_table error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
 			}
 			throw $e;
 		}
@@ -105,13 +131,19 @@ class Entitlements {
 
 	public static function normalize_product( $product ) {
 		$product = strtolower( trim( sanitize_text_field( (string) $product ) ) );
-		return $product !== '' ? $product : self::PRODUCT_FANVUE;
+		if ( $product === '' ) {
+			return self::PRODUCT_FANVUE;
+		}
+		if ( $product === self::PRODUCT_CREATORREACTOR ) {
+			return self::PRODUCT_FANVUE;
+		}
+		return $product;
 	}
 
 	public static function product_label( $product ) {
 		$product = self::normalize_product( $product );
 		if ( $product === self::PRODUCT_FANVUE ) {
-			return 'FanVue';
+			return 'fanvue';
 		}
 		if ( $product === self::PRODUCT_ONLYFANS ) {
 			return 'OnlyFans';
@@ -138,12 +170,12 @@ class Entitlements {
 		}
 	}
 
-	public static function upsert_by_fanvue_uuid( $fanvue_uuid, $status, $expires_at, $wp_user_id = null, $email = '', $tier = null, $display_name = null, $product = self::PRODUCT_FANVUE ) {
+	public static function upsert_by_creatorreactor_uuid( $creatorreactor_uuid, $status, $expires_at, $wp_user_id = null, $email = '', $tier = null, $display_name = null, $product = self::PRODUCT_FANVUE ) {
 		try {
 			self::maybe_ensure_schema();
 			global $wpdb;
 			$table = self::get_table_name();
-			$fanvue_uuid  = sanitize_text_field( $fanvue_uuid );
+			$creatorreactor_uuid  = sanitize_text_field( $creatorreactor_uuid );
 			$status       = in_array( $status, [ self::STATUS_ACTIVE, self::STATUS_INACTIVE, self::STATUS_UNKNOWN ], true ) ? $status : self::STATUS_UNKNOWN;
 			$product      = self::normalize_product( $product );
 			$email        = sanitize_email( $email );
@@ -152,15 +184,15 @@ class Entitlements {
 
 			$existing = $wpdb->get_var(
 				$wpdb->prepare(
-					"SELECT id FROM {$table} WHERE fanvue_user_uuid = %s AND product = %s LIMIT 1",
-					$fanvue_uuid,
+					"SELECT id FROM {$table} WHERE creatorreactor_user_uuid = %s AND product = %s LIMIT 1",
+					$creatorreactor_uuid,
 					$product
 				)
 			);
 
 			$data = [
 				'product'          => $product,
-				'fanvue_user_uuid' => $fanvue_uuid,
+				'creatorreactor_user_uuid' => $creatorreactor_uuid,
 				'status'           => $status,
 				'expires_at'       => $expires_at,
 				'updated_at'       => current_time( 'mysql' ),
@@ -187,19 +219,19 @@ class Entitlements {
 			return $result !== false;
 		} catch ( \Throwable $e ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( 'FanBridge upsert_by_fanvue_uuid error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
+				error_log( 'CreatorReactor upsert_by_creatorreactor_uuid error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
 			}
 			return false;
 		}
 	}
 
-	public static function mark_missing_as_inactive( array $active_fanvue_uuids, $expires_at, $product = self::PRODUCT_FANVUE ) {
+	public static function mark_missing_as_inactive( array $active_creatorreactor_uuids, $expires_at, $product = self::PRODUCT_FANVUE ) {
 		try {
 			self::maybe_ensure_schema();
 			global $wpdb;
 			$table = self::get_table_name();
 			$product = self::normalize_product( $product );
-			if ( empty( $active_fanvue_uuids ) ) {
+			if ( empty( $active_creatorreactor_uuids ) ) {
 				$wpdb->query(
 					$wpdb->prepare(
 						"UPDATE {$table} SET status = %s, expires_at = %s, updated_at = %s WHERE status = %s AND product = %s",
@@ -213,19 +245,19 @@ class Entitlements {
 				return (int) $wpdb->rows_affected;
 			}
 
-			$placeholders = implode( ',', array_fill( 0, count( $active_fanvue_uuids ), '%s' ) );
+			$placeholders = implode( ',', array_fill( 0, count( $active_creatorreactor_uuids ), '%s' ) );
 			$query        = $wpdb->prepare(
-				"UPDATE {$table} SET status = %s, expires_at = %s, updated_at = %s WHERE status = %s AND product = %s AND fanvue_user_uuid NOT IN ($placeholders)",
+				"UPDATE {$table} SET status = %s, expires_at = %s, updated_at = %s WHERE status = %s AND product = %s AND creatorreactor_user_uuid NOT IN ($placeholders)",
 				array_merge(
 					[ self::STATUS_INACTIVE, $expires_at, current_time( 'mysql' ), self::STATUS_ACTIVE, $product ],
-					array_map( 'sanitize_text_field', $active_fanvue_uuids )
+					array_map( 'sanitize_text_field', $active_creatorreactor_uuids )
 				)
 			);
 			$wpdb->query( $query );
 			return (int) $wpdb->rows_affected;
 		} catch ( \Throwable $e ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( 'FanBridge mark_missing_as_inactive error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
+				error_log( 'CreatorReactor mark_missing_as_inactive error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
 			}
 			return 0;
 		}
@@ -285,5 +317,31 @@ class Entitlements {
 		$row   = $wpdb->get_row( $wpdb->prepare( $query, $args ) );
 
 		return $row !== null;
+	}
+
+	/**
+	 * One-time migration: stored product key fanvue (replaces legacy creatorreactor).
+	 */
+	public static function maybe_migrate_fanvue_product_key() {
+		if ( get_option( self::OPTION_FANVUE_PRODUCT_KEY_MIGRATED, '' ) === '1' ) {
+			return;
+		}
+
+		global $wpdb;
+		$table = self::get_table_name();
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from trusted prefix.
+		$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+		if ( $exists === $table ) {
+			// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- identifiers from $wpdb->prefix only.
+			$wpdb->query( "UPDATE {$table} SET product = 'fanvue' WHERE product = 'creatorreactor'" );
+		}
+
+		$opts = get_option( 'creatorreactor_settings', [] );
+		if ( is_array( $opts ) && isset( $opts['product'] ) && is_string( $opts['product'] ) && strtolower( trim( $opts['product'] ) ) === self::PRODUCT_CREATORREACTOR ) {
+			$opts['product'] = self::PRODUCT_FANVUE;
+			update_option( 'creatorreactor_settings', $opts );
+		}
+
+		update_option( self::OPTION_FANVUE_PRODUCT_KEY_MIGRATED, '1' );
 	}
 }

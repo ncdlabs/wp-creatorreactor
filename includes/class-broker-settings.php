@@ -2,11 +2,11 @@
 /**
  * Broker Settings - Placeholder for future implementation.
  *
- * @package FanBridge
+ * @package CreatorReactor
  * @author  ncdLabs
  */
 
-namespace FanBridge;
+namespace CreatorReactor;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;

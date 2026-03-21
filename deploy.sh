@@ -3,7 +3,7 @@ set -e
 
 SSH_HOST="u650398700@82.29.157.171"
 SSH_PORT="65002"
-REMOTE_PATH="/home/u650398700/domains/lightskyblue-lyrebird-554318.hostingersite.com/public_html/wp-content/plugins/fanbridge-2.0.0/"
+REMOTE_PATH="/home/u650398700/domains/lightskyblue-lyrebird-554318.hostingersite.com/public_html/wp-content/plugins/creatorreactor-2.0.1/"
 
 LOCAL_DIR="$(dirname "$0")"
 

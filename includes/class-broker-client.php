@@ -1,14 +1,14 @@
 <?php
 /**
- * FanBridge OAuth Broker Client
+ * CreatorReactor OAuth Broker Client
  * Handles communication with the centralized OAuth broker
  *
- * @package FanBridge
+ * @package CreatorReactor
  * @author  ncdLabs
  * @company ncdLabs
  */
 
-namespace FanBridge;
+namespace CreatorReactor;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
@@ -16,28 +16,37 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class Broker_Client {
 
-	const REST_NAMESPACE            = 'fanbridge/v1';
+	const REST_NAMESPACE            = 'creatorreactor/v1';
 	const REST_ROUTE_CONNECT       = '/broker-connect';
 	const REST_ROUTE_DISCONNECT    = '/broker-disconnect';
 	const REST_ROUTE_STATUS        = '/broker-status';
 	const REST_ROUTE_CALLBACK      = '/broker-callback';
 
-	const OPTION_JWT_TOKEN         = 'fanbridge_login_jwt_token';
+	const OPTION_JWT_TOKEN         = 'creatorreactor_login_jwt_token';
 
 	public static function init() {
 		add_action( 'rest_api_init', [ __CLASS__, 'register_routes' ] );
 	}
 
+	/** Default broker OAuth callback URL (creatorreactor/v1/broker-callback). */
+	public static function get_default_redirect_uri() {
+		return CreatorReactor_OAuth::get_rest_redirect_uri( self::REST_NAMESPACE, self::REST_ROUTE_CALLBACK );
+	}
+
+	/** Legacy fanvue/v1 path for the same broker callback. */
+	public static function get_legacy_fanvue_redirect_uri() {
+		return CreatorReactor_OAuth::get_rest_redirect_uri( CreatorReactor_OAuth::REST_NAMESPACE_LEGACY_FANVUE, self::REST_ROUTE_CALLBACK );
+	}
+
 	public static function register_routes() {
-		register_rest_route(
-			self::REST_NAMESPACE,
-			self::REST_ROUTE_CALLBACK,
-			[
-				'methods'             => 'GET',
-				'callback'            => [ __CLASS__, 'handle_callback' ],
-				'permission_callback' => '__return_true',
-			]
-		);
+		$args = [
+			'methods'             => [ 'GET', 'POST', 'HEAD' ],
+			'callback'            => [ __CLASS__, 'handle_callback' ],
+			'permission_callback' => '__return_true',
+		];
+		foreach ( CreatorReactor_OAuth::oauth_callback_namespaces() as $namespace ) {
+			register_rest_route( $namespace, self::REST_ROUTE_CALLBACK, $args );
+		}
 	}
 
 	private static function get_broker_options() {
@@ -65,24 +74,24 @@ class Broker_Client {
 		return null;
 	}
 
-	public static function get_fanvue_oauth_client_id() {
+	public static function get_creatorreactor_oauth_client_id() {
 		$opts = self::get_broker_options();
-		return isset( $opts['fanvue_oauth_client_id'] ) ? $opts['fanvue_oauth_client_id'] : null;
+		return isset( $opts['creatorreactor_oauth_client_id'] ) ? $opts['creatorreactor_oauth_client_id'] : null;
 	}
 
-	public static function get_fanvue_oauth_redirect_uri() {
+	public static function get_creatorreactor_oauth_redirect_uri() {
 		$opts = self::get_broker_options();
-		return isset( $opts['fanvue_oauth_redirect_uri'] ) ? $opts['fanvue_oauth_redirect_uri'] : null;
+		return isset( $opts['creatorreactor_oauth_redirect_uri'] ) ? $opts['creatorreactor_oauth_redirect_uri'] : null;
 	}
 
-	public static function get_fanvue_oauth_scopes() {
+	public static function get_creatorreactor_oauth_scopes() {
 		$opts = self::get_broker_options();
-		return isset( $opts['fanvue_oauth_scopes'] ) ? $opts['fanvue_oauth_scopes'] : null;
+		return isset( $opts['creatorreactor_oauth_scopes'] ) ? $opts['creatorreactor_oauth_scopes'] : null;
 	}
 
-	public static function get_fanvue_api_version() {
+	public static function get_creatorreactor_api_version() {
 		$opts = self::get_broker_options();
-		return isset( $opts['fanvue_api_version'] ) ? $opts['fanvue_api_version'] : '2025-06-26';
+		return isset( $opts['creatorreactor_api_version'] ) ? $opts['creatorreactor_api_version'] : '2025-06-26';
 	}
 
 	public static function is_configured() {
@@ -104,32 +113,35 @@ class Broker_Client {
 			'site_id' => $site_id,
 		];
 
-		$client_id = self::get_fanvue_oauth_client_id();
+		$client_id = self::get_creatorreactor_oauth_client_id();
 		if ( ! empty( $client_id ) ) {
 			$params['client_id'] = $client_id;
 		}
 
-		$redirect_uri = self::get_fanvue_oauth_redirect_uri();
+		$redirect_uri = self::get_creatorreactor_oauth_redirect_uri();
 		if ( ! empty( $redirect_uri ) ) {
 			$params['redirect_uri'] = $redirect_uri;
 		}
 
-		$scopes = self::get_fanvue_oauth_scopes();
+		$scopes = self::get_creatorreactor_oauth_scopes();
 		if ( ! empty( $scopes ) ) {
 			$params['scope'] = $scopes;
 		}
 
-		return add_query_arg( $params, self::get_broker_url() . '/connect/fanvue' );
+		return add_query_arg( $params, self::get_broker_url() . '/connect/creatorreactor' );
 	}
 
 	public static function handle_callback( $request ) {
 		try {
-			$connection = $request->get_param( 'fanvue_connection' );
+			Admin_Settings::log_connection( 'info', 'Broker REST callback: request received.' );
+
+			$connection = $request->get_param( 'creatorreactor_connection' );
 			$creator_id = $request->get_param( 'creator_id' );
 			$site_id    = $request->get_param( 'site_id' );
 			$error      = $request->get_param( 'error' );
 
 			if ( $error ) {
+				Admin_Settings::log_connection( 'error', 'Broker callback: error parameter — ' . (string) $error );
 				Admin_Settings::set_last_error( 'Broker: ' . $error );
 				wp_safe_redirect(
 					admin_url( 'options-general.php?page=' . Admin_Settings::PAGE_SLUG . '&status=error' )
@@ -141,12 +153,19 @@ class Broker_Client {
 				$jwt = self::exchange_code_for_jwt( $site_id, $creator_id );
 				if ( $jwt ) {
 					self::store_jwt_token( $jwt );
+					Admin_Settings::log_connection( 'info', 'Broker callback: JWT stored; connection success.' );
 					Admin_Settings::set_last_error( '' );
 					wp_safe_redirect(
 						admin_url( 'options-general.php?page=' . Admin_Settings::PAGE_SLUG . '&status=connected' )
 					);
 					exit;
 				}
+				Admin_Settings::log_connection( 'error', 'Broker callback: JWT exchange returned empty token.' );
+			} else {
+				Admin_Settings::log_connection(
+					'error',
+					'Broker callback: unexpected parameters (connection=' . (string) $connection . ', site_id=' . ( $site_id ? 'set' : 'empty' ) . ', creator_id=' . ( $creator_id ? 'set' : 'empty' ) . ').'
+				);
 			}
 
 			wp_safe_redirect(
@@ -154,9 +173,7 @@ class Broker_Client {
 			);
 			exit;
 		} catch ( \Throwable $e ) {
-			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( 'FanBridge handle_callback error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
-			}
+			Admin_Settings::log_connection( 'error', 'Broker callback: exception — ' . $e->getMessage() . ' (' . basename( $e->getFile() ) . ':' . $e->getLine() . ')' );
 			Admin_Settings::set_last_error( 'Broker callback failed: ' . $e->getMessage() );
 			wp_safe_redirect( admin_url( 'options-general.php?page=' . Admin_Settings::PAGE_SLUG . '&status=error' ) );
 			exit;
@@ -179,18 +196,28 @@ class Broker_Client {
 		);
 
 		if ( is_wp_error( $response ) ) {
+			Admin_Settings::log_connection( 'error', 'Broker JWT exchange: request failed — ' . $response->get_error_message() );
 			Admin_Settings::set_last_error( 'Failed to exchange code: ' . $response->get_error_message() );
 			return null;
 		}
 
 		$code = wp_remote_retrieve_response_code( $response );
 		if ( $code !== 200 ) {
+			$body = wp_remote_retrieve_body( $response );
+			if ( strlen( $body ) > 500 ) {
+				$body = substr( $body, 0, 500 ) . '…';
+			}
+			Admin_Settings::log_connection( 'error', 'Broker JWT exchange: HTTP ' . $code . '. ' . preg_replace( '/\s+/', ' ', wp_strip_all_tags( $body ) ) );
 			Admin_Settings::set_last_error( 'Token exchange failed: HTTP ' . $code );
 			return null;
 		}
 
 		$body = json_decode( wp_remote_retrieve_body( $response ), true );
-		return isset( $body['token'] ) ? $body['token'] : null;
+		if ( isset( $body['token'] ) ) {
+			return $body['token'];
+		}
+		Admin_Settings::log_connection( 'error', 'Broker JWT exchange: HTTP 200 but response JSON missing token key.' );
+		return null;
 	}
 
 	private static function store_jwt_token( $token ) {
@@ -206,6 +233,7 @@ class Broker_Client {
 		try {
 			$jwt = self::get_jwt_token();
 			if ( ! $jwt ) {
+				Admin_Settings::log_connection( 'debug', 'Broker disconnect: no JWT to revoke (already cleared).' );
 				return false;
 			}
 
@@ -236,7 +264,7 @@ class Broker_Client {
 			return true;
 		} catch ( \Throwable $e ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( 'FanBridge disconnect error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
+				error_log( 'CreatorReactor disconnect error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
 			}
 			self::clear_credentials();
 			return false;
@@ -264,11 +292,32 @@ class Broker_Client {
 
 	public static function test_connection() {
 		try {
+			if ( ! self::is_configured() ) {
+				return [
+					'success' => false,
+					'message' => __( 'Broker URL and Site ID must be configured for Agency mode.', 'creatorreactor' ),
+					'checks' => [
+						[
+							'label' => __( 'Broker URL & Site ID', 'creatorreactor' ),
+							'pass' => false,
+							'message' => __( 'Required: set both in Broker Settings.', 'creatorreactor' ),
+						],
+					],
+				];
+			}
+
 			$jwt = self::get_jwt_token();
 			if ( ! $jwt ) {
 				return [
 					'success' => false,
-					'message' => __( 'Not connected to broker. Please connect first.', 'fanbridge' ),
+					'message' => __( 'Not connected to broker. Use Connect after saving broker settings.', 'creatorreactor' ),
+					'checks' => [
+						[
+							'label' => __( 'Broker session', 'creatorreactor' ),
+							'pass' => false,
+							'message' => __( 'No JWT yet — complete OAuth via Connect.', 'creatorreactor' ),
+						],
+					],
 				];
 			}
 
@@ -277,14 +326,28 @@ class Broker_Client {
 				return [
 					'success' => false,
 					'message' => $result->get_error_message(),
+					'checks' => [
+						[
+							'label' => __( 'CreatorReactor API (via broker)', 'creatorreactor' ),
+							'pass' => false,
+							'message' => $result->get_error_message(),
+						],
+					],
 				];
 			}
 
-			$name = isset( $result['displayName'] ) ? $result['displayName'] : ( isset( $result['handle'] ) ? $result['handle'] : __( 'Unknown', 'fanbridge' ) );
+			$name = isset( $result['displayName'] ) ? $result['displayName'] : ( isset( $result['handle'] ) ? $result['handle'] : __( 'Unknown', 'creatorreactor' ) );
 
 			return [
 				'success' => true,
-				'message' => sprintf( __( 'Connected successfully as %s', 'fanbridge' ), $name ),
+				'message' => sprintf( __( 'Connected successfully as %s', 'creatorreactor' ), $name ),
+				'checks' => [
+					[
+						'label' => __( 'CreatorReactor API (via broker)', 'creatorreactor' ),
+						'pass' => true,
+						'message' => sprintf( __( 'OK (%s)', 'creatorreactor' ), $name ),
+					],
+				],
 			];
 		} catch ( \Throwable $e ) {
 			return [
@@ -301,7 +364,7 @@ class Broker_Client {
 				return new \WP_Error( 'not_connected', 'Not connected to broker' );
 			}
 
-			$url = self::get_broker_url() . '/api/fanvue' . $endpoint;
+			$url = self::get_broker_url() . '/api/creatorreactor' . $endpoint;
 			if ( ! empty( $args ) ) {
 				$url = add_query_arg( $args, $url );
 			}
@@ -312,7 +375,7 @@ class Broker_Client {
 					'timeout' => 20,
 					'headers' => [
 						'Authorization'         => 'Bearer ' . $jwt,
-						'X-Fanvue-API-Version' => self::get_fanvue_api_version(),
+						'X-CreatorReactor-API-Version' => self::get_creatorreactor_api_version(),
 					],
 				]
 			);
@@ -334,7 +397,7 @@ class Broker_Client {
 			return json_decode( wp_remote_retrieve_body( $response ), true );
 		} catch ( \Throwable $e ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( 'FanBridge api_get error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
+				error_log( 'CreatorReactor api_get error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
 			}
 			return new \WP_Error( 'api_error', 'API request failed: ' . $e->getMessage() );
 		}

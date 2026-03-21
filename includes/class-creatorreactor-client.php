@@ -1,22 +1,22 @@
 <?php
 /**
- * Fanvue API client: OAuth 2.0 access token + list subscribers and followers.
+ * CreatorReactor API client: OAuth 2.0 access token + list subscribers and followers.
  *
- * @package FanBridge
+ * @package CreatorReactor
  * @author  ncdLabs
  * @company ncdLabs
  */
 
-namespace FanBridge;
+namespace CreatorReactor;
 
 if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-class Fanvue_Client {
+class CreatorReactor_Client {
 
 	public static function get_access_token() {
-		return Fanvue_OAuth::get_access_token();
+		return CreatorReactor_OAuth::get_access_token();
 	}
 
 	private static function fetch_first_non_404_response( $base, $token, $api_version, $endpoints ) {
@@ -36,7 +36,7 @@ class Fanvue_Client {
 					'Content-Type'  => 'application/json',
 				];
 				if ( is_string( $version_header ) && $version_header !== '' ) {
-					$headers['X-Fanvue-API-Version'] = $version_header;
+					$headers['X-CreatorReactor-API-Version'] = $version_header;
 				}
 
 				$response = wp_remote_get(
@@ -103,23 +103,23 @@ class Fanvue_Client {
 		$all_passed = true;
 
 		$opts = Admin_Settings::get_options();
-		$client_id = ! empty( $opts['fanvue_oauth_client_id'] );
-		$client_secret = ! empty( $opts['fanvue_oauth_client_secret'] );
-		$base = rtrim( $opts['fanvue_api_base_url'] ?? 'https://api.fanvue.com', '/' );
+		$client_id = ! empty( $opts['creatorreactor_oauth_client_id'] );
+		$client_secret = ! empty( $opts['creatorreactor_oauth_client_secret'] );
+		$base = rtrim( $opts['creatorreactor_api_base_url'] ?? CreatorReactor_OAuth::API_BASE_URL, '/' );
 
 		$checks[] = [
-			'label' => __( 'OAuth Client ID', 'fanbridge' ),
+			'label' => __( 'OAuth Client ID', 'creatorreactor' ),
 			'pass' => $client_id,
-			'message' => $client_id ? __( 'Configured', 'fanbridge' ) : __( 'Not configured', 'fanbridge' ),
+			'message' => $client_id ? __( 'Configured', 'creatorreactor' ) : __( 'Not configured', 'creatorreactor' ),
 		];
 		if ( ! $client_id ) {
 			$all_passed = false;
 		}
 
 		$checks[] = [
-			'label' => __( 'OAuth Client Secret', 'fanbridge' ),
+			'label' => __( 'OAuth Client Secret', 'creatorreactor' ),
 			'pass' => $client_secret,
-			'message' => $client_secret ? __( 'Configured', 'fanbridge' ) : __( 'Not configured', 'fanbridge' ),
+			'message' => $client_secret ? __( 'Configured', 'creatorreactor' ) : __( 'Not configured', 'creatorreactor' ),
 		];
 		if ( ! $client_secret ) {
 			$all_passed = false;
@@ -142,9 +142,9 @@ class Fanvue_Client {
 				$code = wp_remote_retrieve_response_code( $response );
 				$api_reachable = $code > 0;
 				if ( $code === 401 ) {
-					$api_message = sprintf( __( '%1$s — HTTP %2$d (reachable, auth required)', 'fanbridge' ), $base, $code );
+					$api_message = sprintf( __( '%1$s — HTTP %2$d (reachable, auth required)', 'creatorreactor' ), $base, $code );
 				} else {
-					$api_message = sprintf( __( '%1$s — HTTP %2$d', 'fanbridge' ), $base, $code );
+					$api_message = sprintf( __( '%1$s — HTTP %2$d', 'creatorreactor' ), $base, $code );
 				}
 				if ( ! $api_reachable ) {
 					$all_passed = false;
@@ -155,24 +155,24 @@ class Fanvue_Client {
 			$all_passed = false;
 		}
 		$checks[] = [
-			'label' => __( 'API Endpoint Reachable', 'fanbridge' ),
+			'label' => __( 'API Endpoint Reachable', 'creatorreactor' ),
 			'pass' => $api_reachable,
-			'message' => $api_message ?: ( $api_reachable ? __( 'OK', 'fanbridge' ) : __( 'Failed', 'fanbridge' ) ),
+			'message' => $api_message ?: ( $api_reachable ? __( 'OK', 'creatorreactor' ) : __( 'Failed', 'creatorreactor' ) ),
 		];
 
 		$token = self::get_access_token();
 		$checks[] = [
-			'label' => __( 'OAuth Token', 'fanbridge' ),
+			'label' => __( 'OAuth Token', 'creatorreactor' ),
 			'pass' => ! empty( $token ),
-			'message' => ! empty( $token ) ? __( 'Valid', 'fanbridge' ) : __( 'Not authenticated', 'fanbridge' ),
+			'message' => ! empty( $token ) ? __( 'Valid', 'creatorreactor' ) : __( 'Not authenticated', 'creatorreactor' ),
 		];
 		if ( ! $token ) {
 			$all_passed = false;
 		}
 
 		if ( $token ) {
-			$api_version = isset( $opts['fanvue_api_version'] ) ? $opts['fanvue_api_version'] : '2025-06-26';
-			$creator_id = isset( $opts['fanvue_creator_id'] ) ? trim( (string) $opts['fanvue_creator_id'] ) : '';
+			$api_version = isset( $opts['creatorreactor_api_version'] ) ? $opts['creatorreactor_api_version'] : '2025-06-26';
+			$creator_id = isset( $opts['creatorreactor_creator_id'] ) ? trim( (string) $opts['creatorreactor_creator_id'] ) : '';
 			$oauth_valid = false;
 			$oauth_message = '';
 			try {
@@ -190,24 +190,24 @@ class Fanvue_Client {
 						$body = json_decode( wp_remote_retrieve_body( $response ), true );
 						$name = isset( $body['displayName'] ) ? $body['displayName'] : ( isset( $body['handle'] ) ? $body['handle'] : null );
 						if ( $name ) {
-							$oauth_message = sprintf( __( 'Connected as %s', 'fanbridge' ), $name );
+							$oauth_message = sprintf( __( 'Connected as %s', 'creatorreactor' ), $name );
 						} else {
-							$oauth_message = __( 'Authenticated', 'fanbridge' );
+							$oauth_message = __( 'Authenticated', 'creatorreactor' );
 						}
 						if ( ! is_string( $version_header ) || $version_header === '' ) {
-							$oauth_message .= __( ' (without API version header)', 'fanbridge' );
+							$oauth_message .= __( ' (without API version header)', 'creatorreactor' );
 						}
 					} elseif ( $code === 401 ) {
-						$oauth_message = __( 'Token expired or invalid', 'fanbridge' );
+						$oauth_message = __( 'Token expired or invalid', 'creatorreactor' );
 						$all_passed = false;
 					} elseif ( $code === 403 ) {
 						$oauth_valid = true;
-						$oauth_message = sprintf( __( 'Authenticated, but access denied for %s (HTTP 403)', 'fanbridge' ), $endpoint ?: '/me' );
+						$oauth_message = sprintf( __( 'Authenticated, but access denied for %s (HTTP 403)', 'creatorreactor' ), $endpoint ?: '/me' );
 					} elseif ( $code === 404 ) {
-						$oauth_message = sprintf( __( 'No OAuth verification endpoint found (last tried %s)', 'fanbridge' ), $endpoint ?: '/me' );
+						$oauth_message = sprintf( __( 'No OAuth verification endpoint found (last tried %s)', 'creatorreactor' ), $endpoint ?: '/me' );
 						$all_passed = false;
 					} else {
-						$oauth_message = sprintf( __( 'HTTP %d', 'fanbridge' ), $code );
+						$oauth_message = sprintf( __( 'HTTP %d', 'creatorreactor' ), $code );
 						$all_passed = false;
 					}
 				}
@@ -216,7 +216,7 @@ class Fanvue_Client {
 				$all_passed = false;
 			}
 			$checks[] = [
-				'label' => __( 'OAuth Credentials', 'fanbridge' ),
+				'label' => __( 'OAuth Credentials', 'creatorreactor' ),
 				'pass' => $oauth_valid,
 				'message' => $oauth_message,
 			];
@@ -224,7 +224,7 @@ class Fanvue_Client {
 
 		return [
 			'success' => $all_passed,
-			'message' => $all_passed ? __( 'All checks passed', 'fanbridge' ) : __( 'Some checks failed', 'fanbridge' ),
+			'message' => $all_passed ? __( 'All checks passed', 'creatorreactor' ) : __( 'Some checks failed', 'creatorreactor' ),
 			'checks' => $checks,
 		];
 	}
@@ -233,13 +233,13 @@ class Fanvue_Client {
 		try {
 			$token = $this->get_access_token();
 			if ( ! $token ) {
-				Admin_Settings::set_last_error( __( 'No OAuth token. Connect to Fanvue in the OAuth tab, then run Sync again.', 'fanbridge' ) );
+				Admin_Settings::set_last_error( __( 'No OAuth token. Connect to creatorreactor in the OAuth tab, then run Sync again.', 'creatorreactor' ) );
 				return null;
 			}
 
 			$opts       = Admin_Settings::get_options();
-			$base       = rtrim( $opts['fanvue_api_base_url'] ?? 'https://api.fanvue.com', '/' );
-			$creator_id = isset( $opts['fanvue_creator_id'] ) ? trim( (string) $opts['fanvue_creator_id'] ) : '';
+			$base       = rtrim( $opts['creatorreactor_api_base_url'] ?? CreatorReactor_OAuth::API_BASE_URL, '/' );
+			$creator_id = isset( $opts['creatorreactor_creator_id'] ) ? trim( (string) $opts['creatorreactor_creator_id'] ) : '';
 
 			if ( $creator_id !== '' ) {
 				$url = $base . '/creators/' . rawurlencode( $creator_id ) . '/subscribers';
@@ -261,7 +261,7 @@ class Fanvue_Client {
 					'timeout' => 20,
 					'headers' => [
 						'Authorization'        => 'Bearer ' . $token,
-						'X-Fanvue-API-Version' => '2025-06-26',
+						'X-CreatorReactor-API-Version' => '2025-06-26',
 						'Content-Type'         => 'application/json',
 					],
 				]
@@ -287,7 +287,7 @@ class Fanvue_Client {
 				'pagination' => isset( $data['pagination'] ) && is_array( $data['pagination'] ) ? $data['pagination'] : [ 'page' => 1, 'size' => 0, 'hasMore' => false ],
 			];
 		} catch ( \Throwable $e ) {
-			Admin_Settings::set_critical_error( __( 'List subscribers failed:', 'fanbridge' ) . ' ' . $e->getMessage() . ' (' . basename( $e->getFile() ) . ':' . $e->getLine() . ')' );
+			Admin_Settings::set_critical_error( __( 'List subscribers failed:', 'creatorreactor' ) . ' ' . $e->getMessage() . ' (' . basename( $e->getFile() ) . ':' . $e->getLine() . ')' );
 			Admin_Settings::set_last_error( $e->getMessage() );
 			return null;
 		}
@@ -297,12 +297,12 @@ class Fanvue_Client {
 		try {
 			$token = $this->get_access_token();
 			if ( ! $token ) {
-				Admin_Settings::set_last_error( __( 'No OAuth token. Connect to Fanvue in the OAuth tab, then run Sync again.', 'fanbridge' ) );
+				Admin_Settings::set_last_error( __( 'No OAuth token. Connect to creatorreactor in the OAuth tab, then run Sync again.', 'creatorreactor' ) );
 				return null;
 			}
 
 			$opts = Admin_Settings::get_options();
-			$base = rtrim( $opts['fanvue_api_base_url'] ?? 'https://api.fanvue.com', '/' );
+			$base = rtrim( $opts['creatorreactor_api_base_url'] ?? CreatorReactor_OAuth::API_BASE_URL, '/' );
 			$url  = $base . '/followers';
 
 			$url = add_query_arg(
@@ -319,7 +319,7 @@ class Fanvue_Client {
 					'timeout' => 20,
 					'headers' => [
 						'Authorization'        => 'Bearer ' . $token,
-						'X-Fanvue-API-Version' => '2025-06-26',
+						'X-CreatorReactor-API-Version' => '2025-06-26',
 						'Content-Type'         => 'application/json',
 					],
 				]
@@ -345,7 +345,7 @@ class Fanvue_Client {
 				'pagination' => isset( $data['pagination'] ) && is_array( $data['pagination'] ) ? $data['pagination'] : [ 'page' => 1, 'size' => 0, 'hasMore' => false ],
 			];
 		} catch ( \Throwable $e ) {
-			Admin_Settings::set_critical_error( __( 'List followers failed:', 'fanbridge' ) . ' ' . $e->getMessage() . ' (' . basename( $e->getFile() ) . ':' . $e->getLine() . ')' );
+			Admin_Settings::set_critical_error( __( 'List followers failed:', 'creatorreactor' ) . ' ' . $e->getMessage() . ' (' . basename( $e->getFile() ) . ':' . $e->getLine() . ')' );
 			Admin_Settings::set_last_error( $e->getMessage() );
 			return null;
 		}
@@ -359,9 +359,9 @@ class Fanvue_Client {
 			}
 
 			$opts = Admin_Settings::get_options();
-			$base = rtrim( $opts['fanvue_api_base_url'] ?? 'https://api.fanvue.com', '/' );
+			$base = rtrim( $opts['creatorreactor_api_base_url'] ?? CreatorReactor_OAuth::API_BASE_URL, '/' );
 
-			$api_version = isset( $opts['fanvue_api_version'] ) ? $opts['fanvue_api_version'] : '2025-06-26';
+			$api_version = isset( $opts['creatorreactor_api_version'] ) ? $opts['creatorreactor_api_version'] : '2025-06-26';
 			$profile_result = self::fetch_profile_response( $base, $token, $api_version );
 			$response = $profile_result['response'];
 
@@ -471,7 +471,7 @@ class Fanvue_Client {
 							$tier_definitions[ $def['id'] ] = $def;
 						}
 					}
-					Entitlements::upsert_by_fanvue_uuid( $uuid, Entitlements::STATUS_ACTIVE, $expires_at, null, $email, $tier, $display_name, Entitlements::PRODUCT_FANVUE );
+					Entitlements::upsert_by_creatorreactor_uuid( $uuid, Entitlements::STATUS_ACTIVE, $expires_at, null, $email, $tier, $display_name, Entitlements::PRODUCT_FANVUE );
 				}
 				$pagination = $result['pagination'];
 				$has_more   = ! empty( $pagination['hasMore'] );
@@ -507,7 +507,7 @@ class Fanvue_Client {
 					}
 					$email        = isset( $follower['email'] ) ? (string) $follower['email'] : '';
 					$display_name = self::item_display_name( $follower );
-					Entitlements::upsert_by_fanvue_uuid(
+					Entitlements::upsert_by_creatorreactor_uuid(
 						$uuid,
 						Entitlements::STATUS_INACTIVE,
 						$expires_at,
@@ -528,7 +528,7 @@ class Fanvue_Client {
 
 			return $any_ok;
 		} catch ( \Throwable $e ) {
-			Admin_Settings::set_critical_error( __( 'Sync subscribers failed:', 'fanbridge' ) . ' ' . $e->getMessage() . ' (' . basename( $e->getFile() ) . ':' . $e->getLine() . ')' );
+			Admin_Settings::set_critical_error( __( 'Sync subscribers failed:', 'creatorreactor' ) . ' ' . $e->getMessage() . ' (' . basename( $e->getFile() ) . ':' . $e->getLine() . ')' );
 			Admin_Settings::set_last_error( $e->getMessage() );
 			return false;
 		}
