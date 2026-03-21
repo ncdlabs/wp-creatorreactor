@@ -86,7 +86,7 @@ class Broker_Client {
 
 	public static function get_creatorreactor_oauth_scopes() {
 		$opts = self::get_broker_options();
-		return isset( $opts['creatorreactor_oauth_scopes'] ) ? $opts['creatorreactor_oauth_scopes'] : null;
+		return CreatorReactor_OAuth::normalize_scopes_string( $opts['creatorreactor_oauth_scopes'] ?? '' );
 	}
 
 	public static function get_creatorreactor_api_version() {
@@ -369,13 +369,15 @@ class Broker_Client {
 				$url = add_query_arg( $args, $url );
 			}
 
+			$api_ver = self::get_creatorreactor_api_version();
 			$response = wp_remote_get(
 				$url,
 				[
 					'timeout' => 20,
 					'headers' => [
-						'Authorization'         => 'Bearer ' . $jwt,
-						'X-CreatorReactor-API-Version' => self::get_creatorreactor_api_version(),
+						'Authorization'                => 'Bearer ' . $jwt,
+						'X-Fanvue-API-Version'         => $api_ver,
+						'X-CreatorReactor-API-Version' => $api_ver,
 					],
 				]
 			);
@@ -391,7 +393,13 @@ class Broker_Client {
 			}
 
 			if ( $code !== 200 ) {
-				return new \WP_Error( 'api_error', 'API request failed: HTTP ' . $code );
+				$body    = wp_remote_retrieve_body( $response );
+				$snippet = is_string( $body ) && $body !== '' ? substr( wp_strip_all_tags( $body ), 0, 500 ) : '';
+				$msg     = 'API request failed: HTTP ' . $code . ( $snippet !== '' ? '. Response: ' . $snippet : '' );
+				if ( (int) $code === 403 && is_string( $body ) && stripos( $body, 'Insufficient scopes' ) !== false ) {
+					$msg .= ' ' . CreatorReactor_Client::get_insufficient_scopes_hint_text();
+				}
+				return new \WP_Error( 'api_error', $msg );
 			}
 
 			return json_decode( wp_remote_retrieve_body( $response ), true );

@@ -14,7 +14,7 @@
 
 		function errorMarkup(message) {
 			var refresh =
-				creatorreactorUsersTable.refreshLabel || 'Refresh list';
+				creatorreactorUsersTable.refreshLabel || 'Sync & refresh list';
 			return (
 				'<div class="notice notice-error inline"><p>' +
 				escapeHtml(message) +

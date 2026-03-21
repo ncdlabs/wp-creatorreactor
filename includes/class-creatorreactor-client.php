@@ -229,6 +229,79 @@ class CreatorReactor_Client {
 		];
 	}
 
+	/**
+	 * Headers for Fanvue list endpoints (docs require X-Fanvue-API-Version; alias kept for compatibility).
+	 *
+	 * @param string $token Bearer access token.
+	 * @return array<string, string>
+	 */
+	private static function list_get_headers( $token ) {
+		$opts = Admin_Settings::get_options();
+		$ver  = isset( $opts['creatorreactor_api_version'] ) && (string) $opts['creatorreactor_api_version'] !== ''
+			? (string) $opts['creatorreactor_api_version']
+			: '2025-06-26';
+
+		return [
+			'Authorization'                => 'Bearer ' . $token,
+			'X-Fanvue-API-Version'         => $ver,
+			'X-CreatorReactor-API-Version' => $ver,
+			'Content-Type'                 => 'application/json',
+		];
+	}
+
+	/**
+	 * Hint appended when Fanvue returns 403 with insufficient OAuth scopes for subscriber/follower list APIs.
+	 */
+	public static function get_insufficient_scopes_hint_text() {
+		return __( 'Fanvue requires the read:fan scope for listing subscribers and followers. Add read:fan under Advanced → Scopes, ensure your Fanvue developer app enables that scope, save settings, then disconnect OAuth and connect again.', 'creatorreactor' );
+	}
+
+	/**
+	 * @param string $list_label e.g. "List subscribers".
+	 */
+	private static function format_list_endpoint_http_error( $list_label, $code, $body_response ) {
+		$snippet = is_string( $body_response ) && $body_response !== '' ? substr( wp_strip_all_tags( $body_response ), 0, 500 ) : '';
+		$msg     = $list_label . ': HTTP ' . $code . ( $snippet !== '' ? '. Response: ' . $snippet : '' );
+		if ( (int) $code === 403 && self::response_indicates_insufficient_scopes( $body_response ) ) {
+			$msg .= ' ' . self::get_insufficient_scopes_hint_text();
+		}
+		return $msg;
+	}
+
+	private static function response_indicates_insufficient_scopes( $body_response ) {
+		if ( ! is_string( $body_response ) || $body_response === '' ) {
+			return false;
+		}
+		if ( stripos( $body_response, 'Insufficient scopes' ) !== false ) {
+			return true;
+		}
+		$decoded = json_decode( $body_response, true );
+		return is_array( $decoded ) && isset( $decoded['error'] ) && stripos( (string) $decoded['error'], 'Insufficient scopes' ) !== false;
+	}
+
+	/**
+	 * Broker proxy returns the same JSON shape as direct API calls; WP_Error means not connected or HTTP error.
+	 *
+	 * @param array|\WP_Error|null $result Raw API response.
+	 * @return array{data: array, pagination: array}|null
+	 */
+	public static function normalize_broker_list_response( $result ) {
+		if ( $result === null || is_wp_error( $result ) ) {
+			if ( is_wp_error( $result ) ) {
+				Admin_Settings::set_last_error( $result->get_error_message() );
+			}
+			return null;
+		}
+		if ( ! is_array( $result ) ) {
+			return null;
+		}
+
+		return [
+			'data'       => isset( $result['data'] ) && is_array( $result['data'] ) ? $result['data'] : [],
+			'pagination' => isset( $result['pagination'] ) && is_array( $result['pagination'] ) ? $result['pagination'] : [ 'page' => 1, 'size' => 0, 'hasMore' => false ],
+		];
+	}
+
 	public function list_subscribers( $page = 1, $size = 50 ) {
 		try {
 			$token = $this->get_access_token();
@@ -259,19 +332,14 @@ class CreatorReactor_Client {
 				$url,
 				[
 					'timeout' => 20,
-					'headers' => [
-						'Authorization'        => 'Bearer ' . $token,
-						'X-CreatorReactor-API-Version' => '2025-06-26',
-						'Content-Type'         => 'application/json',
-					],
+					'headers' => self::list_get_headers( $token ),
 				]
 			);
 
 			$code          = wp_remote_retrieve_response_code( $response );
 			$body_response = wp_remote_retrieve_body( $response );
 			if ( $code !== 200 ) {
-				$snippet = is_string( $body_response ) && $body_response !== '' ? substr( wp_strip_all_tags( $body_response ), 0, 500 ) : '';
-				Admin_Settings::set_last_error( 'List subscribers: HTTP ' . $code . ( $snippet !== '' ? '. Response: ' . $snippet : '' ) );
+				Admin_Settings::set_last_error( self::format_list_endpoint_http_error( 'List subscribers', $code, $body_response ) );
 				return null;
 			}
 
@@ -317,19 +385,14 @@ class CreatorReactor_Client {
 				$url,
 				[
 					'timeout' => 20,
-					'headers' => [
-						'Authorization'        => 'Bearer ' . $token,
-						'X-CreatorReactor-API-Version' => '2025-06-26',
-						'Content-Type'         => 'application/json',
-					],
+					'headers' => self::list_get_headers( $token ),
 				]
 			);
 
 			$code          = wp_remote_retrieve_response_code( $response );
 			$body_response = wp_remote_retrieve_body( $response );
 			if ( $code !== 200 ) {
-				$snippet = is_string( $body_response ) && $body_response !== '' ? substr( wp_strip_all_tags( $body_response ), 0, 500 ) : '';
-				Admin_Settings::set_last_error( 'List followers: HTTP ' . $code . ( $snippet !== '' ? '. Response: ' . $snippet : '' ) );
+				Admin_Settings::set_last_error( self::format_list_endpoint_http_error( 'List followers', $code, $body_response ) );
 				return null;
 			}
 
@@ -438,6 +501,27 @@ class CreatorReactor_Client {
 	}
 
 	public function sync_subscribers_to_table( $cache_ttl_seconds = 900 ) {
+		return self::sync_subscribers_to_table_with_listers(
+			$cache_ttl_seconds,
+			function ( $page, $size ) {
+				return $this->list_subscribers( $page, $size );
+			},
+			function ( $page, $size ) {
+				return $this->list_followers( $page, $size );
+			}
+		);
+	}
+
+	/**
+	 * Sync subscribers and followers into the entitlements table. List callbacks must return the same shape as
+	 * {@see list_subscribers()} / {@see list_followers()} or null on failure.
+	 *
+	 * @param int                                                                 $cache_ttl_seconds Cache TTL for expires_at.
+	 * @param callable(int,int): (array{data: array, pagination: array}|null) $list_subscribers  Page/size → subscriber page.
+	 * @param callable(int,int): (array{data: array, pagination: array}|null) $list_followers    Page/size → follower page.
+	 * @return bool True if at least one API page succeeded.
+	 */
+	public static function sync_subscribers_to_table_with_listers( $cache_ttl_seconds, callable $list_subscribers, callable $list_followers ) {
 		try {
 			$expires_at        = gmdate( 'Y-m-d H:i:s', time() + $cache_ttl_seconds );
 			$active_uuids      = [];
@@ -448,7 +532,7 @@ class CreatorReactor_Client {
 			$any_ok            = false;
 
 			do {
-				$result = $this->list_subscribers( $page, $size );
+				$result = $list_subscribers( $page, $size );
 				if ( $result === null ) {
 					break;
 				}
@@ -495,7 +579,7 @@ class CreatorReactor_Client {
 			$followers_page = 1;
 			$followers_size = 50;
 			do {
-				$followers_result = $this->list_followers( $followers_page, $followers_size );
+				$followers_result = $list_followers( $followers_page, $followers_size );
 				if ( $followers_result === null ) {
 					break;
 				}

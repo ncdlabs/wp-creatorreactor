@@ -28,6 +28,7 @@ $redirect_uri_input_value = Admin_Settings::get_redirect_uri_input_value( $opts,
 	<?php endif; ?>
 </div>
 <div class="creatorreactor-settings-block">
+	<div class="creatorreactor-oauth-configuration">
 	<h3><?php esc_html_e( 'OAuth Configuration', 'creatorreactor' ); ?></h3>
 	<div class="creatorreactor-subsection">
 		<h4><?php esc_html_e( 'Credentials', 'creatorreactor' ); ?></h4>
@@ -113,13 +114,14 @@ $redirect_uri_input_value = Admin_Settings::get_redirect_uri_input_value( $opts,
 					<tr>
 						<th scope="row"><?php esc_html_e( 'Scopes', 'creatorreactor' ); ?></th>
 						<td>
-							<input type="text" readonly name="<?php echo esc_attr( $option_name ); ?>[creatorreactor_oauth_scopes]" value="<?php echo esc_attr( $opts['creatorreactor_oauth_scopes'] ?? Admin_Settings::DEFAULT_CREATORREACTOR_SCOPES ); ?>" class="regular-text creatorreactor-advanced-endpoint-input" autocomplete="off" />
-							<p class="description"><?php esc_html_e( 'Space-separated OAuth scopes.', 'creatorreactor' ); ?></p>
+							<input type="text" readonly name="<?php echo esc_attr( $option_name ); ?>[creatorreactor_oauth_scopes]" value="<?php echo esc_attr( CreatorReactor_OAuth::normalize_scopes_string( $opts['creatorreactor_oauth_scopes'] ?? '' ) ); ?>" class="regular-text creatorreactor-advanced-endpoint-input" autocomplete="off" />
+							<p class="description"><?php esc_html_e( 'Space-separated OAuth scopes. Defaults include read:fan (required for Fanvue subscriber and follower APIs). Unlock Advanced to edit.', 'creatorreactor' ); ?></p>
 						</td>
 					</tr>
 				</table>
 			</div>
 		</div>
+	</div>
 	</div>
 </div>
 <?php if ( $broker_mode ) : ?>

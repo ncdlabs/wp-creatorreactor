@@ -76,7 +76,7 @@ That guide matches what this plugin implements for **Creator** (direct) mode:
 
 For **Creator** mode, defaults match Fanvue’s OAuth hosts: **`https://auth.fanvue.com/oauth2/auth`**, **`https://auth.fanvue.com/oauth2/token`**, and API base **`https://api.fanvue.com`**. Override **OAuth → Endpoints** or **API Base URL** in settings only if you need a different environment. Register the same **Redirect URI** in the [Fanvue developer portal](https://fanvue.com/developers/apps).
 
-Default scopes include `openid offline_access offline read:self read:fan`; Fanvue’s quick-start example uses `openid offline_access offline read:self` — adjust **Scopes** in settings if your app registration differs.
+Default scopes match Fanvue’s quick start: `openid offline_access offline read:self`. If your OAuth app is granted extra scopes (e.g. `read:fan`), add them under **Advanced → Scopes**.
 
 ## API (PHP)
 

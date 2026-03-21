@@ -31,7 +31,34 @@ class CreatorReactor_OAuth {
 	const REST_ROUTE_CALLBACK   = '/oauth-callback';
 	const REST_ROUTE_START      = '/oauth-start';
 
+	/**
+	 * Default OAuth scopes. Includes `read:fan` because Fanvue requires it for GET /subscribers and GET /followers
+	 * (see api.fanvue.com API reference). Re-authorize after changing scopes. Advanced → Scopes can remove it if
+	 * your Fanvue app cannot grant `read:fan` (subscriber/follower sync will then fail those endpoints).
+	 */
 	const DEFAULT_SCOPES = 'openid offline_access offline read:self read:fan';
+
+	/**
+	 * Normalize space-separated OAuth scopes from settings: default when empty, upgrade legacy
+	 * quick-start-only string, and ensure read:fan is present for Fanvue list APIs.
+	 *
+	 * @param string $scopes Raw scopes string from options.
+	 * @return string Canonical space-separated scopes.
+	 */
+	public static function normalize_scopes_string( $scopes ) {
+		$s = is_string( $scopes ) ? trim( preg_replace( '/\s+/', ' ', $scopes ) ) : '';
+		if ( $s === '' ) {
+			return self::DEFAULT_SCOPES;
+		}
+		if ( $s === 'openid offline_access offline read:self' ) {
+			return self::DEFAULT_SCOPES;
+		}
+		$parts = array_values( array_unique( array_filter( explode( ' ', $s ) ) ) );
+		if ( ! in_array( 'read:fan', $parts, true ) ) {
+			$parts[] = 'read:fan';
+		}
+		return implode( ' ', $parts );
+	}
 
 	/**
 	 * Authorization (authorize) URL: plugin settings override, else {@see AUTH_URL}.
@@ -240,6 +267,60 @@ class CreatorReactor_OAuth {
 	}
 
 	/**
+	 * Parse the raw HTTP query string (OAuth params can be missing from $_GET on some hosts / security filters).
+	 *
+	 * @return array<string, string>
+	 */
+	private static function parse_oauth_callback_query_args() {
+		$raw = '';
+		if ( isset( $_SERVER['QUERY_STRING'] ) && is_string( $_SERVER['QUERY_STRING'] ) ) {
+			$raw = wp_unslash( $_SERVER['QUERY_STRING'] );
+		}
+		if ( $raw === '' && isset( $_SERVER['REQUEST_URI'] ) && is_string( $_SERVER['REQUEST_URI'] ) ) {
+			$uri = wp_unslash( $_SERVER['REQUEST_URI'] );
+			$pos = strpos( $uri, '?' );
+			if ( $pos !== false ) {
+				$raw = substr( $uri, $pos + 1 );
+			}
+		}
+		if ( $raw === '' ) {
+			return [];
+		}
+		$parsed = [];
+		wp_parse_str( $raw, $parsed );
+		return is_array( $parsed ) ? $parsed : [];
+	}
+
+	/**
+	 * OAuth redirect uses GET query params. WP_REST_Request::get_param() can miss them on some installs
+	 * (plain permalinks, rest_route parsing, or filters), which falsely looks like "code missing".
+	 *
+	 * @param \WP_REST_Request $request Request.
+	 * @param string           $key     Query key: code, state, error, error_description.
+	 * @return string
+	 */
+	private static function get_oauth_callback_query_param( $request, $key ) {
+		$val = $request->get_param( $key );
+		if ( is_string( $val ) && $val !== '' ) {
+			return $val;
+		}
+		if ( is_scalar( $val ) && $val !== '' && $val !== null ) {
+			return (string) $val;
+		}
+		if ( isset( $_GET[ $key ] ) && is_string( $_GET[ $key ] ) ) {
+			return wp_unslash( $_GET[ $key ] );
+		}
+		if ( isset( $_REQUEST[ $key ] ) && is_string( $_REQUEST[ $key ] ) ) {
+			return wp_unslash( $_REQUEST[ $key ] );
+		}
+		$parsed = self::parse_oauth_callback_query_args();
+		if ( isset( $parsed[ $key ] ) && is_string( $parsed[ $key ] ) && $parsed[ $key ] !== '' ) {
+			return $parsed[ $key ];
+		}
+		return '';
+	}
+
+	/**
 	 * Canonical HTTPS redirect for a registered REST route. Uses {@see rest_url()} so it matches
 	 * the live REST base (subdirectory installs, custom rest prefix, plain permalinks).
 	 *
@@ -275,7 +356,7 @@ class CreatorReactor_OAuth {
 			? $redirect_uri_override
 			: ( ! empty( $opts['creatorreactor_oauth_redirect_uri'] ) ? $opts['creatorreactor_oauth_redirect_uri'] : $default_redirect );
 
-		$scopes = $opts['creatorreactor_oauth_scopes'] ?? self::DEFAULT_SCOPES;
+		$scopes = self::normalize_scopes_string( $opts['creatorreactor_oauth_scopes'] ?? '' );
 
 		if ( $client_id === '' ) {
 			return null;
@@ -323,7 +404,6 @@ class CreatorReactor_OAuth {
 
 	public static function oauth_start( $request ) {
 		try {
-			Admin_Settings::log_connection( 'info', 'OAuth REST oauth-start: invoked (redirect to Fanvue).' );
 			$url = self::get_authorization_url();
 			if ( ! $url ) {
 				Admin_Settings::log_connection( 'error', 'OAuth REST oauth-start: failed — missing Client ID or could not build authorize URL.' );
@@ -337,6 +417,7 @@ class CreatorReactor_OAuth {
 				);
 				exit;
 			}
+			Admin_Settings::reset_connection_state_before_connect();
 			Admin_Settings::log_connection( 'info', 'OAuth REST oauth-start: redirecting to Fanvue.' );
 			wp_redirect( $url );
 			exit;
@@ -350,15 +431,22 @@ class CreatorReactor_OAuth {
 
 	public static function oauth_callback( $request ) {
 		try {
-			$code  = $request->get_param( 'code' );
-			$state = $request->get_param( 'state' );
-			$error = $request->get_param( 'error' );
+			$method = $request instanceof \WP_REST_Request ? strtoupper( (string) $request->get_method() ) : 'GET';
+			// HEAD probes (uptime, link check) hit the callback without OAuth params — omit connection log noise.
+			if ( $method === 'HEAD' ) {
+				wp_safe_redirect( self::settings_redirect_url() );
+				exit;
+			}
 
-			$route = $request instanceof \WP_REST_Request ? $request->get_route() : '';
-			Admin_Settings::log_connection( 'info', 'OAuth callback: hit REST route ' . ( is_string( $route ) ? $route : '(unknown)' ) . '.' );
+			$code  = self::get_oauth_callback_query_param( $request, 'code' );
+			$state = self::get_oauth_callback_query_param( $request, 'state' );
+			$error = self::get_oauth_callback_query_param( $request, 'error' );
 
 			if ( $error ) {
-				$msg = $request->get_param( 'error_description' ) ?: $error;
+				$msg = self::get_oauth_callback_query_param( $request, 'error_description' );
+				if ( $msg === '' ) {
+					$msg = $error;
+				}
 				Admin_Settings::log_connection( 'error', 'OAuth callback: Fanvue returned error parameter — ' . ( is_string( $msg ) ? $msg : wp_json_encode( $msg ) ) );
 				Admin_Settings::set_last_error( 'OAuth: ' . $msg );
 				wp_safe_redirect(
@@ -373,13 +461,33 @@ class CreatorReactor_OAuth {
 			}
 
 			if ( ! $code || ! $state ) {
+				$parsed_qs = self::parse_oauth_callback_query_args();
+				$key_names = array_keys( $parsed_qs );
+				$keys_hint = ! empty( $key_names ) ? ' query_param_keys=' . implode( ',', $key_names ) : ' query_param_keys=(none)';
+
+				$hint = '';
+				if ( $state && ! $code ) {
+					$pkce_probe = get_transient( self::TRANSIENT_PKCE_PREFIX . $state );
+					if ( $pkce_probe === false ) {
+						$hint = ' PKCE state unknown or expired — often a repeat visit without the full redirect query.';
+					} elseif ( ! in_array( 'code', $key_names, true ) ) {
+						$hint = ' No `code` in this request URL — authorization server or proxy did not pass it; confirm redirect URI in Fanvue matches this site exactly.';
+					} else {
+						$hint = ' `code` appears in raw query but was not readable — report this to hosting (security filters, max_input_vars).';
+					}
+				} elseif ( ! $code && ! $state ) {
+					$hint = ' Anonymous probe to callback URL (no OAuth query).';
+				}
 				Admin_Settings::log_connection(
 					'debug',
-					'OAuth callback: no code/state (probe or manual GET). code=' . ( $code ? 'set' : 'empty' ) . ', state=' . ( $state ? 'set' : 'empty' ) . '.'
+					'OAuth callback: incomplete redirect (missing code or state). code=' . ( $code ? 'set' : 'empty' ) . ', state=' . ( $state ? 'set' : 'empty' ) . '.' . $keys_hint . $hint
 				);
 				wp_safe_redirect( self::settings_redirect_url() );
 				exit;
 			}
+
+			$route = $request instanceof \WP_REST_Request ? $request->get_route() : '';
+			Admin_Settings::log_connection( 'info', 'OAuth callback: hit REST route ' . ( is_string( $route ) ? $route : '(unknown)' ) . '.' );
 
 			$pkce_payload = get_transient( self::TRANSIENT_PKCE_PREFIX . $state );
 			delete_transient( self::TRANSIENT_PKCE_PREFIX . $state );
@@ -575,7 +683,7 @@ class CreatorReactor_OAuth {
 				|| stripos( $desc, 'does not match the id during the initial token issuance' ) !== false;
 			if ( $client_mismatch ) {
 				delete_option( self::OPTION_TOKENS );
-				$msg = __( 'OAuth tokens were issued for a different Client ID than the one in settings. Use Disconnect, confirm Client ID and Secret match your Fanvue app, then Connect again.', 'creatorreactor' );
+				$msg = __( 'Stored OAuth tokens were removed: they were issued for a different Client ID than the one in settings. In your Fanvue app, confirm Client ID and Secret match what you saved here, then click Connect.', 'creatorreactor' );
 				Admin_Settings::set_last_error( $msg );
 				Admin_Settings::log_connection(
 					'info',

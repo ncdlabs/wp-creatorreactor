@@ -13,18 +13,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+$next_sync_display = Cron::get_next_sync_datetime_for_display();
+
 ?>
 <?php if ( ! $broker_mode ) : ?>
 <div class="creatorreactor-settings-block">
 	<h3><?php esc_html_e( 'Sync Settings', 'creatorreactor' ); ?></h3>
 	<table class="form-table">
-		<tr>
-			<th scope="row"><?php esc_html_e( 'Creator ID', 'creatorreactor' ); ?></th>
-			<td>
-				<input type="text" name="<?php echo esc_attr( $option_name ); ?>[creatorreactor_creator_id]" value="<?php echo esc_attr( $opts['creatorreactor_creator_id'] ?? '' ); ?>" class="creatorreactor-creator-sync-field regular-text" />
-				<p class="description"><?php esc_html_e( 'Optional: Filter subscribers to a specific creator.', 'creatorreactor' ); ?></p>
-			</td>
-		</tr>
 		<tr>
 			<th scope="row"><?php esc_html_e( 'Sync Interval', 'creatorreactor' ); ?></th>
 			<td>
@@ -33,6 +28,14 @@ if ( ! defined( 'ABSPATH' ) ) {
 					<span class="description"><?php esc_html_e( 'minutes', 'creatorreactor' ); ?></span>
 				</div>
 				<p class="description"><?php esc_html_e( 'How often to sync subscribers and followers.', 'creatorreactor' ); ?></p>
+				<p class="description creatorreactor-next-sync">
+					<strong><?php esc_html_e( 'Next sync:', 'creatorreactor' ); ?></strong>
+					<?php if ( $next_sync_display !== null ) : ?>
+						<?php echo esc_html( $next_sync_display ); ?>
+					<?php else : ?>
+						<?php esc_html_e( 'Not scheduled', 'creatorreactor' ); ?>
+					<?php endif; ?>
+				</p>
 			</td>
 		</tr>
 		<tr>
@@ -50,5 +53,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 <?php else : ?>
 <div class="creatorreactor-settings-block">
 	<p class="description"><?php esc_html_e( 'Sync settings for Agency mode are managed through your broker configuration.', 'creatorreactor' ); ?></p>
+	<p class="description creatorreactor-next-sync">
+		<strong><?php esc_html_e( 'Next sync:', 'creatorreactor' ); ?></strong>
+		<?php if ( $next_sync_display !== null ) : ?>
+			<?php echo esc_html( $next_sync_display ); ?>
+		<?php else : ?>
+			<?php esc_html_e( 'Not scheduled', 'creatorreactor' ); ?>
+		<?php endif; ?>
+	</p>
 </div>
 <?php endif; ?>

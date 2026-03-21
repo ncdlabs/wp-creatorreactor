@@ -27,7 +27,8 @@ class Admin_Settings {
 	const OPTION_TIERS               = 'creatorreactor_tiers';
 	const OPTION_SUBSCRIPTION_TIERS  = 'creatorreactor_subscription_tiers';
 	const ENCRYPTED_FIELDS            = [ 'creatorreactor_oauth_client_id', 'creatorreactor_oauth_client_secret' ];
-	const DEFAULT_CREATORREACTOR_SCOPES       = 'openid offline_access offline read:self read:fan';
+	/** @var string Mirrors {@see CreatorReactor_OAuth::DEFAULT_SCOPES} (includes read:fan for Fanvue list APIs). */
+	const DEFAULT_CREATORREACTOR_SCOPES = CreatorReactor_OAuth::DEFAULT_SCOPES;
 	const PAGE_SLUG                   = 'creatorreactor';
 
 	/** Form value authentication_mode maps to stored broker_mode (Agency = true). */
@@ -56,6 +57,7 @@ class Admin_Settings {
 		add_action( 'admin_post_creatorreactor_disconnect', [ __CLASS__, 'handle_disconnect' ] );
 		add_action( 'admin_post_creatorreactor_test_connection', [ __CLASS__, 'handle_connection_test' ] );
 		add_action( 'admin_post_creatorreactor_clear_connection_logs', [ __CLASS__, 'handle_clear_connection_logs' ] );
+		add_action( 'admin_post_creatorreactor_broker_connect', [ __CLASS__, 'handle_broker_connect' ] );
 		add_action( 'wp_ajax_creatorreactor_auth_mode_fields', [ __CLASS__, 'ajax_auth_mode_fields' ] );
 		add_action( 'wp_ajax_creatorreactor_get_users_table', [ __CLASS__, 'ajax_get_users_table' ] );
 	}
@@ -104,6 +106,7 @@ class Admin_Settings {
 		if ( is_array( $opts ) && ! empty( $opts ) ) {
 			$merged_opts = self::merge_legacy_oauth_fields( $opts );
 			$merged_opts = self::maybe_upgrade_fanvue_default_endpoints( $merged_opts );
+			$merged_opts['creatorreactor_oauth_scopes'] = CreatorReactor_OAuth::normalize_scopes_string( $merged_opts['creatorreactor_oauth_scopes'] ?? '' );
 			if ( $merged_opts !== $opts ) {
 				update_option( self::OPTION_NAME, $merged_opts );
 			}
@@ -288,7 +291,9 @@ class Admin_Settings {
 		if ( ! is_array( $opts ) ) {
 			return [];
 		}
-		return self::decrypt_option_fields( $opts );
+		$opts = self::decrypt_option_fields( $opts );
+		$opts['creatorreactor_oauth_scopes'] = CreatorReactor_OAuth::normalize_scopes_string( $opts['creatorreactor_oauth_scopes'] ?? '' );
+		return $opts;
 	}
 
 	public static function get_raw_options() {
@@ -438,28 +443,47 @@ class Admin_Settings {
 			}
 		}
 
-		$opts['creatorreactor_oauth_redirect_uri'] = isset( $input['creatorreactor_oauth_redirect_uri'] )
-			? self::sanitize_https_url( wp_unslash( $input['creatorreactor_oauth_redirect_uri'] ) )
-			: ( $opts['broker_mode'] ? self::get_broker_default_redirect_uri() : CreatorReactor_OAuth::get_default_redirect_uri() );
+		if ( isset( $input['creatorreactor_oauth_redirect_uri'] ) ) {
+			$opts['creatorreactor_oauth_redirect_uri'] = self::sanitize_https_url( wp_unslash( $input['creatorreactor_oauth_redirect_uri'] ) );
+		} else {
+			$prev_redirect = isset( $raw_opts['creatorreactor_oauth_redirect_uri'] ) ? trim( (string) $raw_opts['creatorreactor_oauth_redirect_uri'] ) : '';
+			if ( $prev_redirect !== '' ) {
+				$opts['creatorreactor_oauth_redirect_uri'] = self::sanitize_https_url( $prev_redirect );
+			} else {
+				$opts['creatorreactor_oauth_redirect_uri'] = $opts['broker_mode'] ? self::get_broker_default_redirect_uri() : CreatorReactor_OAuth::get_default_redirect_uri();
+			}
+		}
 		if ( $opts['creatorreactor_oauth_redirect_uri'] !== '' ) {
 			$opts['creatorreactor_oauth_redirect_uri'] = trailingslashit( untrailingslashit( $opts['creatorreactor_oauth_redirect_uri'] ) );
 		}
 
-		$opts['creatorreactor_authorization_url'] = isset( $input['creatorreactor_authorization_url'] )
-			? self::sanitize_https_url( wp_unslash( $input['creatorreactor_authorization_url'] ) )
-			: CreatorReactor_OAuth::AUTH_URL;
+		if ( isset( $input['creatorreactor_authorization_url'] ) ) {
+			$opts['creatorreactor_authorization_url'] = self::sanitize_https_url( wp_unslash( $input['creatorreactor_authorization_url'] ) );
+		} else {
+			$prev_auth = isset( $raw_opts['creatorreactor_authorization_url'] ) ? trim( (string) $raw_opts['creatorreactor_authorization_url'] ) : '';
+			$opts['creatorreactor_authorization_url'] = $prev_auth !== '' ? self::sanitize_https_url( $prev_auth ) : CreatorReactor_OAuth::AUTH_URL;
+		}
 
-		$opts['creatorreactor_token_url'] = isset( $input['creatorreactor_token_url'] )
-			? self::sanitize_https_url( wp_unslash( $input['creatorreactor_token_url'] ) )
-			: CreatorReactor_OAuth::TOKEN_URL;
+		if ( isset( $input['creatorreactor_token_url'] ) ) {
+			$opts['creatorreactor_token_url'] = self::sanitize_https_url( wp_unslash( $input['creatorreactor_token_url'] ) );
+		} else {
+			$prev_token = isset( $raw_opts['creatorreactor_token_url'] ) ? trim( (string) $raw_opts['creatorreactor_token_url'] ) : '';
+			$opts['creatorreactor_token_url'] = $prev_token !== '' ? self::sanitize_https_url( $prev_token ) : CreatorReactor_OAuth::TOKEN_URL;
+		}
 
-		$opts['creatorreactor_api_base_url'] = isset( $input['creatorreactor_api_base_url'] )
-			? self::sanitize_https_url( wp_unslash( $input['creatorreactor_api_base_url'] ) )
-			: CreatorReactor_OAuth::API_BASE_URL;
+		if ( isset( $input['creatorreactor_api_base_url'] ) ) {
+			$opts['creatorreactor_api_base_url'] = self::sanitize_https_url( wp_unslash( $input['creatorreactor_api_base_url'] ) );
+		} else {
+			$prev_api = isset( $raw_opts['creatorreactor_api_base_url'] ) ? trim( (string) $raw_opts['creatorreactor_api_base_url'] ) : '';
+			$opts['creatorreactor_api_base_url'] = $prev_api !== '' ? self::sanitize_https_url( $prev_api ) : CreatorReactor_OAuth::API_BASE_URL;
+		}
 
-		$opts['creatorreactor_oauth_scopes'] = isset( $input['creatorreactor_oauth_scopes'] )
-			? sanitize_text_field( wp_unslash( $input['creatorreactor_oauth_scopes'] ) )
-			: self::DEFAULT_CREATORREACTOR_SCOPES;
+		if ( isset( $input['creatorreactor_oauth_scopes'] ) ) {
+			$opts['creatorreactor_oauth_scopes'] = sanitize_text_field( wp_unslash( $input['creatorreactor_oauth_scopes'] ) );
+		} else {
+			$prev_scopes = isset( $raw_opts['creatorreactor_oauth_scopes'] ) ? trim( (string) $raw_opts['creatorreactor_oauth_scopes'] ) : '';
+			$opts['creatorreactor_oauth_scopes'] = $prev_scopes !== '' ? sanitize_text_field( $prev_scopes ) : self::DEFAULT_CREATORREACTOR_SCOPES;
+		}
 
 		if ( isset( $input['creatorreactor_api_version'] ) ) {
 			$opts['creatorreactor_api_version'] = preg_replace( '/[^0-9\-]/', '', sanitize_text_field( wp_unslash( $input['creatorreactor_api_version'] ) ) );
@@ -495,6 +519,7 @@ class Admin_Settings {
 		if ( $opts['creatorreactor_oauth_scopes'] === '' ) {
 			$opts['creatorreactor_oauth_scopes'] = self::DEFAULT_CREATORREACTOR_SCOPES;
 		}
+		$opts['creatorreactor_oauth_scopes'] = CreatorReactor_OAuth::normalize_scopes_string( $opts['creatorreactor_oauth_scopes'] );
 		if ( $opts['creatorreactor_api_base_url'] === '' ) {
 			$opts['creatorreactor_api_base_url'] = CreatorReactor_OAuth::API_BASE_URL;
 		}
@@ -566,8 +591,44 @@ class Admin_Settings {
 			wp_safe_redirect( admin_url( 'options-general.php?page=' . self::PAGE_SLUG . '&tab=dashboard' ) );
 			exit;
 		}
+		self::reset_connection_state_before_connect();
 		self::log_connection( 'info', 'OAuth Connect: redirecting browser to Fanvue authorization.' );
 		wp_redirect( $auth_url );
+		exit;
+	}
+
+	/**
+	 * Clear connection test result, connection log, last/critical errors (dashboard card styling).
+	 * Called when starting OAuth/Connect so the UI resets before a new attempt.
+	 */
+	public static function reset_connection_state_before_connect() {
+		delete_option( self::OPTION_CONNECTION_TEST );
+		self::clear_connection_logs();
+		self::set_last_error( '' );
+		self::set_critical_error( '' );
+	}
+
+	/**
+	 * Agency mode: clear dashboard connection state, then redirect to broker Connect URL.
+	 */
+	public static function handle_broker_connect() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Unauthorized', 'creatorreactor' ), '', [ 'response' => 403 ] );
+		}
+		check_admin_referer( 'creatorreactor_broker_connect' );
+		if ( ! self::is_broker_mode() ) {
+			wp_safe_redirect( admin_url( 'options-general.php?page=' . self::PAGE_SLUG . '&tab=dashboard' ) );
+			exit;
+		}
+		$url = Broker_Client::get_connect_url();
+		if ( ! is_string( $url ) || $url === '' ) {
+			self::set_last_error( __( 'Cannot build broker Connect URL. Check Site ID and broker settings.', 'creatorreactor' ) );
+			wp_safe_redirect( admin_url( 'options-general.php?page=' . self::PAGE_SLUG . '&tab=dashboard' ) );
+			exit;
+		}
+		self::reset_connection_state_before_connect();
+		self::log_connection( 'info', 'Broker Connect: redirecting to broker authorization.' );
+		wp_redirect( $url );
 		exit;
 	}
 
@@ -598,6 +659,7 @@ class Admin_Settings {
 		if ( ! isset( $opts['creatorreactor_oauth_scopes'] ) || $opts['creatorreactor_oauth_scopes'] === '' ) {
 			$opts['creatorreactor_oauth_scopes'] = self::DEFAULT_CREATORREACTOR_SCOPES;
 		}
+		$opts['creatorreactor_oauth_scopes'] = CreatorReactor_OAuth::normalize_scopes_string( $opts['creatorreactor_oauth_scopes'] );
 		if ( ! isset( $opts['creatorreactor_api_version'] ) || $opts['creatorreactor_api_version'] === '' ) {
 			$opts['creatorreactor_api_version'] = '2025-06-26';
 		}
@@ -630,6 +692,8 @@ class Admin_Settings {
 			self::log_connection( 'info', 'Disconnect: Creator/direct mode — deleting stored OAuth tokens.' );
 			delete_option( CreatorReactor_OAuth::OPTION_TOKENS );
 		}
+
+		self::set_last_error( '' );
 
 		wp_safe_redirect( admin_url( 'options-general.php?page=' . self::PAGE_SLUG . '&status=disconnected' ) );
 		exit;
@@ -788,8 +852,9 @@ class Admin_Settings {
 	 *
 	 * @param array{total: int, active: int, inactive: int} $user_totals Counts.
 	 * @param array<int, array<string, mixed>>               $user_rows   Rows from entitlements table.
+	 * @param string|null                                      $sync_error  If set, show an inline error after sync (AJAX refresh).
 	 */
-	private static function render_users_tab_inner_html( array $user_totals, array $user_rows ) {
+	private static function render_users_tab_inner_html( array $user_totals, array $user_rows, $sync_error = null ) {
 		ob_start();
 		?>
 		<div class="creatorreactor-users-toolbar">
@@ -798,8 +863,12 @@ class Admin_Settings {
 				<strong><?php esc_html_e( 'Active:', 'creatorreactor' ); ?></strong> <?php echo esc_html( (string) $user_totals['active'] ); ?>,
 				<strong><?php esc_html_e( 'Inactive:', 'creatorreactor' ); ?></strong> <?php echo esc_html( (string) $user_totals['inactive'] ); ?>
 			</p>
-			<button type="button" class="button" id="creatorreactor-users-refresh"><?php esc_html_e( 'Refresh list', 'creatorreactor' ); ?></button>
+			<button type="button" class="button" id="creatorreactor-users-refresh"><?php esc_html_e( 'Sync & refresh list', 'creatorreactor' ); ?></button>
 		</div>
+
+		<?php if ( is_string( $sync_error ) && $sync_error !== '' ) : ?>
+			<div class="notice notice-error inline"><p><?php echo esc_html( $sync_error ); ?></p></div>
+		<?php endif; ?>
 
 		<?php if ( ! empty( $user_rows ) ) : ?>
 			<table class="widefat striped">
@@ -829,14 +898,14 @@ class Admin_Settings {
 				</tbody>
 			</table>
 		<?php else : ?>
-			<p><?php esc_html_e( 'No synced users found yet. Run a sync and refresh this tab.', 'creatorreactor' ); ?></p>
+			<p><?php esc_html_e( 'No synced users found yet. Connect OAuth, then use Sync & refresh list above.', 'creatorreactor' ); ?></p>
 		<?php endif; ?>
 		<?php
 		return (string) ob_get_clean();
 	}
 
 	/**
-	 * AJAX: return refreshed Users tab inner HTML (same markup as initial render).
+	 * AJAX: run subscriber/follower sync, then return Users tab inner HTML (same markup as initial render).
 	 */
 	public static function ajax_get_users_table() {
 		check_ajax_referer( 'creatorreactor_users_table', 'security' );
@@ -844,8 +913,20 @@ class Admin_Settings {
 			wp_send_json_error( __( 'Forbidden.', 'creatorreactor' ), 403 );
 		}
 
+		Cron::run_sync();
+
+		$last_sync = get_option( self::OPTION_LAST_SYNC, [] );
+		$sync_ok   = ! empty( $last_sync['success'] );
+		$sync_err  = null;
+		if ( ! $sync_ok ) {
+			$msg = trim( (string) get_option( self::OPTION_LAST_ERROR, '' ) );
+			$sync_err = $msg !== ''
+				? $msg
+				: __( 'Sync did not complete successfully. Check OAuth and scopes (including read:fan), then try again.', 'creatorreactor' );
+		}
+
 		$snapshot = self::get_users_tab_snapshot();
-		wp_send_json_success( self::render_users_tab_inner_html( $snapshot['totals'], $snapshot['rows'] ) );
+		wp_send_json_success( self::render_users_tab_inner_html( $snapshot['totals'], $snapshot['rows'], $sync_err ) );
 	}
 
 	/**
@@ -966,9 +1047,16 @@ class Admin_Settings {
 		.form-table textarea { width: 100%; max-width: 400px; }
 		input.creatorreactor-oauth-client-secret { -webkit-text-security: disc; font-family: Consolas, Monaco, monospace; }
 		.form-table .description { color: #646970; font-size: 13px; }
-		.creatorreactor-status-row { display: flex; align-items: center; gap: 10px; margin-bottom: 15px; }
 		.creatorreactor-status-badge { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; text-transform: uppercase; }
 		.creatorreactor-status-green { background: #edfaef; color: #1a7f37; }
+		.creatorreactor-status-badge.creatorreactor-status-healthy {
+			background: transparent;
+			padding: 0;
+			border-radius: 0;
+			font-size: 1.375rem;
+			font-weight: 700;
+			color: #1a7f37;
+		}
 		.creatorreactor-status-yellow { background: #fff7e5; color: #8a6d1d; }
 		.creatorreactor-status-red { background: #fbeaea; color: #b52727; }
 		.creatorreactor-tab-nav { margin: 0 0 16px; }
@@ -988,13 +1076,7 @@ class Admin_Settings {
 		.creatorreactor-connection-actions .creatorreactor-connect-fanvue-hint { flex-basis: 100%; margin: 8px 0 0; max-width: 28rem; }
 		.creatorreactor-connection-actions form { margin: 0; }
 		.creatorreactor-connection-actions .submit { margin: 0; padding: 0; }
-		.creatorreactor-kv { display: grid; grid-template-columns: minmax(120px, 180px) 1fr; gap: 8px 12px; margin: 0; }
-		.creatorreactor-kv dt { font-weight: 600; color: #1d2327; }
-		.creatorreactor-kv dd { margin: 0; }
-		.creatorreactor-test-details { margin-top: 12px; }
-		.creatorreactor-test-details summary { cursor: pointer; color: #3858e9; }
-		.creatorreactor-product-stack { margin-top: 0; }
-		.creatorreactor-product-stack summary { font-weight: 600; }
+		.creatorreactor-test-details-open { margin: 12px 0 0; }
 		.creatorreactor-test-modal-trigger { margin-left: 8px; }
 		.creatorreactor-test-errors { margin-top: 14px; padding: 12px; border: 1px solid #f3c7c7; border-radius: 6px; background: #fff7f7; }
 		.creatorreactor-test-errors h3 { margin: 0 0 8px; font-size: 13px; color: #7a1f1f; }
@@ -1017,6 +1099,80 @@ class Admin_Settings {
 		@media (max-width: 782px) {
 			.creatorreactor-connection-overview { flex-direction: column; }
 		}
+		.creatorreactor-btn-connect.button {
+			background: #1a7f37;
+			border-color: #156a2e;
+			color: #fff;
+		}
+		.creatorreactor-btn-connect.button:hover,
+		.creatorreactor-btn-connect.button:focus {
+			background: #156a2e;
+			border-color: #125a28;
+			color: #fff;
+		}
+		.creatorreactor-btn-disconnect.button {
+			background: #c92a2a;
+			border-color: #a61e1e;
+			color: #fff;
+		}
+		.creatorreactor-btn-disconnect.button:hover,
+		.creatorreactor-btn-disconnect.button:focus {
+			background: #b52727;
+			border-color: #8f1f1f;
+			color: #fff;
+		}
+		.creatorreactor-connection-log {
+			margin-top: 20px;
+			border: 0;
+			border-radius: 0;
+			background: transparent;
+			padding: 0;
+		}
+		.creatorreactor-connection-log > summary {
+			list-style: none;
+			cursor: pointer;
+			padding: 0;
+			margin: 0;
+			font-size: 14px;
+			font-weight: 600;
+			color: #1d2327;
+			display: inline-flex;
+			align-items: center;
+			gap: 8px;
+			background: transparent;
+			width: max-content;
+			max-width: 100%;
+		}
+		.creatorreactor-connection-log > summary::-webkit-details-marker { display: none; }
+		.creatorreactor-connection-log > summary::before {
+			content: "";
+			display: inline-block;
+			width: 0;
+			height: 0;
+			border-left: 5px solid transparent;
+			border-right: 5px solid transparent;
+			border-top: 6px solid #50575e;
+			transition: transform 0.15s ease;
+			flex-shrink: 0;
+		}
+		.creatorreactor-connection-log[open] > summary::before {
+			transform: rotate(180deg);
+		}
+		.creatorreactor-connection-log-body { margin: 10px 0 0; padding: 0; border: 0; }
+		.creatorreactor-connection-log-body > .description { margin: 0 0 8px; }
+		.creatorreactor-connection-log-list {
+			max-height: 22rem;
+			overflow: auto;
+			font-family: Consolas, Monaco, monospace;
+			font-size: 12px;
+			background: #f6f7f7;
+			border: 1px solid #dcdcde;
+			border-radius: 4px;
+			padding: 10px 12px;
+			margin: 0 0 12px;
+			list-style: none;
+		}
+		.creatorreactor-connection-log-list li { margin: 0 0 6px; }
 		/* Danger Zone Styles */
 		.creatorreactor-danger-zone {
 			background: #fff8f8;
@@ -1063,6 +1219,7 @@ class Admin_Settings {
 		.creatorreactor-sidebar-link.is-active { background: #f6f7f7; color: #007cba; border-left: 3px solid #007cba; }
 		.creatorreactor-sidebar-link:hover:not(.is-active) { background: #f5f5f5; }
 		.creatorreactor-settings-content { flex: 1; min-width: 0; }
+		.creatorreactor-settings-content.creatorreactor-settings-subtab-sync #creatorreactor-auth-mode-root { display: none; }
 		.creatorreactor-settings-form-card {
 			background: #fff;
 			border: 1px solid #dcdcde;
@@ -1078,6 +1235,30 @@ class Admin_Settings {
 			border-bottom: 1px solid #dcdcde;
 			background: #f6f7f7;
 		}
+		.creatorreactor-settings-form-card > .creatorreactor-settings-panel > .creatorreactor-settings-panel-header {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 12px;
+			margin: 0;
+			padding: 12px 20px;
+			border-bottom: 1px solid #dcdcde;
+			background: #f6f7f7;
+		}
+		.creatorreactor-settings-form-card > .creatorreactor-settings-panel > .creatorreactor-settings-panel-header h2 {
+			margin: 0;
+			padding: 0;
+			font-size: 16px;
+			border: 0;
+			background: transparent;
+			flex: 1;
+		}
+		.creatorreactor-oauth-tab-lock .dashicons { width: 18px; height: 18px; font-size: 18px; line-height: 1; }
+		.creatorreactor-oauth-tab-lock[aria-pressed="true"] .creatorreactor-oauth-tab-lock-icon-off { display: none; }
+		.creatorreactor-oauth-tab-lock[aria-pressed="true"] .creatorreactor-oauth-tab-lock-icon-on { display: inline-block; }
+		.creatorreactor-oauth-tab-lock[aria-pressed="false"] .creatorreactor-oauth-tab-lock-icon-on { display: none; }
+		.creatorreactor-oauth-tab-lock[aria-pressed="false"] .creatorreactor-oauth-tab-lock-icon-off { display: inline-block; }
+		.creatorreactor-oauth-configuration.is-oauth-config-locked { opacity: 0.92; }
 		.creatorreactor-settings-block {
 			padding: 20px;
 			border-top: 1px solid #dcdcde;
@@ -1211,7 +1392,7 @@ class Admin_Settings {
 			'creatorreactorUsersTable',
 			[
 				'nonce'         => wp_create_nonce( 'creatorreactor_users_table' ),
-				'refreshLabel'  => __( 'Refresh list', 'creatorreactor' ),
+				'refreshLabel'  => __( 'Sync & refresh list', 'creatorreactor' ),
 				'loadError'     => __( 'Error loading user table.', 'creatorreactor' ),
 			]
 		);
@@ -1329,6 +1510,34 @@ class Admin_Settings {
 						block.classList.toggle("is-locked", nextLocked);
 					}
 				});
+			}
+
+			function relockOAuthConfigurationTab() {
+				var lockBtn = document.querySelector(".creatorreactor-oauth-tab-lock");
+				if (!lockBtn) {
+					return;
+				}
+				lockBtn.setAttribute("aria-pressed", "true");
+				applyOAuthTabLockState();
+			}
+
+			function applyOAuthTabLockState() {
+				var lockBtn = document.querySelector(".creatorreactor-oauth-tab-lock");
+				var container = document.querySelector(".creatorreactor-oauth-configuration");
+				if (!lockBtn || !container) {
+					return;
+				}
+				var locked = lockBtn.getAttribute("aria-pressed") !== "false";
+				var lk = lockBtn.getAttribute("data-label-locked") || "";
+				var uk = lockBtn.getAttribute("data-label-unlocked") || "";
+				lockBtn.setAttribute("aria-label", locked ? lk : uk);
+				container.querySelectorAll("input, select, textarea, button").forEach(function(el) {
+					el.disabled = locked;
+				});
+				container.classList.toggle("is-oauth-config-locked", locked);
+				if (!locked && oauthDynamic) {
+					applyCreatorreactorAdvancedDefaults(oauthDynamic);
+				}
 			}
 
 			function applyCreatorreactorAdvancedDefaults(root) {
@@ -1452,7 +1661,7 @@ class Admin_Settings {
 						}
 						restoreFieldValues(oauthDynamic, prevOauth);
 						restoreFieldValues(syncDynamic, prevSync);
-						applyCreatorreactorAdvancedDefaults(oauthDynamic);
+						relockOAuthConfigurationTab();
 					})
 					.catch(function() {})
 					.finally(function() {
@@ -1498,6 +1707,10 @@ class Admin_Settings {
 						}
 						window.history.replaceState({}, "", url.toString());
 					}
+
+					if (tabName === "settings") {
+						relockOAuthConfigurationTab();
+					}
 				}
 
 				tabLinks.forEach(function(link) {
@@ -1525,7 +1738,17 @@ class Admin_Settings {
 			initTabs();
 
 			setupCreatorreactorAdvancedDelegation(oauthDynamic);
-			applyCreatorreactorAdvancedDefaults(oauthDynamic);
+			applyOAuthTabLockState();
+
+			var oauthTabLockBtn = document.querySelector(".creatorreactor-oauth-tab-lock");
+			if (oauthTabLockBtn) {
+				oauthTabLockBtn.addEventListener("click", function(e) {
+					e.preventDefault();
+					var pressed = oauthTabLockBtn.getAttribute("aria-pressed") === "true";
+					oauthTabLockBtn.setAttribute("aria-pressed", pressed ? "false" : "true");
+					applyOAuthTabLockState();
+				});
+			}
 
 			// Danger Zone collapsible functionality
 			var dangerZoneTitle = document.querySelector(".creatorreactor-danger-zone-title");
@@ -1662,6 +1885,13 @@ class Admin_Settings {
 				sidebarPanels.forEach(function(panel) {
 					panel.classList.toggle("is-active", panel.getAttribute("data-subtab") === subtab);
 				});
+				var settingsContent = document.querySelector(".creatorreactor-settings-content");
+				if (settingsContent) {
+					settingsContent.classList.toggle("creatorreactor-settings-subtab-sync", subtab === "sync");
+				}
+				if (subtab === "oauth") {
+					relockOAuthConfigurationTab();
+				}
 			}
 
 			var sidebarLinks = document.querySelectorAll(".creatorreactor-sidebar-link");
@@ -1705,43 +1935,8 @@ class Admin_Settings {
 	public static function get_status_summary() {
 		$opts = self::get_options();
 		$broker_mode = ! empty( $opts['broker_mode'] );
-		$product_label = Entitlements::product_label( Entitlements::PRODUCT_FANVUE );
-
-		$overall = 'green';
-		$overall_message = sprintf( __( '%s is ready.', 'creatorreactor' ), $product_label );
-
-		if ( $broker_mode ) {
-			$configured = Broker_Client::is_configured();
-			$connected = self::is_connected();
-
-			if ( ! $configured ) {
-				$overall = 'yellow';
-				$overall_message = sprintf( __( 'Agency mode (%s): Set broker URL and Site ID (OAuth app fields below are optional).', 'creatorreactor' ), $product_label );
-			} elseif ( ! $connected ) {
-				$overall = 'yellow';
-				$overall_message = sprintf( __( 'Agency mode (%s): Connect to complete setup.', 'creatorreactor' ), $product_label );
-			} else {
-				$overall_message = sprintf( __( 'Agency mode (%s): Connected to broker.', 'creatorreactor' ), $product_label );
-			}
-		} else {
-			$client_id = ! empty( $opts['creatorreactor_oauth_client_id'] );
-			$secret_set = ! empty( $opts['creatorreactor_oauth_client_secret'] ) && $opts['creatorreactor_oauth_client_secret'] !== '********';
-			$connected = self::is_connected();
-
-			if ( ! $client_id || ! $secret_set ) {
-				$overall = 'yellow';
-				$overall_message = sprintf( __( 'Creator mode (%s): Configure OAuth credentials.', 'creatorreactor' ), $product_label );
-			} elseif ( ! $connected ) {
-				$overall = 'yellow';
-				$overall_message = sprintf( __( 'Creator mode (%s): Connect to complete setup.', 'creatorreactor' ), $product_label );
-			} else {
-				$overall_message = sprintf( __( 'Creator mode (%s): Connected.', 'creatorreactor' ), $product_label );
-			}
-		}
 
 		return [
-			'overall' => $overall,
-			'overall_message' => $overall_message,
 			'broker_mode' => $broker_mode,
 			'connected' => self::is_connected(),
 			'last_sync' => get_option( self::OPTION_LAST_SYNC ),
@@ -1772,15 +1967,15 @@ class Admin_Settings {
 			return;
 		}
 
+		self::maybe_clear_stale_oauth_client_mismatch_last_error();
+
 		$status = self::get_status_summary();
 		$opts   = self::get_options();
-		$current_product = Entitlements::PRODUCT_FANVUE;
-		$current_product_label = Entitlements::product_label( $current_product );
+		$current_product_label = Entitlements::product_label( Entitlements::PRODUCT_FANVUE );
 		$secret_mask = ! empty( $opts['creatorreactor_oauth_client_secret'] ) ? '********' : '';
 		$broker_mode         = ! empty( $opts['broker_mode'] );
 		$authentication_mode = $broker_mode ? self::AUTH_MODE_AGENCY : self::AUTH_MODE_CREATOR;
 		$connection_test = get_option( self::OPTION_CONNECTION_TEST, [] );
-		$next_sync_time = wp_next_scheduled( Cron::HOOK );
 		$allowed_tabs = [ 'dashboard', 'users', 'settings' ];
 		$requested_tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'dashboard';
 		$active_tab = in_array( $requested_tab, $allowed_tabs, true ) ? $requested_tab : 'dashboard';
@@ -1802,21 +1997,6 @@ class Admin_Settings {
 				<div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Connection log cleared.', 'creatorreactor' ); ?></p></div>
 			<?php endif; ?>
 
-			<div class="creatorreactor-status-row">
-				<span class="creatorreactor-status-badge <?php echo 'green' === $status['overall'] ? 'creatorreactor-status-green' : ( 'yellow' === $status['overall'] ? 'creatorreactor-status-yellow' : 'creatorreactor-status-red' ); ?>">
-					<?php
-					if ( 'green' === $status['overall'] ) {
-						esc_html_e( 'Ready', 'creatorreactor' );
-					} elseif ( 'yellow' === $status['overall'] ) {
-						esc_html_e( 'Setup Required', 'creatorreactor' );
-					} else {
-						esc_html_e( 'Error', 'creatorreactor' );
-					}
-					?>
-				</span>
-				<span><?php echo esc_html( $status['overall_message'] ); ?></span>
-			</div>
-
 			<nav class="nav-tab-wrapper creatorreactor-tab-nav" aria-label="<?php esc_attr_e( 'CreatorReactor sections', 'creatorreactor' ); ?>">
 				<a href="<?php echo esc_url( admin_url( 'options-general.php?page=' . self::PAGE_SLUG . '&tab=dashboard' ) ); ?>" class="nav-tab creatorreactor-tab-link <?php echo 'dashboard' === $active_tab ? 'nav-tab-active' : ''; ?>" data-tab="dashboard"><?php esc_html_e( 'Dashboard', 'creatorreactor' ); ?></a>
 				<a href="<?php echo esc_url( admin_url( 'options-general.php?page=' . self::PAGE_SLUG . '&tab=users' ) ); ?>" class="nav-tab creatorreactor-tab-link <?php echo 'users' === $active_tab ? 'nav-tab-active' : ''; ?>" data-tab="users"><?php esc_html_e( 'Users', 'creatorreactor' ); ?></a>
@@ -1835,7 +2015,7 @@ class Admin_Settings {
 				<a href="<?php echo esc_url( admin_url( 'options-general.php?page=' . self::PAGE_SLUG . '&tab=settings&subtab=sync' ) ); ?>" class="creatorreactor-sidebar-link <?php echo 'sync' === $active_subtab ? 'is-active' : ''; ?>" data-subtab="sync"><?php esc_html_e( 'Sync', 'creatorreactor' ); ?></a>
 			</nav>
 		</div>
-		<div class="creatorreactor-settings-content">
+		<div class="creatorreactor-settings-content<?php echo 'sync' === $active_subtab ? ' creatorreactor-settings-subtab-sync' : ''; ?>">
 			<div id="creatorreactor-auth-mode-root" class="creatorreactor-settings-auth-card" data-ajax-url="<?php echo esc_url( admin_url( 'admin-ajax.php' ) ); ?>" data-nonce="<?php echo esc_attr( wp_create_nonce( 'creatorreactor_auth_mode' ) ); ?>">
 				<h2><?php esc_html_e( 'Authentication Modes', 'creatorreactor' ); ?></h2>
 				<div class="creatorreactor-settings-block">
@@ -1872,7 +2052,16 @@ class Admin_Settings {
 			</div>
 			<div class="creatorreactor-settings-form-card">
 			<div class="creatorreactor-settings-panel <?php echo 'oauth' === $active_subtab ? 'is-active' : ''; ?>" data-subtab="oauth">
-				<h2><?php esc_html_e( 'OAuth', 'creatorreactor' ); ?></h2>
+				<div class="creatorreactor-settings-panel-header creatorreactor-oauth-panel-header">
+					<h2><?php esc_html_e( 'OAuth', 'creatorreactor' ); ?></h2>
+					<button type="button" class="button creatorreactor-oauth-tab-lock" aria-pressed="true"
+						data-label-locked="<?php echo esc_attr( __( 'OAuth configuration locked — click to unlock editing', 'creatorreactor' ) ); ?>"
+						data-label-unlocked="<?php echo esc_attr( __( 'OAuth configuration unlocked — click to lock', 'creatorreactor' ) ); ?>"
+						aria-label="<?php echo esc_attr( __( 'OAuth configuration locked — click to unlock editing', 'creatorreactor' ) ); ?>">
+						<span class="dashicons dashicons-lock creatorreactor-oauth-tab-lock-icon-on" aria-hidden="true"></span>
+						<span class="dashicons dashicons-unlock creatorreactor-oauth-tab-lock-icon-off" aria-hidden="true"></span>
+					</button>
+				</div>
 				<div id="creatorreactor-oauth-dynamic" class="creatorreactor-auth-mode-dynamic" tabindex="-1">
 					<?php self::render_oauth_dynamic_fields( $broker_mode, $opts, $secret_mask, $current_product_label ); ?>
 				</div>
@@ -1910,7 +2099,7 @@ class Admin_Settings {
 				$connection_state = 'yellow';
 				$connection_failure_message = '';
 
-				if ( $connection_test_ran && ! $connection_test_passed ) {
+				if ( $connection_test_ran && ! $connection_test_passed && ! $status['connected'] ) {
 					$connection_state = 'red';
 					$connection_failure_message = isset( $connection_test['message'] ) ? trim( (string) $connection_test['message'] ) : '';
 					if ( ! empty( $connection_test['checks'] ) && is_array( $connection_test['checks'] ) ) {
@@ -1925,10 +2114,10 @@ class Admin_Settings {
 							}
 						}
 					}
+				} elseif ( $status['connected'] ) {
+					$connection_state = 'green';
 				} elseif ( $connection_test_passed && ! $status['connected'] ) {
 					$connection_state = 'yellow';
-				} elseif ( $connection_test_passed && $status['connected'] ) {
-					$connection_state = 'green';
 				} elseif ( ! $status['connected'] && ! empty( $status['critical_error'] ) ) {
 					$connection_state = 'red';
 					$connection_failure_message = trim( (string) $status['critical_error'] );
@@ -1937,7 +2126,7 @@ class Admin_Settings {
 				$connection_card_class = 'creatorreactor-connection-card is-' . $connection_state;
 				?>
 				<div class="creatorreactor-section <?php echo esc_attr( $connection_card_class ); ?>">
-					<h2><?php esc_html_e( 'Connection Status', 'creatorreactor' ); ?></h2>
+					<h2><?php printf( esc_html__( '%s Status', 'creatorreactor' ), esc_html( $current_product_label ) ); ?></h2>
 					<?php
 					$connect_url = '';
 					if ( $broker_mode ) {
@@ -1948,9 +2137,6 @@ class Admin_Settings {
 							'options-general.php?page=' . self::PAGE_SLUG . '&tab=dashboard&creatorreactor_oauth_start=1&_wpnonce=' . wp_create_nonce( 'creatorreactor_oauth_start' )
 						);
 					}
-					$last_sync = $status['last_sync'];
-					$last_sync_time = is_array( $last_sync ) && isset( $last_sync['time'] ) ? (int) $last_sync['time'] : ( $last_sync ? (int) $last_sync : 0 );
-					$last_sync_success = is_array( $last_sync ) && array_key_exists( 'success', $last_sync ) ? ! empty( $last_sync['success'] ) : true;
 					?>
 
 					<?php if ( $connection_state === 'red' && $connection_failure_message !== '' ) : ?>
@@ -1962,14 +2148,18 @@ class Admin_Settings {
 					<div class="creatorreactor-connection-overview">
 						<div>
 							<p>
-								<span class="creatorreactor-status-badge <?php echo 'green' === $connection_state ? 'creatorreactor-status-green' : ( 'red' === $connection_state ? 'creatorreactor-status-red' : 'creatorreactor-status-yellow' ); ?>">
+								<span class="creatorreactor-status-badge <?php echo 'green' === $connection_state ? 'creatorreactor-status-healthy' : ( 'red' === $connection_state ? 'creatorreactor-status-red' : 'creatorreactor-status-yellow' ); ?>">
 									<?php echo 'green' === $connection_state ? esc_html__( 'Healthy', 'creatorreactor' ) : ( 'red' === $connection_state ? esc_html__( 'Attention', 'creatorreactor' ) : esc_html__( 'Pending', 'creatorreactor' ) ); ?>
 								</span>
 							</p>
 							<p class="creatorreactor-muted">
 								<?php
 								if ( 'green' === $connection_state ) {
-									printf( esc_html__( 'All checks passed and %s is connected.', 'creatorreactor' ), esc_html( $current_product_label ) );
+									if ( $connection_test_passed ) {
+										printf( esc_html__( 'All checks passed and %s is connected.', 'creatorreactor' ), esc_html( $current_product_label ) );
+									} else {
+										printf( esc_html__( '%s is connected. Disconnect if you need to run a connection test again.', 'creatorreactor' ), esc_html( $current_product_label ) );
+									}
 								} elseif ( 'red' === $connection_state ) {
 									esc_html_e( 'Connection needs attention. Review the failure and retry.', 'creatorreactor' );
 								} else {
@@ -1983,7 +2173,7 @@ class Admin_Settings {
 								<?php wp_nonce_field( 'creatorreactor_test_connection' ); ?>
 								<input type="hidden" name="action" value="creatorreactor_test_connection" />
 								<p class="submit">
-									<input type="submit" class="button button-primary" value="<?php esc_attr_e( 'Run Test', 'creatorreactor' ); ?>" />
+									<input type="submit" class="button button-primary" value="<?php esc_attr_e( 'Run Test', 'creatorreactor' ); ?>"<?php disabled( ! empty( $status['connected'] ) ); ?><?php if ( ! empty( $status['connected'] ) ) : ?> title="<?php echo esc_attr__( 'Disconnect to run a connection test.', 'creatorreactor' ); ?>"<?php endif; ?> />
 								</p>
 							</form>
 							<?php if ( $status['connected'] ) : ?>
@@ -1991,11 +2181,15 @@ class Admin_Settings {
 									<?php wp_nonce_field( 'creatorreactor_disconnect' ); ?>
 									<input type="hidden" name="action" value="creatorreactor_disconnect" />
 									<p class="submit">
-										<input type="submit" class="button button-secondary" value="<?php esc_attr_e( 'Disconnect', 'creatorreactor' ); ?>" onclick="return confirm('<?php esc_attr_e( 'Are you sure you want to disconnect?', 'creatorreactor' ); ?>');" />
+										<input type="submit" class="button creatorreactor-btn-disconnect" value="<?php esc_attr_e( 'Disconnect', 'creatorreactor' ); ?>" onclick="return confirm('<?php esc_attr_e( 'Are you sure you want to disconnect?', 'creatorreactor' ); ?>');" />
 									</p>
 								</form>
 							<?php elseif ( $connect_url ) : ?>
-								<a href="<?php echo esc_url( $connect_url, [ 'https', 'http' ] ); ?>" class="button button-secondary"><?php esc_html_e( 'Connect', 'creatorreactor' ); ?></a>
+								<?php if ( $broker_mode ) : ?>
+									<a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=creatorreactor_broker_connect' ), 'creatorreactor_broker_connect' ) ); ?>" class="button creatorreactor-btn-connect"><?php esc_html_e( 'Connect', 'creatorreactor' ); ?></a>
+								<?php else : ?>
+									<a href="<?php echo esc_url( $connect_url, [ 'https', 'http' ] ); ?>" class="button creatorreactor-btn-connect"><?php esc_html_e( 'Connect', 'creatorreactor' ); ?></a>
+								<?php endif; ?>
 							<?php endif; ?>
 					</div>
 					</div>
@@ -2012,59 +2206,12 @@ class Admin_Settings {
 					}
 					?>
 
-					<dl class="creatorreactor-kv">
-						<dt><?php esc_html_e( 'Product', 'creatorreactor' ); ?></dt>
-						<dd>
-							<details class="creatorreactor-test-details creatorreactor-product-stack">
-								<summary><?php echo esc_html( $current_product_label ); ?></summary>
-								<ul class="creatorreactor-check-list">
-									<li><strong><?php esc_html_e( 'Key', 'creatorreactor' ); ?>:</strong> <?php echo esc_html( $current_product ); ?></li>
-									<li><strong><?php esc_html_e( 'Mode', 'creatorreactor' ); ?>:</strong> <?php echo $broker_mode ? esc_html__( 'Agency', 'creatorreactor' ) : esc_html__( 'Creator', 'creatorreactor' ); ?></li>
-									<li>
-										<strong><?php esc_html_e( 'Test', 'creatorreactor' ); ?>:</strong>
-										<?php if ( ! empty( $connection_test ) && is_array( $connection_test ) ) : ?>
-											<span class="creatorreactor-status-badge <?php echo ! empty( $connection_test['success'] ) ? 'creatorreactor-status-green' : 'creatorreactor-status-red'; ?>">
-												<?php echo ! empty( $connection_test['success'] ) ? esc_html__( 'Pass', 'creatorreactor' ) : esc_html__( 'Fail', 'creatorreactor' ); ?>
-											</span>
-											<?php if ( ! empty( $connection_test['time'] ) ) : ?>
-												<span class="creatorreactor-inline-status creatorreactor-muted">
-													<?php printf( esc_html__( '%s ago', 'creatorreactor' ), esc_html( human_time_diff( (int) $connection_test['time'], time() ) ) ); ?>
-												</span>
-											<?php endif; ?>
-											<?php if ( ! empty( $connection_test_checks ) ) : ?>
-												<button type="button" class="button-link creatorreactor-test-modal-trigger creatorreactor-open-test-modal">
-													<?php esc_html_e( 'View details', 'creatorreactor' ); ?>
-												</button>
-											<?php endif; ?>
-										<?php else : ?>
-											<span class="creatorreactor-muted"><?php esc_html_e( 'Not run yet', 'creatorreactor' ); ?></span>
-										<?php endif; ?>
-									</li>
-									<li>
-										<strong><?php esc_html_e( 'Last Sync', 'creatorreactor' ); ?>:</strong>
-										<?php if ( $last_sync_time > 0 ) : ?>
-											<?php printf( esc_html__( '%s ago', 'creatorreactor' ), esc_html( human_time_diff( $last_sync_time, time() ) ) ); ?>
-											<span class="creatorreactor-inline-status <?php echo $last_sync_success ? 'creatorreactor-check-result-pass' : 'creatorreactor-check-result-fail'; ?>">
-												<?php echo $last_sync_success ? esc_html__( 'Success', 'creatorreactor' ) : esc_html__( 'Failed', 'creatorreactor' ); ?>
-											</span>
-										<?php else : ?>
-											<span class="creatorreactor-muted"><?php esc_html_e( 'No sync has run yet', 'creatorreactor' ); ?></span>
-										<?php endif; ?>
-									</li>
-									<li>
-										<strong><?php esc_html_e( 'Next Sync', 'creatorreactor' ); ?>:</strong>
-										<?php if ( $next_sync_time ) : ?>
-											<?php printf( esc_html__( '%s from now', 'creatorreactor' ), esc_html( human_time_diff( time(), (int) $next_sync_time ) ) ); ?>
-										<?php else : ?>
-											<span class="creatorreactor-check-result-fail"><?php esc_html_e( 'Not scheduled', 'creatorreactor' ); ?></span>
-										<?php endif; ?>
-									</li>
-								</ul>
-							</details>
-						</dd>
-					</dl>
-
 					<?php if ( ! empty( $connection_test_checks ) ) : ?>
+						<p class="creatorreactor-test-details-open">
+							<button type="button" class="button-link creatorreactor-test-modal-trigger creatorreactor-open-test-modal">
+								<?php esc_html_e( 'View test details', 'creatorreactor' ); ?>
+							</button>
+						</p>
 						<div id="creatorreactor-test-modal" class="creatorreactor-modal" aria-hidden="true" data-test-time="<?php echo esc_attr( (string) (int) ( $connection_test['time'] ?? 0 ) ); ?>">
 							<div class="creatorreactor-modal-backdrop"></div>
 							<div class="creatorreactor-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="creatorreactor-test-modal-title">
@@ -2127,38 +2274,59 @@ class Admin_Settings {
 						</div>
 					<?php endif; ?>
 
-					<div class="creatorreactor-connection-log">
-						<h3><?php esc_html_e( 'Connection log', 'creatorreactor' ); ?></h3>
-						<p class="description"><?php esc_html_e( 'OAuth, broker, and connection-test events (newest first). Mirrors to the PHP error log when available.', 'creatorreactor' ); ?></p>
-						<?php if ( empty( $connection_logs ) ) : ?>
-							<p class="creatorreactor-muted"><?php esc_html_e( 'No log entries yet.', 'creatorreactor' ); ?></p>
-						<?php else : ?>
-							<ul class="creatorreactor-connection-log-list" style="max-height: 22rem; overflow: auto; font-family: monospace; font-size: 12px; background: #fff; border: 1px solid #dcdcde; padding: 10px 12px; margin: 0 0 12px; list-style: none;">
-								<?php
-								$logs_rev = array_reverse( $connection_logs );
-								foreach ( $logs_rev as $entry ) {
-									if ( ! is_array( $entry ) ) {
-										continue;
+					<details class="creatorreactor-connection-log">
+						<summary><?php esc_html_e( 'Connection log', 'creatorreactor' ); ?></summary>
+						<div class="creatorreactor-connection-log-body">
+							<p class="description"><?php esc_html_e( 'OAuth, broker, and connection-test events (newest first). Mirrors to the PHP error log when available.', 'creatorreactor' ); ?></p>
+							<?php if ( empty( $connection_logs ) ) : ?>
+								<p class="creatorreactor-muted"><?php esc_html_e( 'No log entries yet.', 'creatorreactor' ); ?></p>
+							<?php else : ?>
+								<ul class="creatorreactor-connection-log-list">
+									<?php
+									$logs_rev = array_reverse( $connection_logs );
+									foreach ( $logs_rev as $entry ) {
+										if ( ! is_array( $entry ) ) {
+											continue;
+										}
+										$t = isset( $entry['time'] ) ? (int) $entry['time'] : 0;
+										$lvl = isset( $entry['level'] ) ? (string) $entry['level'] : 'info';
+										$msg = isset( $entry['message'] ) ? (string) $entry['message'] : '';
+										$line = gmdate( 'Y-m-d H:i:s', $t ) . ' UTC [' . $lvl . '] ' . $msg;
+										echo '<li>' . esc_html( $line ) . '</li>';
 									}
-									$t = isset( $entry['time'] ) ? (int) $entry['time'] : 0;
-									$lvl = isset( $entry['level'] ) ? (string) $entry['level'] : 'info';
-									$msg = isset( $entry['message'] ) ? (string) $entry['message'] : '';
-									$line = gmdate( 'Y-m-d H:i:s', $t ) . ' UTC [' . $lvl . '] ' . $msg;
-									echo '<li style="margin: 0 0 6px;">' . esc_html( $line ) . '</li>';
-								}
-								?>
-							</ul>
-						<?php endif; ?>
-						<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin: 0;">
-							<?php wp_nonce_field( 'creatorreactor_clear_connection_logs' ); ?>
-							<input type="hidden" name="action" value="creatorreactor_clear_connection_logs" />
-							<input type="submit" class="button button-secondary" value="<?php esc_attr_e( 'Clear connection log', 'creatorreactor' ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Clear all connection log entries?', 'creatorreactor' ) ); ?>');" />
-						</form>
-					</div>
+									?>
+								</ul>
+							<?php endif; ?>
+							<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin: 0;">
+								<?php wp_nonce_field( 'creatorreactor_clear_connection_logs' ); ?>
+								<input type="hidden" name="action" value="creatorreactor_clear_connection_logs" />
+								<input type="submit" class="button button-secondary" value="<?php esc_attr_e( 'Clear connection log', 'creatorreactor' ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Clear all connection log entries?', 'creatorreactor' ) ); ?>');" />
+							</form>
+						</div>
+					</details>
 				</div>
 			</div>
 		</div>
 		<?php
+	}
+
+	/**
+	 * Clear Last Error when it still shows the deprecated Client ID mismatch text stored in wp_options.
+	 * Tokens were already removed when that error was set; the banner is redundant.
+	 */
+	private static function maybe_clear_stale_oauth_client_mismatch_last_error() {
+		if ( self::is_broker_mode() ) {
+			return;
+		}
+		$le = get_option( self::OPTION_LAST_ERROR );
+		if ( ! is_string( $le ) || $le === '' ) {
+			return;
+		}
+		// Old English copy; localized installs may differ — "Disconnect" was removed from the message in code.
+		if ( stripos( $le, 'different Client ID' ) === false || stripos( $le, 'Use Disconnect' ) === false ) {
+			return;
+		}
+		self::set_last_error( '' );
 	}
 
 	public static function set_last_error( $message ) {
