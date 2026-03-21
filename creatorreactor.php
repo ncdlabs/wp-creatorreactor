@@ -2,7 +2,7 @@
 /**
  * Plugin Name: FanBridge
  * Plugin URI: https://github.com/ncdlabs/fanbridge
- * Description: FanBridge is a secure, multi-tenant OAuth integration platform that connects Fanvue creators to external applications.
+ * Description: FanBridge is a secure, multi-tenant OAuth integration platform for creator products (currently FanVue, with support for additional products such as OnlyFans).
  * Version: 2.0.0
  * Author: ncdLabs
  * Author URI: https://ncdlabs.com
@@ -77,3 +77,5 @@ function fanbridge_deactivate() {
 	FanBridge\Cron::unschedule();
 }
 register_deactivation_hook( __FILE__, 'fanbridge_deactivate' );
+
+register_uninstall_hook( __FILE__, __DIR__ . '/uninstall.php' );

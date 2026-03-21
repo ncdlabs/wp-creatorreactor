@@ -471,14 +471,14 @@ class Fanvue_Client {
 							$tier_definitions[ $def['id'] ] = $def;
 						}
 					}
-					Entitlements::upsert_by_fanvue_uuid( $uuid, Entitlements::STATUS_ACTIVE, $expires_at, null, $email, $tier, $display_name );
+					Entitlements::upsert_by_fanvue_uuid( $uuid, Entitlements::STATUS_ACTIVE, $expires_at, null, $email, $tier, $display_name, Entitlements::PRODUCT_FANVUE );
 				}
 				$pagination = $result['pagination'];
 				$has_more   = ! empty( $pagination['hasMore'] );
 				$page++;
 			} while ( $has_more && count( $items ) === $size );
 
-			Entitlements::mark_missing_as_inactive( $active_uuids, $expires_at );
+			Entitlements::mark_missing_as_inactive( $active_uuids, $expires_at, Entitlements::PRODUCT_FANVUE );
 
 			if ( $any_ok ) {
 				$existing = get_option( Admin_Settings::OPTION_TIERS, [] );
@@ -514,7 +514,8 @@ class Fanvue_Client {
 						null,
 						$email,
 						Entitlements::TIER_FOLLOWER,
-						$display_name
+						$display_name,
+						Entitlements::PRODUCT_FANVUE
 					);
 				}
 				if ( count( $followers ) > 0 ) {

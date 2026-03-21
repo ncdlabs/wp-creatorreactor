@@ -20,6 +20,7 @@ class Admin_Settings {
 	const OPTION_LAST_ERROR           = 'fanbridge_last_error';
 	const OPTION_CRITICAL_ERROR       = 'fanbridge_critical_error';
 	const OPTION_LAST_SYNC            = 'fanbridge_last_sync';
+	const OPTION_CONNECTION_TEST      = 'fanbridge_connection_test';
 	const OPTION_TIERS               = 'fanbridge_tiers';
 	const OPTION_SUBSCRIPTION_TIERS  = 'fanbridge_subscription_tiers';
 	const ENCRYPTED_FIELDS            = [ 'fanvue_oauth_client_id', 'fanvue_oauth_client_secret' ];
@@ -35,11 +36,16 @@ class Admin_Settings {
 		add_action( 'admin_enqueue_scripts', [ __CLASS__, 'enqueue_assets' ] );
 		add_action( 'admin_init', [ __CLASS__, 'register_settings' ] );
 		add_action( 'admin_post_fanbridge_disconnect', [ __CLASS__, 'handle_disconnect' ] );
+		add_action( 'admin_post_fanbridge_test_connection', [ __CLASS__, 'handle_connection_test' ] );
 	}
 
 	private static function migrate_legacy_options() {
 		$opts = get_option( self::OPTION_NAME, [] );
 		if ( is_array( $opts ) && ! empty( $opts ) ) {
+			$merged_opts = self::merge_legacy_oauth_fields( $opts );
+			if ( $merged_opts !== $opts ) {
+				update_option( self::OPTION_NAME, $merged_opts );
+			}
 			return;
 		}
 
@@ -85,6 +91,91 @@ class Admin_Settings {
 		}
 
 		update_option( self::OPTION_NAME, $opts );
+	}
+
+	private static function is_missing_sensitive_setting( $value ) {
+		if ( empty( $value ) || $value === '********' ) {
+			return true;
+		}
+		if ( self::is_encrypted( $value ) ) {
+			return self::decrypt_value( (string) $value ) === null;
+		}
+		return false;
+	}
+
+	private static function merge_legacy_oauth_fields( array $opts ) {
+		$client_id_keys = [ 'fanvue_oauth_client_id', 'fanvue_client_id', 'oauth_client_id', 'client_id' ];
+		$secret_keys    = [ 'fanvue_oauth_client_secret', 'fanvue_client_secret', 'oauth_client_secret', 'client_secret' ];
+
+		$needs_client_id = self::is_missing_sensitive_setting( $opts['fanvue_oauth_client_id'] ?? '' );
+		$needs_secret    = self::is_missing_sensitive_setting( $opts['fanvue_oauth_client_secret'] ?? '' );
+
+		if ( $needs_client_id ) {
+			$fallback_client_id = self::find_first_usable_sensitive_value( $opts, $client_id_keys );
+			if ( $fallback_client_id !== null ) {
+				$opts['fanvue_oauth_client_id'] = $fallback_client_id;
+				$needs_client_id = false;
+			}
+		}
+
+		if ( $needs_secret ) {
+			$fallback_secret = self::find_first_usable_sensitive_value( $opts, $secret_keys );
+			if ( $fallback_secret !== null ) {
+				$opts['fanvue_oauth_client_secret'] = $fallback_secret;
+				$needs_secret = false;
+			}
+		}
+
+		if ( ! $needs_client_id && ! $needs_secret ) {
+			return $opts;
+		}
+
+		$prefer_broker = ! empty( $opts['broker_mode'] );
+		$legacy_sources = $prefer_broker
+			? [ self::LEGACY_OPTION_BROKER, self::LEGACY_OPTION_DIRECT ]
+			: [ self::LEGACY_OPTION_DIRECT, self::LEGACY_OPTION_BROKER ];
+
+		foreach ( $legacy_sources as $legacy_option_name ) {
+			$legacy_opts = get_option( $legacy_option_name, [] );
+			if ( ! is_array( $legacy_opts ) || empty( $legacy_opts ) ) {
+				continue;
+			}
+
+			if ( $needs_client_id ) {
+				$legacy_client_id = self::find_first_usable_sensitive_value( $legacy_opts, $client_id_keys );
+				if ( $legacy_client_id !== null ) {
+					$opts['fanvue_oauth_client_id'] = $legacy_client_id;
+					$needs_client_id = false;
+				}
+			}
+
+			if ( $needs_secret ) {
+				$legacy_secret = self::find_first_usable_sensitive_value( $legacy_opts, $secret_keys );
+				if ( $legacy_secret !== null ) {
+					$opts['fanvue_oauth_client_secret'] = $legacy_secret;
+					$needs_secret = false;
+				}
+			}
+
+			if ( ! $needs_client_id && ! $needs_secret ) {
+				break;
+			}
+		}
+
+		return $opts;
+	}
+
+	private static function find_first_usable_sensitive_value( array $source, array $keys ) {
+		foreach ( $keys as $key ) {
+			if ( ! array_key_exists( $key, $source ) ) {
+				continue;
+			}
+			$value = is_string( $source[ $key ] ) ? $source[ $key ] : '';
+			if ( ! self::is_missing_sensitive_setting( $value ) ) {
+				return $value;
+			}
+		}
+		return null;
 	}
 
 	public static function register_settings() {
@@ -343,6 +434,44 @@ class Admin_Settings {
 		return ! empty( $opts['broker_mode'] );
 	}
 
+	public static function handle_connection_test() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( 'Unauthorized' );
+		}
+
+		check_admin_referer( 'fanbridge_test_connection' );
+
+		$result = Fanvue_Client::test_connection();
+		$checks = [];
+
+		if ( ! empty( $result['checks'] ) && is_array( $result['checks'] ) ) {
+			foreach ( $result['checks'] as $check ) {
+				if ( ! is_array( $check ) ) {
+					continue;
+				}
+				$checks[] = [
+					'label' => isset( $check['label'] ) ? sanitize_text_field( (string) $check['label'] ) : '',
+					'pass' => ! empty( $check['pass'] ),
+					'message' => isset( $check['message'] ) ? sanitize_text_field( (string) $check['message'] ) : '',
+				];
+			}
+		}
+
+		update_option(
+			self::OPTION_CONNECTION_TEST,
+			[
+				'time' => time(),
+				'success' => ! empty( $result['success'] ),
+				'message' => isset( $result['message'] ) ? sanitize_text_field( (string) $result['message'] ) : '',
+				'checks' => $checks,
+			],
+			false
+		);
+
+		wp_safe_redirect( admin_url( 'options-general.php?page=' . self::PAGE_SLUG . '&tab=dashboard&status=connection_tested' ) );
+		exit;
+	}
+
 	public static function enqueue_assets( $hook_suffix ) {
 		if ( 'settings_page_' . self::PAGE_SLUG !== $hook_suffix ) {
 			return;
@@ -384,6 +513,70 @@ class Admin_Settings {
 		.fanbridge-tab-panel.is-active { display: block; }
 		.fanbridge-sync-row { display: flex; gap: 15px; align-items: flex-end; margin-top: 15px; }
 		.fanbridge-sync-row input[type="number"] { width: 80px; }
+		.fanbridge-check-list { margin: 10px 0 0; }
+		.fanbridge-check-list li { margin-bottom: 8px; }
+		.fanbridge-check-result-pass { color: #1a7f37; font-weight: 600; }
+		.fanbridge-check-result-fail { color: #b52727; font-weight: 600; }
+		.fanbridge-muted { color: #646970; }
+		.fanbridge-meta-list { margin: 0; }
+		.fanbridge-meta-list p { margin: 0 0 10px; }
+		.fanbridge-connection-overview { display: flex; justify-content: space-between; gap: 16px; padding: 14px; border: 1px solid #dcdcde; border-radius: 6px; background: #f6f7f7; margin-bottom: 16px; }
+		.fanbridge-connection-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+		.fanbridge-connection-actions form { margin: 0; }
+		.fanbridge-connection-actions .submit { margin: 0; padding: 0; }
+		.fanbridge-kv { display: grid; grid-template-columns: minmax(120px, 180px) 1fr; gap: 8px 12px; margin: 0; }
+		.fanbridge-kv dt { font-weight: 600; color: #1d2327; }
+		.fanbridge-kv dd { margin: 0; }
+		.fanbridge-test-details { margin-top: 12px; }
+		.fanbridge-test-details summary { cursor: pointer; color: #3858e9; }
+		.fanbridge-inline-status { margin-left: 8px; }
+		.fanbridge-connection-card { border-width: 1px; }
+		.fanbridge-connection-card.is-red { background: #fff1f1; border-color: #f3c7c7; }
+		.fanbridge-connection-card.is-yellow { background: #fff9e8; border-color: #f1deaa; }
+		.fanbridge-connection-card.is-green { background: #eefbf1; border-color: #b8e2c1; }
+		.fanbridge-connection-alert { margin: 0 0 12px; color: #7a1f1f; font-weight: 600; }
+		@media (max-width: 782px) {
+			.fanbridge-connection-overview { flex-direction: column; }
+		}
+		/* Danger Zone Styles */
+		.fanbridge-danger-zone {
+			background: #fff8f8;
+			border: 1px solid #f9d6d6;
+			border-radius: 4px;
+			padding: 20px;
+			margin-bottom: 20px;
+		}
+		.fanbridge-danger-zone h2 {
+			margin-top: 0;
+			color: #b52727;
+			font-size: 16px;
+			display: flex;
+			align-items: center;
+			gap: 8px;
+			cursor: pointer;
+		}
+		.fanbridge-danger-zone h2::after {
+			content: "";
+			display: inline-block;
+			width: 0;
+			height: 0;
+			border-left: 4px solid transparent;
+			border-right: 4px solid transparent;
+			border-top: 4px solid #666;
+			margin-left: auto;
+			transition: transform 0.2s ease;
+		}
+		.fanbridge-danger-zone.collapsed h2::after {
+			transform: rotate(-90deg);
+		}
+		.fanbridge-danger-zone-content {
+			max-height: 0;
+			overflow: hidden;
+			transition: max-height 0.3s ease;
+		}
+		.fanbridge-danger-zone.expanded .fanbridge-danger-zone-content {
+			max-height: 200px;
+		}
 		';
 
 		wp_register_style( 'fanbridge-admin', false, [], FANBRIDGE_VERSION );
@@ -454,13 +647,29 @@ class Admin_Settings {
 
 			initTabs();
 
-				var urlParams = new URLSearchParams(window.location.search);
-				var status = urlParams.get("status");
-				var notices = {
-					"disconnected": "' . esc_js( __( 'Disconnected from Fanvue.', 'fanbridge' ) ) . '",
-					"connected": "' . esc_js( __( 'Connected to Fanvue successfully.', 'fanbridge' ) ) . '",
-					"saved": "' . esc_js( __( 'Settings saved.', 'fanbridge' ) ) . '"
-				};
+			// Danger Zone collapsible functionality
+			var dangerZoneTitle = document.querySelector(".fanbridge-danger-zone-title");
+			var dangerZoneContent = document.querySelector(".fanbridge-danger-zone-content");
+			var dangerZone = document.querySelector(".fanbridge-danger-zone");
+			
+			if (dangerZoneTitle && dangerZoneContent && dangerZone) {
+				dangerZoneTitle.addEventListener("click", function() {
+					dangerZone.classList.toggle("expanded");
+					dangerZone.classList.toggle("collapsed");
+				});
+				
+				// Start collapsed by default
+				dangerZone.classList.add("collapsed");
+			}
+
+			var urlParams = new URLSearchParams(window.location.search);
+			var status = urlParams.get("status");
+			var notices = {
+				"disconnected": "' . esc_js( __( 'Disconnected from Fanvue.', 'fanbridge' ) ) . '",
+				"connected": "' . esc_js( __( 'Connected to Fanvue successfully.', 'fanbridge' ) ) . '",
+				"saved": "' . esc_js( __( 'Settings saved.', 'fanbridge' ) ) . '",
+				"connection_tested": "' . esc_js( __( 'Connection test completed.', 'fanbridge' ) ) . '"
+			};
 
 				if (status && notices[status]) {
 					var notice = document.createElement("div");
@@ -470,6 +679,20 @@ class Admin_Settings {
 					if (header) {
 						header.parentNode.insertBefore(notice, header.nextSibling);
 					}
+
+					window.setTimeout(function() {
+						notice.style.transition = "opacity 0.2s ease";
+						notice.style.opacity = "0";
+						window.setTimeout(function() {
+							if (notice.parentNode) {
+								notice.parentNode.removeChild(notice);
+							}
+						}, 200);
+					}, 4000);
+
+					var cleanUrl = new URL(window.location.href);
+					cleanUrl.searchParams.delete("status");
+					window.history.replaceState({}, "", cleanUrl.toString());
 				}
 			});
 		})();
@@ -556,6 +779,8 @@ class Admin_Settings {
 		$opts   = self::get_options();
 		$secret_mask = ! empty( $opts['fanvue_oauth_client_secret'] ) ? '********' : '';
 		$broker_mode = ! empty( $opts['broker_mode'] );
+		$connection_test = get_option( self::OPTION_CONNECTION_TEST, [] );
+		$next_sync_time = wp_next_scheduled( Cron::HOOK );
 		$allowed_tabs = [ 'dashboard', 'users', 'settings' ];
 		$requested_tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'dashboard';
 		$active_tab = in_array( $requested_tab, $allowed_tabs, true ) ? $requested_tab : 'dashboard';
@@ -570,6 +795,7 @@ class Admin_Settings {
 		$table_name = Entitlements::get_table_name();
 		$table_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table_name ) );
 		if ( $table_exists === $table_name ) {
+			Entitlements::maybe_add_product_column();
 			$user_totals['total'] = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table_name}" );
 			$user_totals['active'] = (int) $wpdb->get_var(
 				$wpdb->prepare( "SELECT COUNT(*) FROM {$table_name} WHERE status = %s", Entitlements::STATUS_ACTIVE )
@@ -577,7 +803,7 @@ class Admin_Settings {
 			$user_totals['inactive'] = (int) $wpdb->get_var(
 				$wpdb->prepare( "SELECT COUNT(*) FROM {$table_name} WHERE status = %s", Entitlements::STATUS_INACTIVE )
 			);
-			$user_rows = $wpdb->get_results( "SELECT display_name, email, status, tier, expires_at, updated_at FROM {$table_name} ORDER BY updated_at DESC LIMIT 50", ARRAY_A );
+			$user_rows = $wpdb->get_results( "SELECT product, display_name, email, status, tier, expires_at, updated_at FROM {$table_name} ORDER BY updated_at DESC LIMIT 50", ARRAY_A );
 		}
 		?>
 		<div class="wrap fanbridge-wrap">
@@ -787,6 +1013,7 @@ class Admin_Settings {
 						<table class="widefat striped">
 							<thead>
 								<tr>
+									<th><?php esc_html_e( 'Product', 'fanbridge' ); ?></th>
 									<th><?php esc_html_e( 'Name', 'fanbridge' ); ?></th>
 									<th><?php esc_html_e( 'Email', 'fanbridge' ); ?></th>
 									<th><?php esc_html_e( 'Status', 'fanbridge' ); ?></th>
@@ -798,6 +1025,7 @@ class Admin_Settings {
 							<tbody>
 								<?php foreach ( $user_rows as $row ) : ?>
 									<tr>
+										<td><?php echo esc_html( Entitlements::product_label( $row['product'] ?? Entitlements::PRODUCT_FANVUE ) ); ?></td>
 										<td><?php echo esc_html( (string) ( $row['display_name'] ?: '-' ) ); ?></td>
 										<td><?php echo esc_html( (string) ( $row['email'] ?: '-' ) ); ?></td>
 										<td><?php echo esc_html( (string) ( $row['status'] ?: '-' ) ); ?></td>
@@ -815,59 +1043,167 @@ class Admin_Settings {
 			</div>
 
 			<div class="fanbridge-tab-panel <?php echo 'dashboard' === $active_tab ? 'is-active' : ''; ?>" data-tab="dashboard">
-			<?php if ( $status['connected'] ) : ?>
-				<div class="fanbridge-section">
-					<h2><?php esc_html_e( 'Connection', 'fanbridge' ); ?></h2>
-					<p>
-						<span class="fanbridge-status-badge fanbridge-status-green"><?php esc_html_e( 'Connected', 'fanbridge' ); ?></span>
-						<span style="margin-left: 10px;"><?php esc_html_e( 'Connected to Fanvue', 'fanbridge' ); ?></span>
-					</p>
-					<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-						<?php wp_nonce_field( 'fanbridge_disconnect' ); ?>
-						<input type="hidden" name="action" value="fanbridge_disconnect" />
-						<p class="submit">
-							<input type="submit" class="button button-secondary" value="<?php esc_attr_e( 'Disconnect from Fanvue', 'fanbridge' ); ?>" onclick="return confirm('<?php esc_attr_e( 'Are you sure you want to disconnect?', 'fanbridge' ); ?>');" />
-						</p>
-					</form>
-				</div>
-			<?php elseif ( ! empty( $opts['fanvue_oauth_client_id'] ) && ! empty( $opts['fanvue_oauth_client_secret'] ) && $opts['fanvue_oauth_client_secret'] !== '********' ) : ?>
-				<div class="fanbridge-section">
-					<h2><?php esc_html_e( 'Connect to Fanvue', 'fanbridge' ); ?></h2>
-					<p><?php esc_html_e( 'Click the button below to authorize with Fanvue.', 'fanbridge' ); ?></p>
-					<?php
-					if ( $broker_mode ) {
-						$connect_url = Broker_Client::get_connect_url();
-					} else {
-						$connect_url = Fanvue_OAuth::get_authorization_url();
-					}
-					?>
-					<?php if ( $connect_url ) : ?>
-						<a href="<?php echo esc_url( $connect_url ); ?>" class="button button-primary"><?php esc_html_e( 'Connect to Fanvue', 'fanbridge' ); ?></a>
-					<?php endif; ?>
-				</div>
-			<?php endif; ?>
-			</div>
+				<?php
+				$connection_test_ran = ! empty( $connection_test ) && is_array( $connection_test );
+				$connection_test_passed = $connection_test_ran && ! empty( $connection_test['success'] );
+				$connection_state = 'yellow';
+				$connection_failure_message = '';
 
-			<div class="fanbridge-tab-panel <?php echo 'dashboard' === $active_tab ? 'is-active' : ''; ?>" data-tab="dashboard">
-			<?php if ( $status['last_sync'] ) : ?>
-				<div class="fanbridge-section">
-					<h3><?php esc_html_e( 'Sync Status', 'fanbridge' ); ?></h3>
-					<p>
-						<strong><?php esc_html_e( 'Last Sync:', 'fanbridge' ); ?></strong>
-						<?php
-						$last_sync = $status['last_sync'];
-						$time = is_array( $last_sync ) && isset( $last_sync['time'] ) ? $last_sync['time'] : $last_sync;
-						printf( esc_html__( '%s ago', 'fanbridge' ), esc_html( human_time_diff( (int) $time, time() ) ) );
-						?>
-					</p>
+				if ( $connection_test_ran && ! $connection_test_passed ) {
+					$connection_state = 'red';
+					$connection_failure_message = isset( $connection_test['message'] ) ? trim( (string) $connection_test['message'] ) : '';
+					if ( ! empty( $connection_test['checks'] ) && is_array( $connection_test['checks'] ) ) {
+						foreach ( $connection_test['checks'] as $check ) {
+							if ( empty( $check['pass'] ) ) {
+								$check_label = isset( $check['label'] ) ? trim( (string) $check['label'] ) : '';
+								$check_message = isset( $check['message'] ) ? trim( (string) $check['message'] ) : '';
+								if ( $check_message !== '' ) {
+									$connection_failure_message = $check_label !== '' ? $check_label . ': ' . $check_message : $check_message;
+									break;
+								}
+							}
+						}
+					}
+				} elseif ( $connection_test_passed && ! $status['connected'] ) {
+					$connection_state = 'yellow';
+				} elseif ( $connection_test_passed && $status['connected'] ) {
+					$connection_state = 'green';
+				} elseif ( ! $status['connected'] && ! empty( $status['critical_error'] ) ) {
+					$connection_state = 'red';
+					$connection_failure_message = trim( (string) $status['critical_error'] );
+				}
+
+				$connection_card_class = 'fanbridge-connection-card is-' . $connection_state;
+				?>
+				<div class="fanbridge-section <?php echo esc_attr( $connection_card_class ); ?>">
+					<h2><?php esc_html_e( 'Connection Status', 'fanbridge' ); ?></h2>
+					<?php
+					$connect_url = '';
+					if ( ! empty( $opts['fanvue_oauth_client_id'] ) && ! empty( $opts['fanvue_oauth_client_secret'] ) && $opts['fanvue_oauth_client_secret'] !== '********' ) {
+						$connect_url = $broker_mode ? Broker_Client::get_connect_url() : Fanvue_OAuth::get_authorization_url();
+					}
+					$last_sync = $status['last_sync'];
+					$last_sync_time = is_array( $last_sync ) && isset( $last_sync['time'] ) ? (int) $last_sync['time'] : ( $last_sync ? (int) $last_sync : 0 );
+					$last_sync_success = is_array( $last_sync ) && array_key_exists( 'success', $last_sync ) ? ! empty( $last_sync['success'] ) : true;
+					?>
+
+					<?php if ( $connection_state === 'red' && $connection_failure_message !== '' ) : ?>
+						<p class="fanbridge-connection-alert">
+							<?php echo esc_html( $connection_failure_message ); ?>
+						</p>
+					<?php endif; ?>
+
+					<div class="fanbridge-connection-overview">
+						<div>
+							<p>
+								<span class="fanbridge-status-badge <?php echo 'green' === $connection_state ? 'fanbridge-status-green' : ( 'red' === $connection_state ? 'fanbridge-status-red' : 'fanbridge-status-yellow' ); ?>">
+									<?php echo 'green' === $connection_state ? esc_html__( 'Healthy', 'fanbridge' ) : ( 'red' === $connection_state ? esc_html__( 'Attention', 'fanbridge' ) : esc_html__( 'Pending', 'fanbridge' ) ); ?>
+								</span>
+							</p>
+							<p class="fanbridge-muted">
+								<?php
+								if ( 'green' === $connection_state ) {
+									esc_html_e( 'All checks passed and FanBridge is connected.', 'fanbridge' );
+								} elseif ( 'red' === $connection_state ) {
+									esc_html_e( 'Connection needs attention. Review the failure and retry.', 'fanbridge' );
+								} else {
+									esc_html_e( 'Checks look good. Connect FanBridge to finish setup.', 'fanbridge' );
+								}
+								?>
+							</p>
+						</div>
+						<div class="fanbridge-connection-actions">
+							<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+								<?php wp_nonce_field( 'fanbridge_test_connection' ); ?>
+								<input type="hidden" name="action" value="fanbridge_test_connection" />
+								<p class="submit">
+									<input type="submit" class="button button-primary" value="<?php esc_attr_e( 'Run Test', 'fanbridge' ); ?>" />
+								</p>
+							</form>
+							<?php if ( $status['connected'] ) : ?>
+								<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
+									<?php wp_nonce_field( 'fanbridge_disconnect' ); ?>
+									<input type="hidden" name="action" value="fanbridge_disconnect" />
+									<p class="submit">
+										<input type="submit" class="button button-secondary" value="<?php esc_attr_e( 'Disconnect', 'fanbridge' ); ?>" onclick="return confirm('<?php esc_attr_e( 'Are you sure you want to disconnect?', 'fanbridge' ); ?>');" />
+									</p>
+								</form>
+							<?php elseif ( $connect_url ) : ?>
+								<a href="<?php echo esc_url( $connect_url ); ?>" class="button button-secondary"><?php esc_html_e( 'Connect', 'fanbridge' ); ?></a>
+							<?php endif; ?>
+						</div>
+					</div>
+
+					<dl class="fanbridge-kv">
+						<dt><?php esc_html_e( 'Mode', 'fanbridge' ); ?></dt>
+						<dd><?php echo $broker_mode ? esc_html__( 'Broker', 'fanbridge' ) : esc_html__( 'Direct', 'fanbridge' ); ?></dd>
+						<dt><?php esc_html_e( 'Test', 'fanbridge' ); ?></dt>
+						<dd>
+							<?php if ( ! empty( $connection_test ) && is_array( $connection_test ) ) : ?>
+								<span class="fanbridge-status-badge <?php echo ! empty( $connection_test['success'] ) ? 'fanbridge-status-green' : 'fanbridge-status-red'; ?>">
+									<?php echo ! empty( $connection_test['success'] ) ? esc_html__( 'Pass', 'fanbridge' ) : esc_html__( 'Fail', 'fanbridge' ); ?>
+								</span>
+								<?php if ( ! empty( $connection_test['time'] ) ) : ?>
+									<span class="fanbridge-inline-status fanbridge-muted">
+										<?php printf( esc_html__( '%s ago', 'fanbridge' ), esc_html( human_time_diff( (int) $connection_test['time'], time() ) ) ); ?>
+									</span>
+								<?php endif; ?>
+							<?php else : ?>
+								<span class="fanbridge-muted"><?php esc_html_e( 'Not run yet', 'fanbridge' ); ?></span>
+							<?php endif; ?>
+						</dd>
+						<dt><?php esc_html_e( 'Last Sync', 'fanbridge' ); ?></dt>
+						<dd>
+							<?php if ( $last_sync_time > 0 ) : ?>
+								<?php printf( esc_html__( '%s ago', 'fanbridge' ), esc_html( human_time_diff( $last_sync_time, time() ) ) ); ?>
+								<span class="fanbridge-inline-status <?php echo $last_sync_success ? 'fanbridge-check-result-pass' : 'fanbridge-check-result-fail'; ?>">
+									<?php echo $last_sync_success ? esc_html__( 'Success', 'fanbridge' ) : esc_html__( 'Failed', 'fanbridge' ); ?>
+								</span>
+							<?php else : ?>
+								<span class="fanbridge-muted"><?php esc_html_e( 'No sync has run yet', 'fanbridge' ); ?></span>
+							<?php endif; ?>
+						</dd>
+						<dt><?php esc_html_e( 'Next Sync', 'fanbridge' ); ?></dt>
+						<dd>
+							<?php if ( $next_sync_time ) : ?>
+								<?php printf( esc_html__( '%s from now', 'fanbridge' ), esc_html( human_time_diff( time(), (int) $next_sync_time ) ) ); ?>
+							<?php else : ?>
+								<span class="fanbridge-check-result-fail"><?php esc_html_e( 'Not scheduled', 'fanbridge' ); ?></span>
+							<?php endif; ?>
+						</dd>
+					</dl>
+
 					<?php if ( $status['last_error'] ) : ?>
-						<p style="color: #b52727;">
+						<p class="fanbridge-check-result-fail">
 							<strong><?php esc_html_e( 'Last Error:', 'fanbridge' ); ?></strong>
 							<?php echo esc_html( $status['last_error'] ); ?>
 						</p>
 					<?php endif; ?>
+
+					<?php if ( ! empty( $connection_test['checks'] ) && is_array( $connection_test['checks'] ) ) : ?>
+						<details class="fanbridge-test-details">
+							<summary><?php esc_html_e( 'View test details', 'fanbridge' ); ?></summary>
+							<ul class="fanbridge-check-list">
+								<?php foreach ( $connection_test['checks'] as $check ) : ?>
+									<?php
+									$check_label = isset( $check['label'] ) ? (string) $check['label'] : '';
+									$check_message = isset( $check['message'] ) ? (string) $check['message'] : '';
+									$check_pass = ! empty( $check['pass'] );
+									?>
+									<li>
+										<strong><?php echo esc_html( $check_label ); ?>:</strong>
+										<span class="<?php echo $check_pass ? 'fanbridge-check-result-pass' : 'fanbridge-check-result-fail'; ?>">
+											<?php echo $check_pass ? esc_html__( 'OK', 'fanbridge' ) : esc_html__( 'Issue', 'fanbridge' ); ?>
+										</span>
+										<?php if ( $check_message !== '' ) : ?>
+											&mdash; <?php echo esc_html( $check_message ); ?>
+										<?php endif; ?>
+									</li>
+								<?php endforeach; ?>
+							</ul>
+						</details>
+					<?php endif; ?>
 				</div>
-			<?php endif; ?>
 			</div>
 		</div>
 		<?php

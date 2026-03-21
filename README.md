@@ -2,7 +2,7 @@
 
 ## Overview
 
-FanBridge is a secure OAuth integration platform that connects Fanvue creators to external applications. It periodically syncs subscribers and followers for use in custom integrations.
+FanBridge is a secure OAuth integration platform for creator products (currently FanVue, with additional products like OnlyFans planned). It periodically syncs subscribers and followers for use in custom integrations, and each entitlement row tracks its source product.
 
 **Author:** ncdLabs - [ncdlabs.com](https://ncdlabs.com)
 
@@ -44,13 +44,19 @@ FanBridge is a secure OAuth integration platform that connects Fanvue creators t
 ### Check User Entitlement
 
 ```php
-// Check if user has any active subscription
+// Check if user has any active subscription (all products)
 $has_access = FanBridge\Entitlements::check_user_entitlement($user_id);
 
-// Check if user has specific tier
+// Check if user has specific tier (all products)
 $has_tier = FanBridge\Entitlements::check_user_entitlement($user_id, 'premium');
 
-// Get all active subscribers for a tier
+// Check if user has specific tier in a specific product
+$has_fanvue_tier = FanBridge\Entitlements::check_user_entitlement($user_id, 'premium', 'fanvue');
+
+// Get all active subscribers for a tier in a specific product
+$fanvue_subscribers = FanBridge\Entitlements::get_active_subscribers('premium', 'fanvue');
+
+// Get all active subscribers for a tier across products
 $subscribers = FanBridge\Entitlements::get_active_subscribers('premium');
 ```
 
