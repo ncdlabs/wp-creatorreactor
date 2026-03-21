@@ -88,6 +88,7 @@ class Entitlements {
 			dbDelta( $sql );
 			self::maybe_add_product_column();
 			self::maybe_add_display_name_column();
+			self::maybe_add_creatorreactor_user_uuid_column();
 			self::$schema_checked = true;
 		} catch ( \Throwable $e ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
@@ -112,6 +113,7 @@ class Entitlements {
 
 		self::maybe_add_product_column();
 		self::maybe_add_display_name_column();
+		self::maybe_add_creatorreactor_user_uuid_column();
 		self::$schema_checked = true;
 	}
 
@@ -151,6 +153,23 @@ class Entitlements {
 		return ucwords( str_replace( [ '-', '_' ], ' ', $product ) );
 	}
 
+	/**
+	 * Users tab: collapse stored tier into Follower vs paid Subscriber.
+	 *
+	 * @param string|null $tier Raw tier from entitlements row.
+	 * @return string Translated label or hyphen when unknown.
+	 */
+	public static function tier_audience_label( $tier ) {
+		if ( $tier === null || $tier === '' ) {
+			return '-';
+		}
+		$tier = (string) $tier;
+		if ( $tier === self::TIER_FOLLOWER ) {
+			return __( 'Follower', 'creatorreactor' );
+		}
+		return __( 'Subscriber', 'creatorreactor' );
+	}
+
 	public static function maybe_add_product_column() {
 		global $wpdb;
 		$table = self::get_table_name();
@@ -168,6 +187,53 @@ class Entitlements {
 		if ( ! self::has_column( 'display_name' ) ) {
 			$wpdb->query( "ALTER TABLE {$table} ADD COLUMN display_name varchar(255) DEFAULT NULL AFTER email" );
 		}
+	}
+
+	/**
+	 * Ensure creatorreactor_user_uuid exists (older installs / dbDelta gaps may omit it).
+	 * Renames legacy column `uuid` if present.
+	 */
+	public static function maybe_add_creatorreactor_user_uuid_column() {
+		global $wpdb;
+		$table = self::get_table_name();
+		if ( self::has_column( 'creatorreactor_user_uuid' ) ) {
+			if ( ! self::has_index( 'creatorreactor_user_uuid' ) ) {
+				// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from trusted prefix.
+				$wpdb->query( "ALTER TABLE {$table} ADD KEY creatorreactor_user_uuid (creatorreactor_user_uuid)" );
+			}
+			return;
+		}
+		if ( self::has_column( 'uuid' ) ) {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from trusted prefix.
+			$wpdb->query( "ALTER TABLE `{$table}` CHANGE COLUMN `uuid` `creatorreactor_user_uuid` varchar(36) DEFAULT NULL" );
+		} else {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from trusted prefix.
+			$wpdb->query( "ALTER TABLE {$table} ADD COLUMN creatorreactor_user_uuid varchar(36) DEFAULT NULL" );
+		}
+		if ( ! self::has_index( 'creatorreactor_user_uuid' ) ) {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from trusted prefix.
+			$wpdb->query( "ALTER TABLE {$table} ADD KEY creatorreactor_user_uuid (creatorreactor_user_uuid)" );
+		}
+	}
+
+	/**
+	 * Surface $wpdb errors to last error + sync log (WordPress does not throw on SQL errors).
+	 *
+	 * @param string $context Short label for the failing operation.
+	 * @return bool True if an error was reported.
+	 */
+	private static function report_db_error( $context ) {
+		global $wpdb;
+		$err = isset( $wpdb->last_error ) ? trim( (string) $wpdb->last_error ) : '';
+		if ( $err === '' ) {
+			return false;
+		}
+		$msg = $context . ': ' . $err;
+		if ( class_exists( __NAMESPACE__ . '\\Admin_Settings', false ) ) {
+			Admin_Settings::set_last_error( $msg );
+			Admin_Settings::log_sync( 'error', $msg );
+		}
+		return true;
 	}
 
 	public static function upsert_by_creatorreactor_uuid( $creatorreactor_uuid, $status, $expires_at, $wp_user_id = null, $email = '', $tier = null, $display_name = null, $product = self::PRODUCT_FANVUE ) {
@@ -189,6 +255,9 @@ class Entitlements {
 					$product
 				)
 			);
+			if ( self::report_db_error( 'Entitlements SELECT' ) ) {
+				return false;
+			}
 
 			$data = [
 				'product'          => $product,
@@ -212,10 +281,16 @@ class Entitlements {
 					[ '%s', '%s', '%s', '%s', '%d', '%s', '%s', '%s' ],
 					[ '%d' ]
 				);
+				if ( self::report_db_error( 'Entitlements UPDATE' ) ) {
+					return false;
+				}
 				return $result !== false;
 			}
 
 			$result = $wpdb->insert( $table, $data, $format );
+			if ( self::report_db_error( 'Entitlements INSERT' ) ) {
+				return false;
+			}
 			return $result !== false;
 		} catch ( \Throwable $e ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
@@ -242,6 +317,7 @@ class Entitlements {
 						$product
 					)
 				);
+				self::report_db_error( 'Entitlements mark_missing_as_inactive (empty active set)' );
 				return (int) $wpdb->rows_affected;
 			}
 
@@ -254,6 +330,7 @@ class Entitlements {
 				)
 			);
 			$wpdb->query( $query );
+			self::report_db_error( 'Entitlements mark_missing_as_inactive' );
 			return (int) $wpdb->rows_affected;
 		} catch ( \Throwable $e ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {

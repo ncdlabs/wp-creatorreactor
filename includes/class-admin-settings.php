@@ -24,10 +24,15 @@ class Admin_Settings {
 	/** Option key: connection / OAuth log entries (array of { time, level, message }). */
 	const OPTION_CONNECTION_LOGS      = 'creatorreactor_connection_logs';
 	const MAX_CONNECTION_LOG_ENTRIES  = 500;
+	/** Option key: subscriber/sync and user-table events (same shape as connection logs). */
+	const OPTION_SYNC_LOGS            = 'creatorreactor_sync_logs';
+	const MAX_SYNC_LOG_ENTRIES        = 500;
+	/** CreatorReactor web app CRM (Users tab action). */
+	const CRM_APP_URL                 = 'https://app.creator-reactor.com/crm';
 	const OPTION_TIERS               = 'creatorreactor_tiers';
 	const OPTION_SUBSCRIPTION_TIERS  = 'creatorreactor_subscription_tiers';
 	const ENCRYPTED_FIELDS            = [ 'creatorreactor_oauth_client_id', 'creatorreactor_oauth_client_secret' ];
-	/** @var string Mirrors {@see CreatorReactor_OAuth::DEFAULT_SCOPES} (includes read:fan for Fanvue list APIs). */
+	/** @var string Mirrors {@see CreatorReactor_OAuth::DEFAULT_SCOPES} (Fanvue quick start; add read:fan in Advanced if your app allows it). */
 	const DEFAULT_CREATORREACTOR_SCOPES = CreatorReactor_OAuth::DEFAULT_SCOPES;
 	const PAGE_SLUG                   = 'creatorreactor';
 
@@ -57,9 +62,35 @@ class Admin_Settings {
 		add_action( 'admin_post_creatorreactor_disconnect', [ __CLASS__, 'handle_disconnect' ] );
 		add_action( 'admin_post_creatorreactor_test_connection', [ __CLASS__, 'handle_connection_test' ] );
 		add_action( 'admin_post_creatorreactor_clear_connection_logs', [ __CLASS__, 'handle_clear_connection_logs' ] );
+		add_action( 'admin_post_creatorreactor_clear_sync_logs', [ __CLASS__, 'handle_clear_sync_logs' ] );
 		add_action( 'admin_post_creatorreactor_broker_connect', [ __CLASS__, 'handle_broker_connect' ] );
 		add_action( 'wp_ajax_creatorreactor_auth_mode_fields', [ __CLASS__, 'ajax_auth_mode_fields' ] );
 		add_action( 'wp_ajax_creatorreactor_get_users_table', [ __CLASS__, 'ajax_get_users_table' ] );
+		add_action( 'wp_ajax_creatorreactor_append_sync_log', [ __CLASS__, 'ajax_append_sync_log' ] );
+		add_action( 'wp_ajax_creatorreactor_deactivate_wp_user', [ __CLASS__, 'ajax_deactivate_wp_user' ] );
+		add_filter(
+			'plugin_action_links_' . plugin_basename( CREATORREACTOR_PLUGIN_DIR . 'creatorreactor.php' ),
+			[ __CLASS__, 'add_plugin_action_links' ]
+		);
+	}
+
+	/**
+	 * Settings link on Plugins screen (after Deactivate).
+	 *
+	 * @param array<int|string, string> $links Existing action links.
+	 * @return array<int|string, string>
+	 */
+	public static function add_plugin_action_links( $links ) {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			return $links;
+		}
+		$url                              = admin_url( 'options-general.php?page=' . self::PAGE_SLUG );
+		$links['creatorreactor_settings'] = sprintf(
+			'<a href="%s">%s</a>',
+			esc_url( $url ),
+			esc_html__( 'Settings', 'creatorreactor' )
+		);
+		return $links;
 	}
 
 	/**
@@ -826,6 +857,8 @@ class Admin_Settings {
 		$table_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table_name ) );
 		if ( $table_exists === $table_name ) {
 			Entitlements::maybe_add_product_column();
+			Entitlements::maybe_add_display_name_column();
+			Entitlements::maybe_add_creatorreactor_user_uuid_column();
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from trusted prefix.
 			$user_totals['total'] = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table_name}" );
 			$user_totals['active'] = (int) $wpdb->get_var(
@@ -835,7 +868,7 @@ class Admin_Settings {
 				$wpdb->prepare( "SELECT COUNT(*) FROM {$table_name} WHERE status = %s", Entitlements::STATUS_INACTIVE )
 			);
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from trusted prefix.
-			$user_rows = $wpdb->get_results( "SELECT product, display_name, email, status, tier, expires_at, updated_at FROM {$table_name} ORDER BY updated_at DESC LIMIT 50", ARRAY_A );
+			$user_rows = $wpdb->get_results( "SELECT id, wp_user_id, creatorreactor_user_uuid, product, display_name, email, status, tier, expires_at, updated_at FROM {$table_name} ORDER BY updated_at DESC LIMIT 50", ARRAY_A );
 			if ( ! is_array( $user_rows ) ) {
 				$user_rows = [];
 			}
@@ -844,6 +877,34 @@ class Admin_Settings {
 		return [
 			'totals' => $user_totals,
 			'rows'   => $user_rows,
+		];
+	}
+
+	/**
+	 * JSON-friendly detail fields for the Users tab Details action (modal).
+	 *
+	 * @param array<string, mixed> $row Entitlements row.
+	 * @return array<string, string>
+	 */
+	private static function users_tab_row_details_map( array $row ) {
+		$tier_raw = isset( $row['tier'] ) && $row['tier'] !== null && (string) $row['tier'] !== ''
+			? (string) $row['tier']
+			: '';
+		$wp_uid = isset( $row['wp_user_id'] ) && $row['wp_user_id'] !== null && (string) $row['wp_user_id'] !== ''
+			? (string) (int) $row['wp_user_id']
+			: '';
+
+		return [
+			'product'                  => Entitlements::product_label( $row['product'] ?? Entitlements::PRODUCT_FANVUE ),
+			'display_name'             => (string) ( $row['display_name'] ?? '' ) !== '' ? (string) $row['display_name'] : '-',
+			'email'                    => (string) ( $row['email'] ?? '' ) !== '' ? (string) $row['email'] : '-',
+			'status'                   => (string) ( $row['status'] ?? '' ) !== '' ? (string) $row['status'] : '-',
+			'tier'                     => Entitlements::tier_audience_label( $tier_raw !== '' ? $tier_raw : null ),
+			'tier_raw'                 => $tier_raw !== '' ? $tier_raw : '-',
+			'expires_at'               => (string) ( $row['expires_at'] ?? '' ) !== '' ? (string) $row['expires_at'] : '-',
+			'updated_at'               => (string) ( $row['updated_at'] ?? '' ) !== '' ? (string) $row['updated_at'] : '-',
+			'wp_user_id'               => $wp_uid !== '' ? $wp_uid : '-',
+			'creatorreactor_user_uuid' => (string) ( $row['creatorreactor_user_uuid'] ?? '' ) !== '' ? (string) $row['creatorreactor_user_uuid'] : '-',
 		];
 	}
 
@@ -879,20 +940,58 @@ class Admin_Settings {
 						<th><?php esc_html_e( 'Email', 'creatorreactor' ); ?></th>
 						<th><?php esc_html_e( 'Status', 'creatorreactor' ); ?></th>
 						<th><?php esc_html_e( 'Tier', 'creatorreactor' ); ?></th>
-						<th><?php esc_html_e( 'Expires', 'creatorreactor' ); ?></th>
-						<th><?php esc_html_e( 'Updated', 'creatorreactor' ); ?></th>
+						<th class="creatorreactor-users-col-actions"><?php esc_html_e( 'Actions', 'creatorreactor' ); ?></th>
 					</tr>
 				</thead>
 				<tbody>
 					<?php foreach ( $user_rows as $row ) : ?>
+						<?php
+						$tier_raw = isset( $row['tier'] ) && $row['tier'] !== null && (string) $row['tier'] !== ''
+							? (string) $row['tier']
+							: '';
+						$tier_show = Entitlements::tier_audience_label( $tier_raw !== '' ? $tier_raw : null );
+						$ent_id    = isset( $row['id'] ) ? (int) $row['id'] : 0;
+						$wp_uid    = isset( $row['wp_user_id'] ) && $row['wp_user_id'] !== null && (string) $row['wp_user_id'] !== ''
+							? (int) $row['wp_user_id']
+							: 0;
+						$details_json = wp_json_encode(
+							self::users_tab_row_details_map( $row ),
+							JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+						);
+						?>
 						<tr>
 							<td><?php echo esc_html( Entitlements::product_label( $row['product'] ?? Entitlements::PRODUCT_FANVUE ) ); ?></td>
 							<td><?php echo esc_html( (string) ( $row['display_name'] ?: '-' ) ); ?></td>
 							<td><?php echo esc_html( (string) ( $row['email'] ?: '-' ) ); ?></td>
 							<td><?php echo esc_html( (string) ( $row['status'] ?: '-' ) ); ?></td>
-							<td><?php echo esc_html( (string) ( $row['tier'] ?: '-' ) ); ?></td>
-							<td><?php echo esc_html( (string) ( $row['expires_at'] ?: '-' ) ); ?></td>
-							<td><?php echo esc_html( (string) ( $row['updated_at'] ?: '-' ) ); ?></td>
+							<td><?php echo esc_html( $tier_show ); ?></td>
+							<td class="creatorreactor-users-col-actions">
+								<div class="creatorreactor-user-actions" role="group" aria-label="<?php esc_attr_e( 'Row actions', 'creatorreactor' ); ?>">
+									<button type="button" class="button button-small creatorreactor-user-action creatorreactor-user-action-details" data-details="<?php echo esc_attr( $details_json ); ?>" title="<?php esc_attr_e( 'Details', 'creatorreactor' ); ?>">
+										<span class="dashicons dashicons-info" aria-hidden="true"></span>
+										<span class="screen-reader-text"><?php esc_html_e( 'Details', 'creatorreactor' ); ?></span>
+									</button>
+									<a class="button button-small creatorreactor-user-action creatorreactor-user-action-crm" href="<?php echo esc_url( self::CRM_APP_URL ); ?>" target="_blank" rel="noopener noreferrer" title="<?php esc_attr_e( 'Open in CRM', 'creatorreactor' ); ?>">
+										<span class="dashicons dashicons-external" aria-hidden="true"></span>
+										<span class="screen-reader-text"><?php esc_html_e( 'Open in CRM', 'creatorreactor' ); ?></span>
+									</a>
+									<button type="button" class="button button-small creatorreactor-user-action creatorreactor-user-action-sync" title="<?php esc_attr_e( 'Sync status', 'creatorreactor' ); ?>">
+										<span class="dashicons dashicons-update" aria-hidden="true"></span>
+										<span class="screen-reader-text"><?php esc_html_e( 'Sync status', 'creatorreactor' ); ?></span>
+									</button>
+									<?php if ( $wp_uid > 0 ) : ?>
+										<button type="button" class="button button-small creatorreactor-user-action creatorreactor-user-action-deactivate" data-entitlement-id="<?php echo esc_attr( (string) $ent_id ); ?>" data-wp-user-id="<?php echo esc_attr( (string) $wp_uid ); ?>" title="<?php esc_attr_e( 'Deactivate WordPress user', 'creatorreactor' ); ?>">
+											<span class="dashicons dashicons-dismiss" aria-hidden="true"></span>
+											<span class="screen-reader-text"><?php esc_html_e( 'Deactivate', 'creatorreactor' ); ?></span>
+										</button>
+									<?php else : ?>
+										<button type="button" class="button button-small creatorreactor-user-action" disabled title="<?php esc_attr_e( 'No linked WordPress user', 'creatorreactor' ); ?>">
+											<span class="dashicons dashicons-dismiss" aria-hidden="true"></span>
+											<span class="screen-reader-text"><?php esc_html_e( 'Deactivate (unavailable)', 'creatorreactor' ); ?></span>
+										</button>
+									<?php endif; ?>
+								</div>
+							</td>
 						</tr>
 					<?php endforeach; ?>
 				</tbody>
@@ -900,6 +999,65 @@ class Admin_Settings {
 		<?php else : ?>
 			<p><?php esc_html_e( 'No synced users found yet. Connect OAuth, then use Sync & refresh list above.', 'creatorreactor' ); ?></p>
 		<?php endif; ?>
+		<?php
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Collapsible sync log (same markup and styles as Connection log).
+	 */
+	private static function render_sync_log_html() {
+		$sync_logs = self::get_sync_logs();
+		ob_start();
+		?>
+		<details id="creatorreactor-users-sync-log" class="creatorreactor-connection-log creatorreactor-sync-log">
+			<summary><?php esc_html_e( 'Sync log', 'creatorreactor' ); ?></summary>
+			<div class="creatorreactor-connection-log-body">
+				<p class="description"><?php esc_html_e( 'Subscriber sync, user list refresh, and related errors (newest first). Mirrors to the PHP error log when available.', 'creatorreactor' ); ?></p>
+				<?php if ( empty( $sync_logs ) ) : ?>
+					<p class="creatorreactor-muted"><?php esc_html_e( 'No log entries yet.', 'creatorreactor' ); ?></p>
+				<?php else : ?>
+					<ul class="creatorreactor-connection-log-list">
+						<?php
+						$logs_rev = array_reverse( $sync_logs );
+						foreach ( $logs_rev as $entry ) {
+							if ( ! is_array( $entry ) ) {
+								continue;
+							}
+							$t   = isset( $entry['time'] ) ? (int) $entry['time'] : 0;
+							$lvl = isset( $entry['level'] ) ? (string) $entry['level'] : 'info';
+							$msg = isset( $entry['message'] ) ? (string) $entry['message'] : '';
+							$line = gmdate( 'Y-m-d H:i:s', $t ) . ' UTC [' . $lvl . '] ' . $msg;
+							echo '<li>' . esc_html( $line ) . '</li>';
+						}
+						?>
+					</ul>
+				<?php endif; ?>
+				<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" style="margin: 0;">
+					<?php wp_nonce_field( 'creatorreactor_clear_sync_logs' ); ?>
+					<input type="hidden" name="action" value="creatorreactor_clear_sync_logs" />
+					<input type="submit" class="button button-secondary" value="<?php esc_attr_e( 'Clear sync log', 'creatorreactor' ); ?>" onclick="return confirm('<?php echo esc_js( __( 'Clear all sync log entries?', 'creatorreactor' ) ); ?>');" />
+				</form>
+			</div>
+		</details>
+		<?php
+		return (string) ob_get_clean();
+	}
+
+	/**
+	 * Users tab: inner list + sync log (used on first paint and full AJAX refresh).
+	 *
+	 * @param array{total: int, active: int, inactive: int} $user_totals Counts.
+	 * @param array<int, array<string, mixed>>               $user_rows   Rows from entitlements table.
+	 * @param string|null                                    $sync_error  Inline notice after sync (optional).
+	 */
+	private static function render_users_tab_panel_html( array $user_totals, array $user_rows, $sync_error = null ) {
+		ob_start();
+		?>
+		<div id="creatorreactor-users-inner" class="creatorreactor-users-inner">
+			<?php echo self::render_users_tab_inner_html( $user_totals, $user_rows, $sync_error ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in renderer. ?>
+		</div>
+		<?php echo self::render_sync_log_html(); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in renderer. ?>
 		<?php
 		return (string) ob_get_clean();
 	}
@@ -913,20 +1071,171 @@ class Admin_Settings {
 			wp_send_json_error( __( 'Forbidden.', 'creatorreactor' ), 403 );
 		}
 
-		Cron::run_sync();
-
-		$last_sync = get_option( self::OPTION_LAST_SYNC, [] );
-		$sync_ok   = ! empty( $last_sync['success'] );
-		$sync_err  = null;
-		if ( ! $sync_ok ) {
-			$msg = trim( (string) get_option( self::OPTION_LAST_ERROR, '' ) );
-			$sync_err = $msg !== ''
-				? $msg
-				: __( 'Sync did not complete successfully. Check OAuth and scopes (including read:fan), then try again.', 'creatorreactor' );
+		if ( function_exists( 'set_time_limit' ) ) {
+			// Subscriber/follower sync can paginate; avoid timing out mid-request.
+			@set_time_limit( 300 );
 		}
 
-		$snapshot = self::get_users_tab_snapshot();
-		wp_send_json_success( self::render_users_tab_inner_html( $snapshot['totals'], $snapshot['rows'], $sync_err ) );
+		try {
+			Cron::run_sync();
+
+			$last_sync = get_option( self::OPTION_LAST_SYNC, [] );
+			$sync_ok   = ! empty( $last_sync['success'] );
+			$sync_err  = null;
+			if ( ! $sync_ok ) {
+				$msg = trim( (string) get_option( self::OPTION_LAST_ERROR, '' ) );
+				$sync_err = $msg !== ''
+					? $msg
+					: __( 'Sync did not complete successfully. Check OAuth connection and, for subscriber/follower lists, read:fan scope if your Fanvue app supports it.', 'creatorreactor' );
+				self::log_sync( 'error', $sync_err );
+			}
+
+			$snapshot = self::get_users_tab_snapshot();
+			wp_send_json_success( self::render_users_tab_panel_html( $snapshot['totals'], $snapshot['rows'], $sync_err ) );
+		} catch ( \Throwable $e ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( 'CreatorReactor ajax_get_users_table: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
+			}
+			self::log_sync( 'error', 'User table: ' . $e->getMessage() );
+			$snapshot = [
+				'totals' => [
+					'total'    => 0,
+					'active'   => 0,
+					'inactive' => 0,
+				],
+				'rows'   => [],
+			];
+			try {
+				$snapshot = self::get_users_tab_snapshot();
+			} catch ( \Throwable $ignored ) { // phpcs:ignore Generic.CodeAnalysis.EmptyStatement.DetectedCatch -- fallback to empty snapshot.
+			}
+			wp_send_json_error(
+				[
+					'message'   => __( 'Could not load the user list after sync.', 'creatorreactor' ) . ' ' . $e->getMessage(),
+					'panelHtml' => self::render_users_tab_panel_html( $snapshot['totals'], $snapshot['rows'], $e->getMessage() ),
+				],
+				500
+			);
+		}
+	}
+
+	/**
+	 * AJAX: append a client-side or transport error to the sync log and return refreshed Users panel HTML.
+	 */
+	public static function ajax_append_sync_log() {
+		check_ajax_referer( 'creatorreactor_users_table', 'security' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( __( 'Forbidden.', 'creatorreactor' ), 403 );
+		}
+
+		$msg = isset( $_POST['message'] ) ? (string) wp_unslash( $_POST['message'] ) : '';
+		$msg = wp_strip_all_tags( $msg );
+		$msg = preg_replace( '/\s+/', ' ', $msg );
+		if ( strlen( $msg ) > 4000 ) {
+			$msg = substr( $msg, 0, 4000 ) . '…';
+		}
+		if ( $msg === '' ) {
+			$msg = __( 'User table refresh failed (no error text from browser).', 'creatorreactor' );
+		}
+		self::log_sync( 'error', $msg );
+
+		try {
+			$snapshot = self::get_users_tab_snapshot();
+			wp_send_json_success( self::render_users_tab_panel_html( $snapshot['totals'], $snapshot['rows'], null ) );
+		} catch ( \Throwable $e ) {
+			self::log_sync( 'error', 'User table: ' . $e->getMessage() );
+			wp_send_json_error(
+				[
+					'message'   => $e->getMessage(),
+					'panelHtml' => self::render_users_tab_panel_html(
+						[
+							'total'    => 0,
+							'active'   => 0,
+							'inactive' => 0,
+						],
+						[],
+						$e->getMessage()
+					),
+				],
+				500
+			);
+		}
+	}
+
+	/**
+	 * AJAX: strip capabilities from the linked WP user and mark the entitlement inactive.
+	 */
+	public static function ajax_deactivate_wp_user() {
+		check_ajax_referer( 'creatorreactor_users_table', 'security' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( __( 'Forbidden.', 'creatorreactor' ), 403 );
+		}
+
+		$ent_id = isset( $_POST['entitlement_id'] ) ? absint( wp_unslash( $_POST['entitlement_id'] ) ) : 0;
+		if ( $ent_id < 1 ) {
+			wp_send_json_error( __( 'Invalid record.', 'creatorreactor' ), 400 );
+		}
+
+		global $wpdb;
+		$table = Entitlements::get_table_name();
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from trusted prefix.
+		$row = $wpdb->get_row( $wpdb->prepare( "SELECT id, wp_user_id FROM {$table} WHERE id = %d", $ent_id ), ARRAY_A );
+		if ( ! is_array( $row ) ) {
+			wp_send_json_error( __( 'Record not found.', 'creatorreactor' ), 404 );
+		}
+
+		$wp_uid = isset( $row['wp_user_id'] ) && $row['wp_user_id'] !== null ? (int) $row['wp_user_id'] : 0;
+		if ( $wp_uid < 1 ) {
+			wp_send_json_error( __( 'No linked WordPress user.', 'creatorreactor' ), 400 );
+		}
+		if ( (int) get_current_user_id() === $wp_uid ) {
+			wp_send_json_error( __( 'You cannot deactivate your own account.', 'creatorreactor' ), 400 );
+		}
+
+		$target = new \WP_User( $wp_uid );
+		if ( ! $target->exists() ) {
+			wp_send_json_error( __( 'WordPress user not found.', 'creatorreactor' ), 400 );
+		}
+
+		$target->set_role( '' );
+
+		$wpdb->update(
+			$table,
+			[
+				'status'     => Entitlements::STATUS_INACTIVE,
+				'updated_at' => current_time( 'mysql' ),
+			],
+			[ 'id' => $ent_id ],
+			[ '%s', '%s' ],
+			[ '%d' ]
+		);
+		if ( ! empty( $wpdb->last_error ) ) {
+			self::log_sync( 'error', 'Deactivate user: entitlement update failed: ' . $wpdb->last_error );
+		}
+
+		self::log_sync( 'info', sprintf( 'Deactivated WordPress user ID %d (entitlement row %d).', $wp_uid, $ent_id ) );
+
+		try {
+			$snapshot = self::get_users_tab_snapshot();
+			wp_send_json_success( self::render_users_tab_panel_html( $snapshot['totals'], $snapshot['rows'], null ) );
+		} catch ( \Throwable $e ) {
+			self::log_sync( 'error', 'User table after deactivate: ' . $e->getMessage() );
+			wp_send_json_error(
+				[
+					'message'   => $e->getMessage(),
+					'panelHtml' => self::render_users_tab_panel_html(
+						[
+							'total'    => 0,
+							'active'   => 0,
+							'inactive' => 0,
+						],
+						[],
+						$e->getMessage()
+					),
+				],
+				500
+			);
+		}
 	}
 
 	/**
@@ -1173,6 +1482,62 @@ class Admin_Settings {
 			list-style: none;
 		}
 		.creatorreactor-connection-log-list li { margin: 0 0 6px; }
+		.creatorreactor-users-panel .creatorreactor-sync-log { margin-top: 20px; }
+		.creatorreactor-users-col-actions { width: 1%; text-align: right; white-space: nowrap; }
+		.creatorreactor-user-actions {
+			display: inline-flex;
+			align-items: center;
+			justify-content: flex-end;
+			flex-wrap: wrap;
+			gap: 4px;
+			max-width: 220px;
+		}
+		.creatorreactor-user-actions .button.creatorreactor-user-action {
+			min-width: 30px;
+			padding: 0 6px;
+			line-height: 1;
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+		}
+		.creatorreactor-user-actions .button.creatorreactor-user-action .dashicons { width: 18px; height: 18px; font-size: 18px; }
+		.creatorreactor-user-details-modal[hidden] { display: none !important; }
+		.creatorreactor-user-details-modal.is-open { display: flex !important; }
+		.creatorreactor-user-details-modal {
+			position: fixed;
+			inset: 0;
+			z-index: 100000;
+			align-items: center;
+			justify-content: center;
+			padding: 24px;
+			background: rgba(0, 0, 0, 0.45);
+			box-sizing: border-box;
+		}
+		.creatorreactor-user-details-modal-dialog {
+			background: #fff;
+			border: 1px solid #c3c4c7;
+			border-radius: 4px;
+			box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+			max-width: 520px;
+			width: 100%;
+			max-height: min(85vh, 640px);
+			overflow: auto;
+			padding: 0;
+		}
+		.creatorreactor-user-details-modal-header {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 12px;
+			padding: 14px 16px;
+			border-bottom: 1px solid #dcdcde;
+			background: #f6f7f7;
+		}
+		.creatorreactor-user-details-modal-header h3 { margin: 0; font-size: 15px; line-height: 1.3; }
+		.creatorreactor-user-details-modal-body { padding: 16px; }
+		.creatorreactor-user-details-modal-body dl { margin: 0; display: grid; grid-template-columns: 9.5em 1fr; gap: 8px 16px; font-size: 13px; }
+		.creatorreactor-user-details-modal-body dt { margin: 0; color: #646970; font-weight: 600; }
+		.creatorreactor-user-details-modal-body dd { margin: 0; word-break: break-word; }
 		/* Danger Zone Styles */
 		.creatorreactor-danger-zone {
 			background: #fff8f8;
@@ -1252,6 +1617,28 @@ class Admin_Settings {
 			border: 0;
 			background: transparent;
 			flex: 1;
+		}
+		.creatorreactor-oauth-tab-lock.button {
+			border: 0;
+			background: transparent;
+			box-shadow: none;
+			padding: 2px 4px;
+			min-height: 0;
+			line-height: 1;
+		}
+		.creatorreactor-oauth-tab-lock.button:hover,
+		.creatorreactor-oauth-tab-lock.button:focus {
+			background: transparent;
+			border: 0;
+			box-shadow: none;
+			color: #135e96;
+		}
+		.creatorreactor-oauth-tab-lock.button:focus:not(:focus-visible) {
+			outline: none;
+		}
+		.creatorreactor-oauth-tab-lock.button:focus-visible {
+			outline: 2px solid currentColor;
+			outline-offset: 2px;
 		}
 		.creatorreactor-oauth-tab-lock .dashicons { width: 18px; height: 18px; font-size: 18px; line-height: 1; }
 		.creatorreactor-oauth-tab-lock[aria-pressed="true"] .creatorreactor-oauth-tab-lock-icon-off { display: none; }
@@ -1347,19 +1734,7 @@ class Admin_Settings {
 			background: transparent;
 			border-radius: 0;
 		}
-		.creatorreactor-advanced-toolbar {
-			display: flex;
-			align-items: flex-start;
-			gap: 12px;
-			margin-bottom: 12px;
-			flex-wrap: wrap;
-		}
-		.creatorreactor-advanced-toolbar .creatorreactor-advanced-lock-hint { flex: 1; min-width: 200px; margin: 0; padding-top: 4px; }
-		.creatorreactor-advanced-lock .dashicons { width: 18px; height: 18px; font-size: 18px; line-height: 1; }
-		.creatorreactor-advanced-lock[aria-pressed="true"] .creatorreactor-advanced-lock-icon-off { display: none; }
-		.creatorreactor-advanced-lock[aria-pressed="true"] .creatorreactor-advanced-lock-icon-on { display: inline-block; }
-		.creatorreactor-advanced-lock[aria-pressed="false"] .creatorreactor-advanced-lock-icon-on { display: none; }
-		.creatorreactor-advanced-lock[aria-pressed="false"] .creatorreactor-advanced-lock-icon-off { display: inline-block; }
+		.creatorreactor-advanced-hint { margin: 0 0 12px; max-width: 52em; }
 		input.creatorreactor-advanced-endpoint-input[readonly] {
 			background: #f0f0f1;
 			color: #2c3338;
@@ -1391,9 +1766,29 @@ class Admin_Settings {
 			'creatorreactor-users-tab',
 			'creatorreactorUsersTable',
 			[
-				'nonce'         => wp_create_nonce( 'creatorreactor_users_table' ),
-				'refreshLabel'  => __( 'Sync & refresh list', 'creatorreactor' ),
-				'loadError'     => __( 'Error loading user table.', 'creatorreactor' ),
+				'ajaxUrl'        => admin_url( 'admin-ajax.php' ),
+				'nonce'          => wp_create_nonce( 'creatorreactor_users_table' ),
+				'refreshLabel'   => __( 'Sync & refresh list', 'creatorreactor' ),
+				'loadError'      => __( 'Error loading user table.', 'creatorreactor' ),
+				'sessionError'   => __( 'Request was blocked or your session expired. Reload this page and try again.', 'creatorreactor' ),
+				'syncLogSummary' => __( 'Sync log', 'creatorreactor' ),
+				'syncLogOffline' => __( 'This line was recorded in the browser only because saving to the server log failed. Check that admin-ajax.php is reachable.', 'creatorreactor' ),
+				'detailsTitle'   => __( 'User details', 'creatorreactor' ),
+				'closeLabel'     => __( 'Close', 'creatorreactor' ),
+				'confirmDeactivate' => __( 'Deactivate this WordPress user? They will lose all roles and cannot access the site until an administrator restores a role.', 'creatorreactor' ),
+				'deactivateError'   => __( 'Could not deactivate user.', 'creatorreactor' ),
+				'detailFields'   => [
+					[ 'key' => 'product', 'label' => __( 'Product', 'creatorreactor' ) ],
+					[ 'key' => 'display_name', 'label' => __( 'Name', 'creatorreactor' ) ],
+					[ 'key' => 'email', 'label' => __( 'Email', 'creatorreactor' ) ],
+					[ 'key' => 'status', 'label' => __( 'Status', 'creatorreactor' ) ],
+					[ 'key' => 'tier', 'label' => __( 'Tier', 'creatorreactor' ) ],
+					[ 'key' => 'tier_raw', 'label' => __( 'Tier (raw)', 'creatorreactor' ) ],
+					[ 'key' => 'expires_at', 'label' => __( 'Expires', 'creatorreactor' ) ],
+					[ 'key' => 'updated_at', 'label' => __( 'Updated', 'creatorreactor' ) ],
+					[ 'key' => 'wp_user_id', 'label' => __( 'WordPress user ID', 'creatorreactor' ) ],
+					[ 'key' => 'creatorreactor_user_uuid', 'label' => __( 'CreatorReactor user UUID', 'creatorreactor' ) ],
+				],
 			]
 		);
 
@@ -1489,25 +1884,6 @@ class Admin_Settings {
 						toggleBtn.setAttribute("aria-expanded", next ? "true" : "false");
 						panel.hidden = !next;
 						block.classList.toggle("is-expanded", next);
-						return;
-					}
-					var lockBtn = e.target.closest(".creatorreactor-advanced-lock");
-					if (lockBtn && root.contains(lockBtn)) {
-						e.preventDefault();
-						var block = lockBtn.closest(".creatorreactor-advanced");
-						if (!block) {
-							return;
-						}
-						var pressed = lockBtn.getAttribute("aria-pressed") === "true";
-						var nextLocked = !pressed;
-						lockBtn.setAttribute("aria-pressed", nextLocked ? "true" : "false");
-						var lk = lockBtn.getAttribute("data-label-locked") || "";
-						var uk = lockBtn.getAttribute("data-label-unlocked") || "";
-						lockBtn.setAttribute("aria-label", nextLocked ? lk : uk);
-						block.querySelectorAll(".creatorreactor-advanced-endpoint-input").forEach(function(inp) {
-							inp.readOnly = nextLocked;
-						});
-						block.classList.toggle("is-locked", nextLocked);
 					}
 				});
 			}
@@ -1531,8 +1907,25 @@ class Admin_Settings {
 				var lk = lockBtn.getAttribute("data-label-locked") || "";
 				var uk = lockBtn.getAttribute("data-label-unlocked") || "";
 				lockBtn.setAttribute("aria-label", locked ? lk : uk);
+				container.querySelectorAll(".creatorreactor-advanced-endpoint-input").forEach(function(inp) {
+					inp.readOnly = locked;
+					inp.disabled = false;
+				});
 				container.querySelectorAll("input, select, textarea, button").forEach(function(el) {
-					el.disabled = locked;
+					if (el.closest(".creatorreactor-advanced")) {
+						if (el.classList.contains("creatorreactor-advanced-endpoint-input")) {
+							return;
+						}
+						if (el.classList.contains("creatorreactor-advanced-toggle")) {
+							return;
+						}
+						el.disabled = locked;
+					} else {
+						el.disabled = locked;
+					}
+				});
+				container.querySelectorAll(".creatorreactor-advanced").forEach(function(block) {
+					block.classList.toggle("is-locked", locked);
 				});
 				container.classList.toggle("is-oauth-config-locked", locked);
 				if (!locked && oauthDynamic) {
@@ -1547,21 +1940,12 @@ class Admin_Settings {
 				root.querySelectorAll(".creatorreactor-advanced").forEach(function(block) {
 					var toggleBtn = block.querySelector(".creatorreactor-advanced-toggle");
 					var panel = block.querySelector(".creatorreactor-advanced-panel");
-					var lockBtn = block.querySelector(".creatorreactor-advanced-lock");
-					if (!toggleBtn || !panel || !lockBtn) {
+					if (!toggleBtn || !panel) {
 						return;
 					}
 					var expanded = toggleBtn.getAttribute("aria-expanded") === "true";
 					panel.hidden = !expanded;
 					block.classList.toggle("is-expanded", expanded);
-					var locked = lockBtn.getAttribute("aria-pressed") !== "false";
-					var lk = lockBtn.getAttribute("data-label-locked") || "";
-					var uk = lockBtn.getAttribute("data-label-unlocked") || "";
-					lockBtn.setAttribute("aria-label", locked ? lk : uk);
-					block.querySelectorAll(".creatorreactor-advanced-endpoint-input").forEach(function(inp) {
-						inp.readOnly = locked;
-					});
-					block.classList.toggle("is-locked", locked);
 				});
 			}
 
@@ -1996,6 +2380,9 @@ class Admin_Settings {
 			<?php if ( ! empty( $_GET['connection_log_cleared'] ) ) : ?>
 				<div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Connection log cleared.', 'creatorreactor' ); ?></p></div>
 			<?php endif; ?>
+			<?php if ( ! empty( $_GET['sync_log_cleared'] ) ) : ?>
+				<div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Saved sync log entries were removed.', 'creatorreactor' ); ?></p></div>
+			<?php endif; ?>
 
 			<nav class="nav-tab-wrapper creatorreactor-tab-nav" aria-label="<?php esc_attr_e( 'CreatorReactor sections', 'creatorreactor' ); ?>">
 				<a href="<?php echo esc_url( admin_url( 'options-general.php?page=' . self::PAGE_SLUG . '&tab=dashboard' ) ); ?>" class="nav-tab creatorreactor-tab-link <?php echo 'dashboard' === $active_tab ? 'nav-tab-active' : ''; ?>" data-tab="dashboard"><?php esc_html_e( 'Dashboard', 'creatorreactor' ); ?></a>
@@ -2086,8 +2473,17 @@ class Admin_Settings {
 				<div class="creatorreactor-section">
 					<h2><?php esc_html_e( 'Users', 'creatorreactor' ); ?></h2>
 					<p class="creatorreactor-muted"><?php esc_html_e( 'Each record shows its source product (fanvue, OnlyFans, or another configured product key).', 'creatorreactor' ); ?></p>
-					<div id="creatorreactor-users-inner" class="creatorreactor-users-inner">
-						<?php echo self::render_users_tab_inner_html( $user_totals, $user_rows ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in renderer. ?>
+					<div id="creatorreactor-users-panel" class="creatorreactor-users-panel">
+						<?php echo self::render_users_tab_panel_html( $user_totals, $user_rows ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in renderer. ?>
+					</div>
+					<div id="creatorreactor-user-details-modal" class="creatorreactor-user-details-modal" hidden role="dialog" aria-modal="true" aria-labelledby="creatorreactor-user-details-modal-title">
+						<div class="creatorreactor-user-details-modal-dialog">
+							<div class="creatorreactor-user-details-modal-header">
+								<h3 id="creatorreactor-user-details-modal-title"><?php esc_html_e( 'User details', 'creatorreactor' ); ?></h3>
+								<button type="button" class="button" id="creatorreactor-user-details-modal-close"><?php esc_html_e( 'Close', 'creatorreactor' ); ?></button>
+							</div>
+							<div class="creatorreactor-user-details-modal-body" id="creatorreactor-user-details-modal-body"></div>
+						</div>
 					</div>
 				</div>
 			</div>
@@ -2369,6 +2765,62 @@ class Admin_Settings {
 		if ( function_exists( 'error_log' ) ) {
 			error_log( '[CreatorReactor][' . $level . '] ' . $message );
 		}
+	}
+
+	/**
+	 * Append a subscriber/user-table sync log entry (same storage shape as connection log).
+	 *
+	 * @param string $level   'info'|'error'|'debug'.
+	 * @param string $message Plain text; never include secrets or bearer tokens.
+	 */
+	public static function log_sync( $level, $message ) {
+		$level = in_array( $level, [ 'info', 'error', 'debug' ], true ) ? $level : 'info';
+		if ( ! is_string( $message ) ) {
+			$message = wp_json_encode( $message );
+		}
+		$message = wp_strip_all_tags( (string) $message );
+		$message = preg_replace( '/\s+/', ' ', $message );
+		if ( strlen( $message ) > 4000 ) {
+			$message = substr( $message, 0, 4000 ) . '…';
+		}
+		$logs = get_option( self::OPTION_SYNC_LOGS, [] );
+		if ( ! is_array( $logs ) ) {
+			$logs = [];
+		}
+		$logs[] = [
+			'time'    => time(),
+			'level'   => $level,
+			'message' => $message,
+		];
+		if ( count( $logs ) > self::MAX_SYNC_LOG_ENTRIES ) {
+			$logs = array_slice( $logs, -self::MAX_SYNC_LOG_ENTRIES );
+		}
+		update_option( self::OPTION_SYNC_LOGS, $logs, false );
+		if ( function_exists( 'error_log' ) ) {
+			error_log( '[CreatorReactor sync][' . $level . '] ' . $message );
+		}
+	}
+
+	/**
+	 * @return array<int, array{time:int, level:string, message:string}>
+	 */
+	public static function get_sync_logs() {
+		$logs = get_option( self::OPTION_SYNC_LOGS, [] );
+		return is_array( $logs ) ? $logs : [];
+	}
+
+	public static function clear_sync_logs() {
+		delete_option( self::OPTION_SYNC_LOGS );
+	}
+
+	public static function handle_clear_sync_logs() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Unauthorized', 'creatorreactor' ), '', [ 'response' => 403 ] );
+		}
+		check_admin_referer( 'creatorreactor_clear_sync_logs' );
+		self::clear_sync_logs();
+		wp_safe_redirect( admin_url( 'options-general.php?page=' . self::PAGE_SLUG . '&tab=users&sync_log_cleared=1' ) );
+		exit;
 	}
 
 	/**

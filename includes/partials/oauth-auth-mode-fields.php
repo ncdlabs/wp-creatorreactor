@@ -82,16 +82,7 @@ $redirect_uri_input_value = Admin_Settings::get_redirect_uri_input_value( $opts,
 		</button>
 		<div id="creatorreactor-oauth-advanced-panel" class="creatorreactor-advanced-panel" hidden>
 			<div class="creatorreactor-advanced-panel-inner">
-				<div class="creatorreactor-advanced-toolbar">
-					<button type="button" class="button creatorreactor-advanced-lock" aria-pressed="true"
-						data-label-locked="<?php echo esc_attr( __( 'Endpoint fields locked — click to unlock editing', 'creatorreactor' ) ); ?>"
-						data-label-unlocked="<?php echo esc_attr( __( 'Endpoint fields unlocked — click to lock', 'creatorreactor' ) ); ?>"
-						aria-label="<?php echo esc_attr( __( 'Endpoint fields locked — click to unlock editing', 'creatorreactor' ) ); ?>">
-						<span class="dashicons dashicons-lock creatorreactor-advanced-lock-icon-on" aria-hidden="true"></span>
-						<span class="dashicons dashicons-unlock creatorreactor-advanced-lock-icon-off" aria-hidden="true"></span>
-					</button>
-					<span class="description creatorreactor-advanced-lock-hint"><?php esc_html_e( 'Defaults match Fanvue. Unlock to edit authorization, token, API base, and scopes.', 'creatorreactor' ); ?></span>
-				</div>
+				<p class="description creatorreactor-advanced-hint"><?php esc_html_e( 'Defaults match Fanvue. Use the lock next to the OAuth heading above to edit authorization, token, API base, and scopes.', 'creatorreactor' ); ?></p>
 				<table class="form-table">
 					<tr>
 						<th scope="row"><?php esc_html_e( 'Authorization URL', 'creatorreactor' ); ?></th>
@@ -115,7 +106,7 @@ $redirect_uri_input_value = Admin_Settings::get_redirect_uri_input_value( $opts,
 						<th scope="row"><?php esc_html_e( 'Scopes', 'creatorreactor' ); ?></th>
 						<td>
 							<input type="text" readonly name="<?php echo esc_attr( $option_name ); ?>[creatorreactor_oauth_scopes]" value="<?php echo esc_attr( CreatorReactor_OAuth::normalize_scopes_string( $opts['creatorreactor_oauth_scopes'] ?? '' ) ); ?>" class="regular-text creatorreactor-advanced-endpoint-input" autocomplete="off" />
-							<p class="description"><?php esc_html_e( 'Space-separated OAuth scopes. Defaults include read:fan (required for Fanvue subscriber and follower APIs). Unlock Advanced to edit.', 'creatorreactor' ); ?></p>
+							<p class="description"><?php esc_html_e( 'Space-separated OAuth scopes. Defaults match Fanvue Quick Start. If you enable read:fan for your app in the Fanvue developer portal, add read:fan here too, save settings, then disconnect OAuth and connect again so WordPress gets a new token that includes it.', 'creatorreactor' ); ?></p>
 						</td>
 					</tr>
 				</table>

@@ -393,12 +393,15 @@ class Broker_Client {
 			}
 
 			if ( $code !== 200 ) {
-				$body    = wp_remote_retrieve_body( $response );
+				$body = wp_remote_retrieve_body( $response );
+				if ( (int) $code === 403 && is_string( $body ) && stripos( $body, 'Insufficient scopes' ) !== false ) {
+					return new \WP_Error(
+						'api_error',
+						'HTTP 403 — ' . __( 'Insufficient OAuth scopes.', 'creatorreactor' ) . ' ' . CreatorReactor_Client::get_insufficient_scopes_hint_text()
+					);
+				}
 				$snippet = is_string( $body ) && $body !== '' ? substr( wp_strip_all_tags( $body ), 0, 500 ) : '';
 				$msg     = 'API request failed: HTTP ' . $code . ( $snippet !== '' ? '. Response: ' . $snippet : '' );
-				if ( (int) $code === 403 && is_string( $body ) && stripos( $body, 'Insufficient scopes' ) !== false ) {
-					$msg .= ' ' . CreatorReactor_Client::get_insufficient_scopes_hint_text();
-				}
 				return new \WP_Error( 'api_error', $msg );
 			}
 

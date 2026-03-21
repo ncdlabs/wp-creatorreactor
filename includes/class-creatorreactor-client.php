@@ -250,22 +250,21 @@ class CreatorReactor_Client {
 	}
 
 	/**
-	 * Hint appended when Fanvue returns 403 with insufficient OAuth scopes for subscriber/follower list APIs.
+	 * Short hint when Fanvue returns 403 insufficient scopes for list APIs (read:fan).
 	 */
 	public static function get_insufficient_scopes_hint_text() {
-		return __( 'Fanvue requires the read:fan scope for listing subscribers and followers. Add read:fan under Advanced → Scopes, ensure your Fanvue developer app enables that scope, save settings, then disconnect OAuth and connect again.', 'creatorreactor' );
+		return __( 'Add read:fan under Advanced → Scopes (if missing), save, then disconnect OAuth and connect again—existing tokens do not pick up new scopes. Subscriber and follower lists require read:fan on both the Fanvue app and this field.', 'creatorreactor' );
 	}
 
 	/**
 	 * @param string $list_label e.g. "List subscribers".
 	 */
 	private static function format_list_endpoint_http_error( $list_label, $code, $body_response ) {
-		$snippet = is_string( $body_response ) && $body_response !== '' ? substr( wp_strip_all_tags( $body_response ), 0, 500 ) : '';
-		$msg     = $list_label . ': HTTP ' . $code . ( $snippet !== '' ? '. Response: ' . $snippet : '' );
 		if ( (int) $code === 403 && self::response_indicates_insufficient_scopes( $body_response ) ) {
-			$msg .= ' ' . self::get_insufficient_scopes_hint_text();
+			return $list_label . ': HTTP 403 — ' . __( 'Insufficient OAuth scopes.', 'creatorreactor' ) . ' ' . self::get_insufficient_scopes_hint_text();
 		}
-		return $msg;
+		$snippet = is_string( $body_response ) && $body_response !== '' ? substr( wp_strip_all_tags( $body_response ), 0, 500 ) : '';
+		return $list_label . ': HTTP ' . $code . ( $snippet !== '' ? '. Response: ' . $snippet : '' );
 	}
 
 	private static function response_indicates_insufficient_scopes( $body_response ) {

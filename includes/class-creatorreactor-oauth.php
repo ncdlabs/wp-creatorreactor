@@ -32,31 +32,25 @@ class CreatorReactor_OAuth {
 	const REST_ROUTE_START      = '/oauth-start';
 
 	/**
-	 * Default OAuth scopes. Includes `read:fan` because Fanvue requires it for GET /subscribers and GET /followers
-	 * (see api.fanvue.com API reference). Re-authorize after changing scopes. Advanced → Scopes can remove it if
-	 * your Fanvue app cannot grant `read:fan` (subscriber/follower sync will then fail those endpoints).
+	 * Fanvue OAuth Quick Start scopes (see api.fanvue.com/docs/authentication/quick-start).
+	 * Do not add `read:fan` here: many Fanvue apps are not allowed to request it; add it under Advanced → Scopes only
+	 * after enabling that scope for your app (required for GET /subscribers and GET /followers).
 	 */
-	const DEFAULT_SCOPES = 'openid offline_access offline read:self read:fan';
+	const DEFAULT_SCOPES = 'openid offline_access offline read:self';
 
 	/**
-	 * Normalize space-separated OAuth scopes from settings: default when empty, upgrade legacy
-	 * quick-start-only string, and ensure read:fan is present for Fanvue list APIs.
+	 * Normalize space-separated OAuth scopes: trim, collapse whitespace, dedupe tokens. Empty uses {@see DEFAULT_SCOPES}.
+	 * Does not inject `read:fan` (Fanvue rejects OAuth if the client is not permitted to request it).
 	 *
 	 * @param string $scopes Raw scopes string from options.
-	 * @return string Canonical space-separated scopes.
+	 * @return string Space-separated scopes.
 	 */
 	public static function normalize_scopes_string( $scopes ) {
 		$s = is_string( $scopes ) ? trim( preg_replace( '/\s+/', ' ', $scopes ) ) : '';
 		if ( $s === '' ) {
 			return self::DEFAULT_SCOPES;
 		}
-		if ( $s === 'openid offline_access offline read:self' ) {
-			return self::DEFAULT_SCOPES;
-		}
 		$parts = array_values( array_unique( array_filter( explode( ' ', $s ) ) ) );
-		if ( ! in_array( 'read:fan', $parts, true ) ) {
-			$parts[] = 'read:fan';
-		}
 		return implode( ' ', $parts );
 	}
 
