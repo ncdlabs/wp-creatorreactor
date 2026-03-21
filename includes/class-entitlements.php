@@ -19,7 +19,15 @@ class Entitlements {
 	const STATUS_INACTIVE = 'inactive';
 	const STATUS_UNKNOWN  = 'unknown';
 
+	/**
+	 * Legacy stored tier for followers (pre–product-scoped format).
+	 *
+	 * @deprecated Replaced by {@see tier_stored_for_follower()}; kept for migrations and query matching.
+	 */
 	const TIER_FOLLOWER = '__creatorreactor_follower__';
+
+	/** Option: one-time migration legacy follower tier → {product}_follower. */
+	const OPTION_TIER_FOLLOWER_FORMAT_MIGRATED = 'creatorreactor_tier_follower_format_v1';
 
 	/** Canonical FanVue integration key (stored in entitlements and settings). */
 	const PRODUCT_FANVUE = 'fanvue';
@@ -154,6 +162,91 @@ class Entitlements {
 	}
 
 	/**
+	 * Stored tier for a follower row: {product_id}_follower (e.g. fanvue_follower).
+	 *
+	 * @param string|null $product Product key; normalized.
+	 */
+	public static function tier_stored_for_follower( $product ) {
+		return self::normalize_product( $product ) . '_follower';
+	}
+
+	/**
+	 * Stored tier for a subscriber row: {product_id}_subscriber or {product_id}_subscriber_{api_tier}.
+	 *
+	 * @param string|null $product    Product key; normalized.
+	 * @param string|null $api_tier   Raw/normalized API tier slug (optional).
+	 */
+	public static function tier_stored_for_subscriber( $product, $api_tier = null ) {
+		$p    = self::normalize_product( $product );
+		$base = $p . '_subscriber';
+		if ( $api_tier === null || $api_tier === '' ) {
+			return $base;
+		}
+		$t = sanitize_key( (string) $api_tier );
+		if ( $t === '' ) {
+			return $base;
+		}
+		$full = $base . '_' . $t;
+		return strlen( $full ) > 100 ? substr( $full, 0, 100 ) : $full;
+	}
+
+	/**
+	 * Values to match in SQL when filtering by tier (supports legacy + new stored formats).
+	 *
+	 * @param string      $tier    Requested tier filter.
+	 * @param string|null $product Product filter or null.
+	 * @return array<int, string>
+	 */
+	private static function tier_filter_match_values( $tier, $product = null ) {
+		$t = (string) $tier;
+		$variants = [ $t ];
+
+		if ( $product !== null ) {
+			$p = self::normalize_product( $product );
+			$follower_stored = self::tier_stored_for_follower( $p );
+			if ( $t === self::TIER_FOLLOWER || $t === $follower_stored ) {
+				$variants[] = self::TIER_FOLLOWER;
+				$variants[] = $follower_stored;
+				return array_values( array_unique( array_filter( $variants, 'strlen' ) ) );
+			}
+			$base_sub = $p . '_subscriber';
+			$prefix_sub = $p . '_subscriber_';
+			if ( str_starts_with( $t, $prefix_sub ) ) {
+				$suffix = substr( $t, strlen( $prefix_sub ) );
+				if ( $suffix !== '' ) {
+					$variants[] = $suffix;
+				}
+			} elseif ( $t !== $base_sub ) {
+				$composed = self::tier_stored_for_subscriber( $p, $t );
+				if ( $composed !== $t ) {
+					$variants[] = $composed;
+				}
+			}
+			return array_values( array_unique( array_filter( $variants, 'strlen' ) ) );
+		}
+
+		if ( $t === self::TIER_FOLLOWER || str_ends_with( $t, '_follower' ) ) {
+			$variants[] = self::TIER_FOLLOWER;
+			foreach ( [ self::PRODUCT_FANVUE, self::PRODUCT_ONLYFANS ] as $prod ) {
+				$variants[] = self::tier_stored_for_follower( $prod );
+			}
+		} elseif ( strpos( $t, '_subscriber_' ) !== false && preg_match( '/^([a-z0-9-]+)_subscriber_(.+)$/', $t, $m ) ) {
+			if ( ! in_array( $m[2], $variants, true ) ) {
+				$variants[] = $m[2];
+			}
+		} elseif ( strpos( $t, '_subscriber_' ) === false && $t !== self::TIER_FOLLOWER && ! str_ends_with( $t, '_follower' ) ) {
+			foreach ( [ self::PRODUCT_FANVUE, self::PRODUCT_ONLYFANS ] as $prod ) {
+				$c = self::tier_stored_for_subscriber( $prod, $t );
+				if ( ! in_array( $c, $variants, true ) ) {
+					$variants[] = $c;
+				}
+			}
+		}
+
+		return array_values( array_unique( array_filter( $variants, 'strlen' ) ) );
+	}
+
+	/**
 	 * Users tab: collapse stored tier into Follower vs paid Subscriber.
 	 *
 	 * @param string|null $tier Raw tier from entitlements row.
@@ -164,7 +257,7 @@ class Entitlements {
 			return '-';
 		}
 		$tier = (string) $tier;
-		if ( $tier === self::TIER_FOLLOWER ) {
+		if ( $tier === self::TIER_FOLLOWER || str_ends_with( $tier, '_follower' ) ) {
 			return __( 'Follower', 'creatorreactor' );
 		}
 		return __( 'Subscriber', 'creatorreactor' );
@@ -350,8 +443,10 @@ class Entitlements {
 		$args  = [ self::STATUS_ACTIVE, $now ];
 
 		if ( $tier !== null ) {
-			$where[] = 'tier = %s';
-			$args[]  = $tier;
+			$vals    = self::tier_filter_match_values( $tier, $product );
+			$ph      = implode( ',', array_fill( 0, count( $vals ), '%s' ) );
+			$where[] = "tier IN ($ph)";
+			$args    = array_merge( $args, $vals );
 		}
 
 		if ( $product !== null ) {
@@ -381,8 +476,10 @@ class Entitlements {
 		$args  = [ $email, self::STATUS_ACTIVE, $now ];
 
 		if ( $tier !== null ) {
-			$where[] = 'tier = %s';
-			$args[]  = $tier;
+			$vals    = self::tier_filter_match_values( $tier, $product );
+			$ph      = implode( ',', array_fill( 0, count( $vals ), '%s' ) );
+			$where[] = "tier IN ($ph)";
+			$args    = array_merge( $args, $vals );
 		}
 
 		if ( $product !== null ) {
@@ -394,6 +491,82 @@ class Entitlements {
 		$row   = $wpdb->get_row( $wpdb->prepare( $query, $args ) );
 
 		return $row !== null;
+	}
+
+	/**
+	 * Active entitlement rows for a WordPress user (by wp_user_id or email).
+	 *
+	 * @return array<int, array<string, mixed>>
+	 */
+	public static function get_active_entitlement_rows_for_wp_user( $user_id ) {
+		self::maybe_ensure_schema();
+		$user = get_userdata( (int) $user_id );
+		if ( ! $user ) {
+			return [];
+		}
+
+		global $wpdb;
+		$table = self::get_table_name();
+		$now   = current_time( 'mysql' );
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from trusted prefix.
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT * FROM {$table} WHERE status = %s AND expires_at > %s AND (wp_user_id = %d OR email = %s)",
+				self::STATUS_ACTIVE,
+				$now,
+				(int) $user_id,
+				$user->user_email
+			),
+			ARRAY_A
+		);
+
+		return is_array( $rows ) ? $rows : [];
+	}
+
+	/**
+	 * Whether a stored tier value represents a follower (not a paid subscriber tier).
+	 */
+	public static function tier_stored_is_follower( $tier ) {
+		if ( $tier === null || $tier === '' ) {
+			return false;
+		}
+		$tier = (string) $tier;
+		return $tier === self::TIER_FOLLOWER || str_ends_with( $tier, '_follower' );
+	}
+
+	/**
+	 * Whether a stored tier value represents a subscriber (any non-follower tier with a value).
+	 */
+	public static function tier_stored_is_subscriber( $tier ) {
+		if ( $tier === null || $tier === '' ) {
+			return false;
+		}
+		return ! self::tier_stored_is_follower( $tier );
+	}
+
+	/**
+	 * User may see [follower] content: has an active follower tier (not paid subscriber-only rows).
+	 */
+	public static function wp_user_has_active_follower_entitlement( $user_id ) {
+		foreach ( self::get_active_entitlement_rows_for_wp_user( $user_id ) as $row ) {
+			if ( self::tier_stored_is_follower( $row['tier'] ?? '' ) ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * User may see [subscriber] content: has an active paid subscriber tier only.
+	 */
+	public static function wp_user_has_active_subscriber_entitlement( $user_id ) {
+		foreach ( self::get_active_entitlement_rows_for_wp_user( $user_id ) as $row ) {
+			if ( self::tier_stored_is_subscriber( $row['tier'] ?? '' ) ) {
+				return true;
+			}
+		}
+		return false;
 	}
 
 	/**
@@ -420,5 +593,34 @@ class Entitlements {
 		}
 
 		update_option( self::OPTION_FANVUE_PRODUCT_KEY_MIGRATED, '1' );
+	}
+
+	/**
+	 * One-time: rewrite legacy follower tier token to {product}_follower using the row's product column.
+	 */
+	public static function maybe_migrate_legacy_follower_tier_stored() {
+		if ( get_option( self::OPTION_TIER_FOLLOWER_FORMAT_MIGRATED, '' ) === '1' ) {
+			return;
+		}
+
+		global $wpdb;
+		$table = self::get_table_name();
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from trusted prefix.
+		$exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+		if ( $exists !== $table ) {
+			update_option( self::OPTION_TIER_FOLLOWER_FORMAT_MIGRATED, '1' );
+			return;
+		}
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.NotPrepared -- identifiers from $wpdb->prefix only.
+		$wpdb->query(
+			$wpdb->prepare(
+				"UPDATE `{$table}` SET tier = CONCAT(product, '_follower') WHERE tier = %s",
+				self::TIER_FOLLOWER
+			)
+		);
+		self::report_db_error( 'Entitlements migrate legacy follower tier' );
+
+		update_option( self::OPTION_TIER_FOLLOWER_FORMAT_MIGRATED, '1' );
 	}
 }

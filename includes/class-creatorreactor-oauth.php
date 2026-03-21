@@ -293,7 +293,7 @@ class CreatorReactor_OAuth {
 	 * @param string           $key     Query key: code, state, error, error_description.
 	 * @return string
 	 */
-	private static function get_oauth_callback_query_param( $request, $key ) {
+	public static function get_oauth_callback_query_param( $request, $key ) {
 		$val = $request->get_param( $key );
 		if ( is_string( $val ) && $val !== '' ) {
 			return $val;
@@ -341,7 +341,14 @@ class CreatorReactor_OAuth {
 		return self::get_rest_redirect_uri( self::REST_NAMESPACE_LEGACY_FANVUE, self::REST_ROUTE_CALLBACK );
 	}
 
-	public static function get_authorization_url( $redirect_uri_override = null ) {
+	/**
+	 * Build Fanvue authorize URL (PKCE + state in transient).
+	 *
+	 * @param string|null              $redirect_uri_override Redirect URI for authorize + token exchange (null = option or default REST callback).
+	 * @param string|null              $state_override        OAuth state (null = random password).
+	 * @param array<string, mixed>|null $merge_transient       Extra keys merged into PKCE transient (e.g. fan login redirect_to).
+	 */
+	public static function get_authorization_url( $redirect_uri_override = null, $state_override = null, $merge_transient = null ) {
 		$opts        = Admin_Settings::get_options();
 		$client_id   = $opts['creatorreactor_oauth_client_id'] ?? '';
 		
@@ -358,15 +365,22 @@ class CreatorReactor_OAuth {
 
 		$code_verifier  = self::generate_code_verifier();
 		$code_challenge = self::generate_code_challenge( $code_verifier );
-		$state          = wp_generate_password( 32, false );
+		$state          = ( is_string( $state_override ) && $state_override !== '' )
+			? $state_override
+			: wp_generate_password( 32, false );
+
+		$payload = [
+			'code_verifier' => $code_verifier,
+			'redirect_uri'  => $redirect_uri,
+		];
+		if ( is_array( $merge_transient ) && $merge_transient !== [] ) {
+			$payload = array_merge( $payload, $merge_transient );
+		}
 
 		// Persist exact redirect_uri used in the authorize request — token endpoint must match byte-for-byte.
 		set_transient(
 			self::TRANSIENT_PKCE_PREFIX . $state,
-			[
-				'code_verifier' => $code_verifier,
-				'redirect_uri'  => $redirect_uri,
-			],
+			$payload,
 			self::PKCE_TTL
 		);
 

@@ -37,6 +37,7 @@ class CreatorReactor_Client {
 				];
 				if ( is_string( $version_header ) && $version_header !== '' ) {
 					$headers['X-CreatorReactor-API-Version'] = $version_header;
+					$headers['X-Fanvue-API-Version']         = $version_header;
 				}
 
 				$response = wp_remote_get(
@@ -420,12 +421,31 @@ class CreatorReactor_Client {
 				return null;
 			}
 
+			return self::fetch_profile_with_access_token( $token );
+		} catch ( \Throwable $e ) {
+			return null;
+		}
+	}
+
+	/**
+	 * GET /me (or fallbacks) with an arbitrary bearer token (e.g. fan OAuth).
+	 *
+	 * @param string $access_token OAuth access token.
+	 * @return array<string, mixed>|null Decoded JSON or null.
+	 */
+	public static function fetch_profile_with_access_token( $access_token ) {
+		$access_token = is_string( $access_token ) ? trim( $access_token ) : '';
+		if ( $access_token === '' ) {
+			return null;
+		}
+
+		try {
 			$opts = Admin_Settings::get_options();
 			$base = rtrim( $opts['creatorreactor_api_base_url'] ?? CreatorReactor_OAuth::API_BASE_URL, '/' );
 
 			$api_version = isset( $opts['creatorreactor_api_version'] ) ? $opts['creatorreactor_api_version'] : '2025-06-26';
-			$profile_result = self::fetch_profile_response( $base, $token, $api_version );
-			$response = $profile_result['response'];
+			$profile_result = self::fetch_profile_response( $base, $access_token, $api_version );
+			$response      = $profile_result['response'];
 
 			if ( is_wp_error( $response ) ) {
 				return null;
@@ -436,7 +456,8 @@ class CreatorReactor_Client {
 				return null;
 			}
 
-			return json_decode( wp_remote_retrieve_body( $response ), true );
+			$decoded = json_decode( wp_remote_retrieve_body( $response ), true );
+			return is_array( $decoded ) ? $decoded : null;
 		} catch ( \Throwable $e ) {
 			return null;
 		}
@@ -547,14 +568,17 @@ class CreatorReactor_Client {
 					$tier_raw       = isset( $item['tier'] ) ? $item['tier'] : null;
 					$tier           = self::normalize_tier( $tier_raw );
 					$display_name   = self::item_display_name( $item );
+					$stored_tier    = Entitlements::tier_stored_for_subscriber( Entitlements::PRODUCT_FANVUE, $tier );
 					if ( $tier !== null ) {
-						$seen_tiers[ $tier ] = true;
-						$def                 = self::tier_definition_from_item( $tier_raw );
+						$seen_tiers[ $stored_tier ] = true;
+						$def                        = self::tier_definition_from_item( $tier_raw );
 						if ( $def !== null && ! isset( $tier_definitions[ $def['id'] ] ) ) {
 							$tier_definitions[ $def['id'] ] = $def;
 						}
+					} else {
+						$seen_tiers[ $stored_tier ] = true;
 					}
-					Entitlements::upsert_by_creatorreactor_uuid( $uuid, Entitlements::STATUS_ACTIVE, $expires_at, null, $email, $tier, $display_name, Entitlements::PRODUCT_FANVUE );
+					Entitlements::upsert_by_creatorreactor_uuid( $uuid, Entitlements::STATUS_ACTIVE, $expires_at, null, $email, $stored_tier, $display_name, Entitlements::PRODUCT_FANVUE );
 				}
 				$pagination = $result['pagination'];
 				$has_more   = ! empty( $pagination['hasMore'] );
@@ -566,8 +590,8 @@ class CreatorReactor_Client {
 			if ( $any_ok ) {
 				$existing = get_option( Admin_Settings::OPTION_TIERS, [] );
 				$merged   = is_array( $existing ) ? $existing : [];
-				foreach ( array_keys( $seen_tiers ) as $t ) {
-					$merged[ $t ] = true;
+				foreach ( array_keys( $seen_tiers ) as $st ) {
+					$merged[ $st ] = true;
 				}
 				update_option( Admin_Settings::OPTION_TIERS, array_keys( $merged ) );
 				if ( ! empty( $tier_definitions ) ) {
@@ -596,7 +620,7 @@ class CreatorReactor_Client {
 						$expires_at,
 						null,
 						$email,
-						Entitlements::TIER_FOLLOWER,
+						Entitlements::tier_stored_for_follower( Entitlements::PRODUCT_FANVUE ),
 						$display_name,
 						Entitlements::PRODUCT_FANVUE
 					);

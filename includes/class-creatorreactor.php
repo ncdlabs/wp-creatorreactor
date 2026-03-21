@@ -31,12 +31,17 @@ class Plugin {
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-creatorreactor-client.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-cron.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-broker-client.php';
+			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-creatorreactor-fan-oauth.php';
+			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-creatorreactor-shortcodes.php';
 
 			Entitlements::maybe_migrate_fanvue_product_key();
+			Entitlements::maybe_migrate_legacy_follower_tier_stored();
 
 			CreatorReactor_OAuth::init();
+			Fan_OAuth::init();
 			Cron::init();
 			Admin_Settings::init();
+			Shortcodes::init();
 
 			// Broker REST callback must register in all modes so OAuth redirects to
 			// .../broker-callback never hit rest_no_route (e.g. Fanvue app URI vs mode mismatch).

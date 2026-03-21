@@ -2,15 +2,25 @@
  * CreatorReactor Users tab: refresh list via AJAX (pairs with creatorreactor_get_users_table).
  */
 (function($) {
+	'use strict';
+
 	$(function() {
-		var $panel = $('#creatorreactor-users-panel');
-		if (!$panel.length || typeof creatorreactorUsersTable === 'undefined') {
+		if (typeof creatorreactorUsersTable === 'undefined') {
 			return;
 		}
 
+		var $panel = $('#creatorreactor-users-panel');
+
 		var $modal = $('#creatorreactor-user-details-modal');
-		var $modalBody = $('#creatorreactor-user-details-modal-body');
-		var $modalClose = $('#creatorreactor-user-details-modal-close');
+		if ($modal.length) {
+			$modal.appendTo(document.body);
+		}
+		var $modalBody = $modal.length
+			? $modal.find('#creatorreactor-user-details-modal-body')
+			: $();
+		var $modalClose = $modal.length
+			? $modal.find('.creatorreactor-user-details-close')
+			: $();
 
 		function ajaxAdminUrl() {
 			if (creatorreactorUsersTable.ajaxUrl) {
@@ -28,7 +38,6 @@
 			return iso + ' [error] ' + String(message);
 		}
 
-		/** Full panel when sync log could not be loaded from server — keeps Sync log UI (same structure as PHP). */
 		function errorPanelMarkup(message) {
 			var refresh =
 				creatorreactorUsersTable.refreshLabel || 'Sync & refresh list';
@@ -61,6 +70,9 @@
 		}
 
 		function setInnerBusy(busy) {
+			if (!$panel.length) {
+				return;
+			}
 			var $inner = $panel.find('#creatorreactor-users-inner');
 			if (busy) {
 				$inner.attr('aria-busy', 'true');
@@ -132,9 +144,11 @@
 		}
 
 		function applyPanelHtml(htmlString) {
+			if (!$panel.length) {
+				return;
+			}
 			if (typeof htmlString === 'string' && htmlString !== '') {
 				$panel.html(htmlString);
-				// If markup ever nests duplicate sync log blocks, keep a single section.
 				var $logs = $panel.find('.creatorreactor-sync-log');
 				if ($logs.length > 1) {
 					$logs.slice(1).remove();
@@ -201,6 +215,9 @@
 		}
 
 		function refreshTable() {
+			if (!$panel.length) {
+				return;
+			}
 			setInnerBusy(true);
 			$.ajax({
 				url: ajaxAdminUrl(),
@@ -255,11 +272,15 @@
 				});
 		}
 
+		function userDetailsModalOpen() {
+			return $modal.length && $modal.attr('aria-hidden') === 'false';
+		}
+
 		function closeDetailsModal() {
 			if (!$modal.length) {
 				return;
 			}
-			$modal.prop('hidden', true).removeClass('is-open');
+			$modal.attr('aria-hidden', 'true');
 			$(document).off('keydown.creatorreactorUserDetails');
 		}
 
@@ -267,32 +288,31 @@
 			if (!$modal.length || !$modalBody.length) {
 				return;
 			}
-			var fields = creatorreactorUsersTable.detailFields;
 			var parts = ['<dl>'];
-			if (Array.isArray(fields)) {
-				for (var i = 0; i < fields.length; i++) {
-					var f = fields[i];
-					if (!f || !f.key) {
+			if (details && Array.isArray(details.lines)) {
+				for (var i = 0; i < details.lines.length; i++) {
+					var line = details.lines[i];
+					if (!line) {
 						continue;
 					}
-					var val =
-						details && Object.prototype.hasOwnProperty.call(details, f.key)
-							? details[f.key]
+					var v =
+						line.value !== undefined && line.value !== null
+							? String(line.value)
 							: '';
 					parts.push(
 						'<dt>' +
-							escapeHtml(f.label || f.key) +
+							escapeHtml(line.label || '') +
 							'</dt><dd>' +
-							escapeHtml(val) +
+							escapeHtml(v) +
 							'</dd>'
 					);
 				}
 			}
 			parts.push('</dl>');
 			$modalBody.html(parts.join(''));
-			$modal.prop('hidden', false).addClass('is-open');
+			$modal.attr('aria-hidden', 'false');
 			$(document).on('keydown.creatorreactorUserDetails', function(ev) {
-				if (ev.key === 'Escape') {
+				if (ev.key === 'Escape' && userDetailsModalOpen()) {
 					ev.preventDefault();
 					closeDetailsModal();
 				}
@@ -302,92 +322,150 @@
 			}
 		}
 
-		$panel.on('click', '#creatorreactor-users-refresh', function(e) {
-			e.preventDefault();
-			refreshTable();
-		});
-
-		$panel.on('click', '.creatorreactor-user-action-details', function(e) {
-			e.preventDefault();
-			var raw = $(this).attr('data-details');
-			if (!raw) {
-				return;
-			}
-			try {
-				var details = JSON.parse(raw);
-				openDetailsModal(details);
-			} catch (err) {
-				openDetailsModal({ product: raw });
-			}
-		});
-
-		$panel.on('click', '.creatorreactor-user-action-sync', function(e) {
-			e.preventDefault();
-			$panel.find('#creatorreactor-users-refresh').trigger('click');
-		});
-
-		$panel.on('click', '.creatorreactor-user-action-deactivate', function(e) {
-			e.preventDefault();
-			var $btn = $(this);
-			var entId = $btn.attr('data-entitlement-id');
-			var msg =
-				creatorreactorUsersTable.confirmDeactivate ||
-				'Deactivate this WordPress user?';
-			if (!entId || !window.confirm(msg)) {
-				return;
-			}
-			setInnerBusy(true);
-			$.ajax({
-				url: ajaxAdminUrl(),
-				type: 'POST',
-				dataType: 'json',
-				data: {
-					action: 'creatorreactor_deactivate_wp_user',
-					security: creatorreactorUsersTable.nonce,
-					entitlement_id: entId
+		$(document).on(
+			'click',
+			'#creatorreactor-users-panel .creatorreactor-user-action-details',
+			function(e) {
+				e.preventDefault();
+				var entId = $(this).attr('data-entitlement-id');
+				if (!entId) {
+					return;
 				}
-			})
-				.done(function(response) {
-					var res = parseJsonResponse(response) || response;
-					var html = panelHtmlFromSuccessPayload(res);
-					if (html) {
-						applyPanelHtml(html);
-						setInnerBusy(false);
-						return;
-					}
-					var err =
-						creatorreactorUsersTable.deactivateError ||
-						'Could not deactivate user.';
-					if (res && res.data) {
-						if (typeof res.data === 'string') {
-							err = res.data;
-						} else if (
-							typeof res.data === 'object' &&
-							res.data.message
-						) {
-							err = String(res.data.message);
-						}
-					}
-					window.alert(err);
-					setInnerBusy(false);
-				})
-				.fail(function(jqXHR) {
-					var pdata =
-						jqXHR.responseJSON &&
-						jqXHR.responseJSON.data &&
-						typeof jqXHR.responseJSON.data === 'object'
-							? jqXHR.responseJSON.data
-							: null;
-					if (pdata && pdata.panelHtml) {
-						applyPanelHtml(pdata.panelHtml);
-						setInnerBusy(false);
-						return;
-					}
-					var msg = messageFromFailedRequest(jqXHR, jqXHR.statusText || 'error');
-					window.alert(msg);
-					setInnerBusy(false);
+				var loading =
+					creatorreactorUsersTable.detailsLoading || 'Loading…';
+				openDetailsModal({
+					lines: [{ label: '', value: loading }]
 				});
-		});
+				$.ajax({
+					url: ajaxAdminUrl(),
+					type: 'POST',
+					dataType: 'json',
+					data: {
+						action: 'creatorreactor_get_entitlement_details',
+						security: creatorreactorUsersTable.nonce,
+						entitlement_id: entId
+					}
+				})
+					.done(function(response) {
+						var res = parseJsonResponse(response) || response;
+						var defErr =
+							creatorreactorUsersTable.detailsLoadError ||
+							'Could not load record details.';
+						function showErr(msg) {
+							openDetailsModal({
+								lines: [{ label: '', value: msg }]
+							});
+						}
+						if (!res || !res.success) {
+							var msg = defErr;
+							if (res && res.data !== undefined && res.data !== null) {
+								if (typeof res.data === 'string') {
+									msg = res.data;
+								} else if (
+									typeof res.data === 'object' &&
+									res.data.message
+								) {
+									msg = String(res.data.message);
+								}
+							}
+							showErr(msg);
+							return;
+						}
+						if (!res.data || !Array.isArray(res.data.lines)) {
+							showErr(defErr);
+							return;
+						}
+						openDetailsModal(res.data);
+					})
+					.fail(function(jqXHR) {
+						var msg = messageFromFailedRequest(
+							jqXHR,
+							jqXHR.statusText || 'error'
+						);
+						openDetailsModal({
+							lines: [{ label: '', value: msg }]
+						});
+					});
+			}
+		);
+
+		if ($panel.length) {
+			$panel.on('click', '#creatorreactor-users-refresh', function(e) {
+				e.preventDefault();
+				refreshTable();
+			});
+
+			$panel.on('click', '.creatorreactor-user-action-sync', function(e) {
+				e.preventDefault();
+				$panel.find('#creatorreactor-users-refresh').trigger('click');
+			});
+
+			$panel.on('click', '.creatorreactor-user-action-deactivate', function(e) {
+				e.preventDefault();
+				var $btn = $(this);
+				var entId = $btn.attr('data-entitlement-id');
+				var msg =
+					creatorreactorUsersTable.confirmDeactivate ||
+					'Deactivate this WordPress user?';
+				if (!entId || !window.confirm(msg)) {
+					return;
+				}
+				setInnerBusy(true);
+				$.ajax({
+					url: ajaxAdminUrl(),
+					type: 'POST',
+					dataType: 'json',
+					data: {
+						action: 'creatorreactor_deactivate_wp_user',
+						security: creatorreactorUsersTable.nonce,
+						entitlement_id: entId
+					}
+				})
+					.done(function(response) {
+						var res = parseJsonResponse(response) || response;
+						var html = panelHtmlFromSuccessPayload(res);
+						if (html) {
+							applyPanelHtml(html);
+							setInnerBusy(false);
+							return;
+						}
+						var err =
+							creatorreactorUsersTable.deactivateError ||
+							'Could not deactivate user.';
+						if (res && res.data) {
+							if (typeof res.data === 'string') {
+								err = res.data;
+							} else if (
+								typeof res.data === 'object' &&
+								res.data.message
+							) {
+								err = String(res.data.message);
+							}
+						}
+						window.alert(err);
+						setInnerBusy(false);
+					})
+					.fail(function(jqXHR) {
+						var pdata =
+							jqXHR.responseJSON &&
+							jqXHR.responseJSON.data &&
+							typeof jqXHR.responseJSON.data === 'object'
+								? jqXHR.responseJSON.data
+								: null;
+						if (pdata && pdata.panelHtml) {
+							applyPanelHtml(pdata.panelHtml);
+							setInnerBusy(false);
+							return;
+						}
+						var msg = messageFromFailedRequest(
+							jqXHR,
+							jqXHR.statusText || 'error'
+						);
+						window.alert(msg);
+						setInnerBusy(false);
+					});
+			});
+		}
 
 		if ($modalClose.length) {
 			$modalClose.on('click', function(e) {
@@ -398,12 +476,9 @@
 
 		if ($modal.length) {
 			$modal.on('click', function(e) {
-				if (e.target === $modal[0]) {
+				if ($(e.target).is('.creatorreactor-modal-backdrop')) {
 					closeDetailsModal();
 				}
-			});
-			$modal.find('.creatorreactor-user-details-modal-dialog').on('click', function(e) {
-				e.stopPropagation();
 			});
 		}
 	});
