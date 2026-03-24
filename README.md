@@ -138,9 +138,15 @@ Repository root is the plugin directory (install as `wp-content/plugins/creatorr
 .
 ├── creatorreactor.php                    # Bootstrap, constants, activation hooks
 ├── uninstall.php                         # Optional full cleanup when uninstall + setting enabled
+├── assets/
+│   └── js/                               # Front-end/admin JS assets
+├── css/                                  # Plugin styles
+├── docs/
+│   └── compliance-dsar-checklist.md      # Privacy/compliance notes
 ├── includes/
 │   ├── partials/                         # Admin HTML fragments (OAuth/Sync by auth mode)
 │   ├── class-admin-settings.php          # Settings UI, options, migrations, tabs
+│   ├── class-creatorreactor-banner.php   # Admin notice/banner flow
 │   ├── class-broker-client.php           # Broker OAuth + API proxy
 │   ├── class-creatorreactor.php          # Plugin bootstrap, mode helpers, feature init
 │   ├── class-creatorreactor-blocks.php   # Gutenberg block registration
@@ -148,21 +154,46 @@ Repository root is the plugin directory (install as `wp-content/plugins/creatorr
 │   ├── class-creatorreactor-elementor.php
 │   ├── class-creatorreactor-elementor-widgets.php
 │   ├── class-creatorreactor-fan-oauth.php # Visitor Fanvue OAuth (REST)
+│   ├── class-creatorreactor-onboarding.php # Onboarding state and flow helpers
 │   ├── class-creatorreactor-oauth.php    # Site/creator OAuth
 │   ├── class-creatorreactor-shortcodes.php
+│   ├── class-creatorreactor-wp-login.php # WordPress login redirect integration
 │   ├── class-cron.php
 │   ├── class-editor-context.php          # Elementor vs block editor detection (developers)
 │   ├── class-editor-blocks-prompt.php
+│   ├── class-privacy.php                 # Privacy policy and data export/erase hooks
 │   └── class-entitlements.php
+├── img/                                  # Logos and UI images
 ├── js/
 │   ├── creatorreactor-blocks-editor.js   # Block editor script
 │   ├── creatorreactor-editor-prompt-modal.js
 │   └── creatorreactor-users-tab.js       # Users tab UI
+├── templates/
+│   └── onboarding-tos-embedded.php       # Onboarding Terms embed template
+├── tests/
+│   ├── unit/                             # Unit tests
+│   ├── regression/                       # Regression tests
+│   └── TESTING.md                        # Test suite notes
 ├── build-zip.sh                          # Release zip (see below)
+├── deploy.sh                             # Rsync deployment helper
+├── composer.json                         # Test scripts and dev dependencies
 └── README.md
 ```
 
 What loads at runtime is defined in `creatorreactor.php` and `includes/class-creatorreactor.php` (other files under `includes/` and `js/` may exist for in-progress or auxiliary use).
+
+## Testing
+
+Install dev dependencies, then run:
+
+```bash
+composer install
+composer test
+composer test:unit
+composer test:regression
+```
+
+For suite details, see `tests/TESTING.md`.
 
 ## Building a release zip
 
@@ -172,7 +203,7 @@ From the plugin root:
 ./build-zip.sh
 ```
 
-This reads the version from `creatorreactor.php` and writes `creatorreactor-<version>.zip` including `creatorreactor.php`, `includes/`, `js/`, and `languages/` if present.
+This reads the version from `creatorreactor.php` and writes `creatorreactor-<version>.zip` including runtime plugin assets and code directories (`includes/`, `js/`, `css/`, `templates/`, `img/`, `assets/`, `languages/`) plus `creatorreactor.php`.
 
 ## License
 

@@ -2272,6 +2272,9 @@ class Admin_Settings {
 			border: 1px solid #fecaca;
 		}
 		.creatorreactor-tab-nav { margin: 0 0 16px; }
+		.creatorreactor-tab-nav .nav-tab {
+			white-space: nowrap;
+		}
 		.creatorreactor-tab-panel { display: none; }
 		.creatorreactor-tab-panel.is-active { display: block; }
 		.creatorreactor-sync-row { display: flex; gap: 15px; align-items: flex-end; margin-top: 15px; }
@@ -2298,6 +2301,8 @@ class Admin_Settings {
 			border-radius: 16px;
 			padding: 28px;
 			box-shadow: 0 18px 44px rgba(30, 41, 59, 0.12);
+			width: 100%;
+			box-sizing: border-box;
 		}
 		.creatorreactor-dashboard-head {
 			display: flex;
@@ -2305,11 +2310,28 @@ class Admin_Settings {
 			justify-content: space-between;
 			gap: 20px;
 			margin: 0 0 22px;
-			padding-bottom: 18px;
-			border-bottom: 1px solid #e5e7eb;
+			padding-bottom: 0;
+			border-bottom: 0;
 		}
 		.creatorreactor-dashboard-head .creatorreactor-status-badge { margin-left: auto; }
-		.creatorreactor-dashboard-title { margin: 0 0 6px; font-size: 30px; line-height: 1.1; border: 0; padding: 0; letter-spacing: -0.025em; color: var(--cr-text); font-weight: 750; }
+		.creatorreactor-card-header {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 12px;
+			margin: 0 0 18px;
+		}
+		.creatorreactor-card-title {
+			margin: 0;
+			font-size: 24px;
+			line-height: 1.2;
+			border: 0;
+			padding: 0;
+			letter-spacing: -0.015em;
+			color: var(--cr-text);
+			font-weight: 700;
+		}
+		.creatorreactor-dashboard-title { margin: 0; }
 		.creatorreactor-dashboard-subtitle { margin: 0; color: var(--cr-text-muted); max-width: 58ch; font-size: 14px; line-height: 1.65; }
 		.creatorreactor-dashboard-grid {
 			display: grid;
@@ -2341,8 +2363,6 @@ class Admin_Settings {
 		}
 		.creatorreactor-modules-shell h2 {
 			margin: 0;
-			font-size: 20px;
-			line-height: 1.3;
 		}
 		.creatorreactor-connection-actions {
 			display: flex;
@@ -2403,16 +2423,37 @@ class Admin_Settings {
 			color: #991b1b;
 			font-weight: 600;
 		}
-		@media (max-width: 640px) {
+		@media (max-width: 960px) {
 			.creatorreactor-dashboard-row { grid-template-columns: 1fr; }
 			.creatorreactor-dashboard-grid { grid-template-columns: 1fr; }
 		}
 		@media (max-width: 782px) {
 			.creatorreactor-dashboard-shell { padding: 18px; border-radius: 12px; }
-			.creatorreactor-dashboard-head { flex-direction: column; gap: 12px; margin-bottom: 16px; padding-bottom: 14px; }
-			.creatorreactor-dashboard-title { font-size: 23px; }
+			.creatorreactor-dashboard-head { flex-direction: column; gap: 12px; margin-bottom: 16px; }
+			.creatorreactor-dashboard-head .creatorreactor-status-badge { margin-left: 0; }
+			.creatorreactor-card-title { font-size: 21px; }
 			.creatorreactor-dashboard-subtitle { font-size: 14px; }
 			.creatorreactor-connection-actions { padding: 0; }
+			.creatorreactor-tab-nav {
+				display: flex;
+				flex-wrap: wrap;
+				gap: 6px;
+				border-bottom: 0;
+			}
+			.creatorreactor-tab-nav .nav-tab {
+				margin: 0;
+			}
+			.form-table th {
+				width: auto;
+				padding-bottom: 6px;
+			}
+			.form-table td {
+				padding-top: 0;
+			}
+			.creatorreactor-settings-form-card .creatorreactor-settings-actions {
+				position: static;
+				justify-content: flex-start;
+			}
 		}
 		.creatorreactor-btn-connect.button {
 			background: var(--cr-accent);
@@ -2432,19 +2473,15 @@ class Admin_Settings {
 			color: #fff;
 			box-shadow: 0 8px 20px rgba(220, 38, 38, 0.28);
 		}
-		.creatorreactor-btn-disconnect.button-icon {
-			width: 42px;
-			min-width: 42px;
-			padding: 0 10px;
-			font-size: 14px;
-			line-height: 1;
+		.creatorreactor-btn-disconnect.button-text {
+			width: 100%;
+			padding: 0 14px;
+			font-size: 12px;
+			letter-spacing: 0.04em;
 			display: inline-flex;
 			align-items: center;
 			justify-content: center;
-			margin-left: auto;
-			overflow: hidden;
 			white-space: nowrap;
-			transition: width 0.18s ease, transform 0.12s ease, box-shadow 0.16s ease, filter 0.12s ease;
 		}
 		.creatorreactor-btn-disconnect.button:hover,
 		.creatorreactor-btn-disconnect.button:focus {
@@ -2452,40 +2489,9 @@ class Admin_Settings {
 			border-color: #991b1b;
 			color: #fff;
 		}
-		.creatorreactor-btn-disconnect.button-icon:hover,
-		.creatorreactor-btn-disconnect.button-icon:focus {
+		.creatorreactor-btn-disconnect.button-text:hover,
+		.creatorreactor-btn-disconnect.button-text:focus {
 			transform: translateY(-1px);
-		}
-		.creatorreactor-btn-disconnect-icon {
-			display: inline-block;
-			font-weight: 700;
-			transform: translateY(-1px);
-		}
-		.creatorreactor-btn-disconnect-text {
-			display: inline-block;
-			width: 0;
-			opacity: 0;
-			overflow: hidden;
-			font-size: 11px;
-			letter-spacing: 0.06em;
-			transition: opacity 0.12s ease, width 0.18s ease, margin-left 0.18s ease;
-		}
-		.creatorreactor-btn-disconnect.button-icon:hover,
-		.creatorreactor-btn-disconnect.button-icon:focus,
-		.creatorreactor-btn-disconnect.button-icon:focus-visible {
-			width: 132px;
-		}
-		.creatorreactor-btn-disconnect.button-icon:hover .creatorreactor-btn-disconnect-icon,
-		.creatorreactor-btn-disconnect.button-icon:focus .creatorreactor-btn-disconnect-icon,
-		.creatorreactor-btn-disconnect.button-icon:focus-visible .creatorreactor-btn-disconnect-icon {
-			display: none;
-		}
-		.creatorreactor-btn-disconnect.button-icon:hover .creatorreactor-btn-disconnect-text,
-		.creatorreactor-btn-disconnect.button-icon:focus .creatorreactor-btn-disconnect-text,
-		.creatorreactor-btn-disconnect.button-icon:focus-visible .creatorreactor-btn-disconnect-text {
-			width: auto;
-			opacity: 1;
-			margin-left: 0;
 		}
 		.creatorreactor-connection-log {
 			margin-top: 20px;
@@ -2793,7 +2799,21 @@ class Admin_Settings {
 		@media (max-width: 960px) {
 			.creatorreactor-settings-container { flex-direction: column; }
 			.creatorreactor-settings-sidebar { width: 100%; }
-			.creatorreactor-sidebar-link { border-left: none; }
+			.creatorreactor-sidebar-nav {
+				flex-direction: row;
+				flex-wrap: wrap;
+				gap: 8px;
+			}
+			.creatorreactor-sidebar-link {
+				border-left: none;
+				border-bottom: 0;
+				border: 1px solid #dcdcde;
+				border-radius: 6px;
+				padding: 8px 12px;
+			}
+			.creatorreactor-sidebar-link.is-active {
+				border-left: 1px solid #007cba;
+			}
 		}
 		.creatorreactor-auth-mode-dynamic[aria-busy="true"] { opacity: 0.55; pointer-events: none; transition: opacity 0.15s ease; }
 
@@ -3827,7 +3847,9 @@ class Admin_Settings {
 				<div class="creatorreactor-dashboard-row">
 					<div class="creatorreactor-dashboard-col">
 						<div class="creatorreactor-modules-shell">
-							<h2><?php esc_html_e( 'CreatorReactor Modules', 'creatorreactor' ); ?></h2>
+							<div class="creatorreactor-card-header">
+								<h2 class="creatorreactor-card-title"><?php esc_html_e( 'CreatorReactor Modules', 'creatorreactor' ); ?></h2>
+							</div>
 						</div>
 					</div>
 					<div class="creatorreactor-dashboard-col">
@@ -3854,9 +3876,9 @@ class Admin_Settings {
 						</p>
 					<?php endif; ?>
 
-					<div class="creatorreactor-dashboard-head">
+					<div class="creatorreactor-dashboard-head creatorreactor-card-header">
 						<div>
-							<h2 class="creatorreactor-dashboard-title"><?php printf( esc_html__( '%s Status', 'creatorreactor' ), esc_html( $current_product_label ) ); ?></h2>
+							<h2 class="creatorreactor-dashboard-title creatorreactor-card-title"><?php printf( esc_html__( '%s Status', 'creatorreactor' ), esc_html( $current_product_label ) ); ?></h2>
 						</div>
 						<span class="creatorreactor-status-badge <?php echo 'green' === $connection_state ? 'creatorreactor-status-healthy' : ( 'red' === $connection_state ? 'creatorreactor-status-red' : 'creatorreactor-status-yellow' ); ?>">
 							<?php echo 'green' === $connection_state ? esc_html__( 'Healthy', 'creatorreactor' ) : ( 'red' === $connection_state ? esc_html__( 'Critical', 'creatorreactor' ) : ( $has_warning_error ? esc_html__( 'Warning', 'creatorreactor' ) : esc_html__( 'Pending', 'creatorreactor' ) ) ); ?>
@@ -3879,10 +3901,7 @@ class Admin_Settings {
 									<?php wp_nonce_field( 'creatorreactor_disconnect' ); ?>
 									<input type="hidden" name="action" value="creatorreactor_disconnect" />
 									<p class="submit">
-										<button type="submit" class="button creatorreactor-btn-disconnect button-icon" title="<?php esc_attr_e( 'Disconnect', 'creatorreactor' ); ?>" aria-label="<?php esc_attr_e( 'Disconnect', 'creatorreactor' ); ?>" onclick="return confirm('<?php esc_attr_e( 'Are you sure you want to disconnect?', 'creatorreactor' ); ?>');">
-											<span class="creatorreactor-btn-disconnect-icon" aria-hidden="true">&times;</span>
-											<span class="creatorreactor-btn-disconnect-text" aria-hidden="true"><?php esc_html_e( 'DISCONNECT', 'creatorreactor' ); ?></span>
-										</button>
+										<button type="submit" class="button creatorreactor-btn-disconnect button-text" title="<?php esc_attr_e( 'Disconnect', 'creatorreactor' ); ?>" aria-label="<?php esc_attr_e( 'Disconnect', 'creatorreactor' ); ?>" onclick="return confirm('<?php esc_attr_e( 'Are you sure you want to disconnect?', 'creatorreactor' ); ?>');"><?php esc_html_e( 'DISCONNECT', 'creatorreactor' ); ?></button>
 									</p>
 								</form>
 							<?php elseif ( $connect_url ) : ?>

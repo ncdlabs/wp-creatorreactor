@@ -15,12 +15,14 @@ Thumbs.db
 
 # Editors / IDEs
 .idea/
+.cursor/
 *.swp
 *.swo
 *~
 
 # Logs & caches
 *.log
+*.cache
 .phpunit.result.cache
 .php-cs-fixer.cache
 

@@ -23,6 +23,11 @@ rsync -avz --delete \
     --exclude='*.log' \
     --exclude='*.cache' \
     --exclude='composer.lock' \
+    --exclude='composer.json' \
+    --exclude='tests/' \
+    --exclude='docs/' \
+    --exclude='.cursor/' \
+    --exclude='.idea/' \
     "$LOCAL_DIR/" \
     "$SSH_HOST:$REMOTE_PATH"
 
