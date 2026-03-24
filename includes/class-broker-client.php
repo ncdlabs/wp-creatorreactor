@@ -144,7 +144,7 @@ class Broker_Client {
 				Admin_Settings::log_connection( 'error', 'Broker callback: error parameter — ' . (string) $error );
 				Admin_Settings::set_last_error( 'Broker: ' . $error );
 				wp_safe_redirect(
-					admin_url( 'options-general.php?page=' . Admin_Settings::PAGE_SLUG . '&status=error' )
+					admin_url( 'admin.php?page=' . Admin_Settings::PAGE_SLUG . '&status=error' )
 				);
 				exit;
 			}
@@ -156,7 +156,7 @@ class Broker_Client {
 					Admin_Settings::log_connection( 'info', 'Broker callback: JWT stored; connection success.' );
 					Admin_Settings::set_last_error( '' );
 					wp_safe_redirect(
-						admin_url( 'options-general.php?page=' . Admin_Settings::PAGE_SLUG . '&status=connected' )
+						admin_url( 'admin.php?page=' . Admin_Settings::PAGE_SLUG . '&status=connected' )
 					);
 					exit;
 				}
@@ -169,13 +169,13 @@ class Broker_Client {
 			}
 
 			wp_safe_redirect(
-				admin_url( 'options-general.php?page=' . Admin_Settings::PAGE_SLUG . '&status=pending' )
+				admin_url( 'admin.php?page=' . Admin_Settings::PAGE_SLUG . '&status=pending' )
 			);
 			exit;
 		} catch ( \Throwable $e ) {
 			Admin_Settings::log_connection( 'error', 'Broker callback: exception — ' . $e->getMessage() . ' (' . basename( $e->getFile() ) . ':' . $e->getLine() . ')' );
 			Admin_Settings::set_last_error( 'Broker callback failed: ' . $e->getMessage() );
-			wp_safe_redirect( admin_url( 'options-general.php?page=' . Admin_Settings::PAGE_SLUG . '&status=error' ) );
+			wp_safe_redirect( admin_url( 'admin.php?page=' . Admin_Settings::PAGE_SLUG . '&status=error' ) );
 			exit;
 		}
 	}

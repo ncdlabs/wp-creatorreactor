@@ -27,18 +27,20 @@ class Admin_Settings {
 	/** Option key: subscriber/sync and user-table events (same shape as connection logs). */
 	const OPTION_SYNC_LOGS            = 'creatorreactor_sync_logs';
 	const MAX_SYNC_LOG_ENTRIES        = 500;
-	/** CreatorReactor web app CRM (Users tab action). */
-	const CRM_APP_URL                 = 'https://app.creator-reactor.com/crm';
 	const OPTION_TIERS               = 'creatorreactor_tiers';
 	const OPTION_SUBSCRIPTION_TIERS  = 'creatorreactor_subscription_tiers';
 	const ENCRYPTED_FIELDS            = [ 'creatorreactor_oauth_client_id', 'creatorreactor_oauth_client_secret' ];
 	/** @var string Mirrors {@see CreatorReactor_OAuth::DEFAULT_SCOPES} (Fanvue quick start; add read:fan in Advanced if your app allows it). */
 	const DEFAULT_CREATORREACTOR_SCOPES = CreatorReactor_OAuth::DEFAULT_SCOPES;
 	const PAGE_SLUG                   = 'creatorreactor';
+	const PAGE_SETTINGS_SLUG          = 'creatorreactor-settings';
 
 	/** Form value authentication_mode maps to stored broker_mode (Agency = true). */
 	const AUTH_MODE_CREATOR = 'creator';
 	const AUTH_MODE_AGENCY  = 'agency';
+
+	/** @var bool Guard to avoid printing the profile modal twice. */
+	private static $printed_profile_details_modal = false;
 
 	/** Legacy wp_options keys from installs before the CreatorReactor rename. */
 	const LEGACY_OPTION_BROKER        = 'fan' . 'bridge_broker_options';
@@ -69,6 +71,9 @@ class Admin_Settings {
 		add_action( 'wp_ajax_creatorreactor_append_sync_log', [ __CLASS__, 'ajax_append_sync_log' ] );
 		add_action( 'wp_ajax_creatorreactor_deactivate_wp_user', [ __CLASS__, 'ajax_deactivate_wp_user' ] );
 		add_action( 'wp_ajax_creatorreactor_get_entitlement_details', [ __CLASS__, 'ajax_get_entitlement_details' ] );
+		add_action( 'wp_ajax_creatorreactor_get_user_entitlement_details', [ __CLASS__, 'ajax_get_user_entitlement_details' ] );
+		add_action( 'show_user_profile', [ __CLASS__, 'render_user_profile_creatorreactor_uuid_field' ] );
+		add_action( 'edit_user_profile', [ __CLASS__, 'render_user_profile_creatorreactor_uuid_field' ] );
 		add_filter(
 			'plugin_action_links_' . plugin_basename( CREATORREACTOR_PLUGIN_DIR . 'creatorreactor.php' ),
 			[ __CLASS__, 'add_plugin_action_links' ]
@@ -85,13 +90,29 @@ class Admin_Settings {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return $links;
 		}
-		$url                              = admin_url( 'options-general.php?page=' . self::PAGE_SLUG );
+		$url                              = self::admin_page_url( [ 'tab' => 'settings', 'subtab' => 'oauth' ], self::PAGE_SETTINGS_SLUG );
 		$links['creatorreactor_settings'] = sprintf(
 			'<a href="%s">%s</a>',
 			esc_url( $url ),
 			esc_html__( 'Settings', 'creatorreactor' )
 		);
 		return $links;
+	}
+
+	/**
+	 * Get the admin page URL for the CreatorReactor settings screen.
+	 *
+	 * @param array<string, scalar> $args Optional query args to append.
+	 * @param string $page_slug Optional page slug; defaults to the primary slug.
+	 * @return string
+	 */
+	private static function admin_page_url( array $args = [], $page_slug = self::PAGE_SLUG ) {
+		$page_slug = sanitize_key( $page_slug );
+		$url       = admin_url( 'admin.php?page=' . $page_slug );
+		if ( empty( $args ) ) {
+			return $url;
+		}
+		return add_query_arg( $args, $url );
 	}
 
 	/**
@@ -164,6 +185,7 @@ class Admin_Settings {
 			'creatorreactor_creator_id' => '',
 			'cron_interval_minutes' => 15,
 			'entitlement_cache_ttl_seconds' => 900,
+			'replace_wp_login_with_social' => false,
 		];
 
 		if ( is_array( $broker_opts ) && ! empty( $broker_opts ) ) {
@@ -420,6 +442,22 @@ class Admin_Settings {
 		return $stored;
 	}
 
+	/**
+	 * Whether the OAuth settings panel should load with the lock engaged.
+	 * Unlocked when Client ID and Client Secret are both empty (Creator mode). Agency mode ignores secret.
+	 *
+	 * @param array $opts        Options from {@see get_options()}.
+	 * @param bool  $broker_mode Whether Agency (broker) mode is active.
+	 */
+	private static function oauth_config_should_start_locked( array $opts, $broker_mode ) {
+		$client_id = isset( $opts['creatorreactor_oauth_client_id'] ) ? trim( (string) $opts['creatorreactor_oauth_client_id'] ) : '';
+		if ( $broker_mode ) {
+			return $client_id !== '';
+		}
+		$secret = isset( $opts['creatorreactor_oauth_client_secret'] ) ? trim( (string) $opts['creatorreactor_oauth_client_secret'] ) : '';
+		return $client_id !== '' || $secret !== '';
+	}
+
 	public static function sanitize_options( $input ) {
 		$raw_opts = self::get_raw_options();
 		$opts     = [];
@@ -587,7 +625,56 @@ class Admin_Settings {
 			}
 		}
 
+		if ( array_key_exists( 'replace_wp_login_with_social', $input ) ) {
+			$opts['replace_wp_login_with_social'] = ! empty( $input['replace_wp_login_with_social'] );
+		} else {
+			$opts['replace_wp_login_with_social'] = ! empty( $raw_opts['replace_wp_login_with_social'] );
+		}
+
+		if ( ! self::is_fan_social_login_configured_from_opts( $opts ) ) {
+			if ( ! empty( $opts['replace_wp_login_with_social'] ) ) {
+				add_settings_error(
+					self::OPTION_NAME,
+					'creatorreactor_social_login_not_configured',
+					__( 'The WordPress login page option was turned off because no social login provider is configured. Add Fanvue OAuth (Client ID and Client Secret) in Creator mode.', 'creatorreactor' )
+				);
+			}
+			$opts['replace_wp_login_with_social'] = false;
+		}
+
 		return $opts;
+	}
+
+	/**
+	 * Whether Fanvue fan OAuth can run (Creator mode with app credentials). Used for wp-login button + General tab.
+	 *
+	 * @param array<string, mixed> $opts Sanitized or raw options array (encrypted secrets are non-empty when set).
+	 */
+	private static function is_fan_social_login_configured_from_opts( array $opts ) {
+		if ( ! empty( $opts['broker_mode'] ) ) {
+			return false;
+		}
+		$client_id = isset( $opts['creatorreactor_oauth_client_id'] ) ? trim( (string) $opts['creatorreactor_oauth_client_id'] ) : '';
+		$secret    = isset( $opts['creatorreactor_oauth_client_secret'] ) ? trim( (string) $opts['creatorreactor_oauth_client_secret'] ) : '';
+		return $client_id !== '' && $secret !== '';
+	}
+
+	/**
+	 * True when the plugin has at least one configured social (Fanvue) OAuth app for visitor login in Creator mode.
+	 */
+	public static function is_fan_social_login_configured() {
+		return self::is_fan_social_login_configured_from_opts( self::get_options() );
+	}
+
+	/**
+	 * Whether to add the social login button on wp-login.php (option on + Fanvue OAuth configured).
+	 */
+	public static function is_replace_wp_login_with_social() {
+		if ( ! self::is_fan_social_login_configured() ) {
+			return false;
+		}
+		$o = self::get_options();
+		return ! empty( $o['replace_wp_login_with_social'] );
 	}
 
 	/**
@@ -599,7 +686,7 @@ class Admin_Settings {
 		}
 		if ( ! current_user_can( 'manage_options' ) ) {
 			self::log_connection( 'error', 'OAuth Connect: rejected (user lacks manage_options).' );
-			wp_safe_redirect( admin_url( 'options-general.php?page=' . self::PAGE_SLUG . '&tab=dashboard' ) );
+			wp_safe_redirect( self::admin_page_url( [ 'tab' => 'dashboard' ] ) );
 			exit;
 		}
 		$nonce = isset( $_GET['_wpnonce'] ) ? sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ) : '';
@@ -607,12 +694,12 @@ class Admin_Settings {
 			$msg = __( 'Connect link expired. Reload CreatorReactor settings and click Connect again.', 'creatorreactor' );
 			self::log_connection( 'error', 'OAuth Connect: invalid or expired nonce.' );
 			self::set_last_error( $msg );
-			wp_safe_redirect( admin_url( 'options-general.php?page=' . self::PAGE_SLUG . '&tab=dashboard' ) );
+			wp_safe_redirect( self::admin_page_url( [ 'tab' => 'dashboard' ] ) );
 			exit;
 		}
 		if ( self::is_broker_mode() ) {
 			self::log_connection( 'info', 'OAuth Connect: ignored (Agency/broker mode; use broker Connect).' );
-			wp_safe_redirect( admin_url( 'options-general.php?page=' . self::PAGE_SLUG . '&tab=dashboard' ) );
+			wp_safe_redirect( self::admin_page_url( [ 'tab' => 'dashboard' ] ) );
 			exit;
 		}
 		$auth_url = CreatorReactor_OAuth::get_authorization_url();
@@ -620,7 +707,7 @@ class Admin_Settings {
 			$msg = __( 'OAuth Client ID is missing. Enter your Fanvue Client ID, save settings, then connect again.', 'creatorreactor' );
 			self::log_connection( 'error', 'OAuth Connect: cannot build authorize URL (missing Client ID).' );
 			self::set_last_error( $msg );
-			wp_safe_redirect( admin_url( 'options-general.php?page=' . self::PAGE_SLUG . '&tab=dashboard' ) );
+			wp_safe_redirect( self::admin_page_url( [ 'tab' => 'dashboard' ] ) );
 			exit;
 		}
 		self::reset_connection_state_before_connect();
@@ -649,13 +736,13 @@ class Admin_Settings {
 		}
 		check_admin_referer( 'creatorreactor_broker_connect' );
 		if ( ! self::is_broker_mode() ) {
-			wp_safe_redirect( admin_url( 'options-general.php?page=' . self::PAGE_SLUG . '&tab=dashboard' ) );
+			wp_safe_redirect( self::admin_page_url( [ 'tab' => 'dashboard' ] ) );
 			exit;
 		}
 		$url = Broker_Client::get_connect_url();
 		if ( ! is_string( $url ) || $url === '' ) {
 			self::set_last_error( __( 'Cannot build broker Connect URL. Check Site ID and broker settings.', 'creatorreactor' ) );
-			wp_safe_redirect( admin_url( 'options-general.php?page=' . self::PAGE_SLUG . '&tab=dashboard' ) );
+			wp_safe_redirect( self::admin_page_url( [ 'tab' => 'dashboard' ] ) );
 			exit;
 		}
 		self::reset_connection_state_before_connect();
@@ -727,7 +814,7 @@ class Admin_Settings {
 
 		self::set_last_error( '' );
 
-		wp_safe_redirect( admin_url( 'options-general.php?page=' . self::PAGE_SLUG . '&status=disconnected' ) );
+		wp_safe_redirect( self::admin_page_url( [ 'status' => 'disconnected' ] ) );
 		exit;
 	}
 
@@ -804,7 +891,7 @@ class Admin_Settings {
 			);
 		}
 
-		wp_safe_redirect( admin_url( 'options-general.php?page=' . self::PAGE_SLUG . '&tab=dashboard&status=connection_tested' ) );
+		wp_safe_redirect( self::admin_page_url( [ 'tab' => 'dashboard', 'status' => 'connection_tested' ] ) );
 		exit;
 	}
 
@@ -953,45 +1040,199 @@ class Admin_Settings {
 	}
 
 	/**
-	 * Shortcodes settings tab: usage reference and Fanvue redirect hint.
+	 * Shortcodes settings tab: user guide (collapsible), quick shortcode reference.
 	 */
 	private static function render_shortcodes_tab_body() {
 		$fan_callback = Fan_OAuth::get_callback_redirect_uri();
 		?>
+		<div class="creatorreactor-shortcodes-guide-wrap" style="max-width: 920px;">
+			<details class="creatorreactor-section creatorreactor-shortcodes-guide-details">
+				<summary class="creatorreactor-shortcodes-guide-summary">
+					<span class="creatorreactor-shortcodes-guide-summary-chevron" aria-hidden="true"></span>
+					<span class="creatorreactor-shortcodes-guide-summary-text"><?php esc_html_e( 'CreatorReactor Plugin — User Guide (Simplified)', 'creatorreactor' ); ?></span>
+				</summary>
+				<div class="creatorreactor-shortcodes-guide-inner">
+
+			<h3><?php esc_html_e( 'Overview', 'creatorreactor' ); ?></h3>
+			<p><?php esc_html_e( 'CreatorReactor lets you control who can see content on your WordPress site based on a user’s Fanvue status (follower or subscriber).', 'creatorreactor' ); ?></p>
+			<p><?php esc_html_e( 'You can:', 'creatorreactor' ); ?></p>
+			<ul style="list-style: disc; margin-left: 1.5em;">
+				<li><?php esc_html_e( 'Restrict content using shortcodes', 'creatorreactor' ); ?></li>
+				<li><?php esc_html_e( 'Use the same logic in Block Editor blocks or Elementor widgets', 'creatorreactor' ); ?></li>
+				<li><?php esc_html_e( 'Allow users to log in via Fanvue OAuth', 'creatorreactor' ); ?></li>
+			</ul>
+
+			<hr />
+
+			<h3><?php esc_html_e( '1. How Content Gating Works', 'creatorreactor' ); ?></h3>
+			<p><?php esc_html_e( 'Content visibility is based on:', 'creatorreactor' ); ?></p>
+			<ul style="list-style: disc; margin-left: 1.5em;">
+				<li><?php esc_html_e( 'The user being logged in', 'creatorreactor' ); ?></li>
+				<li><?php esc_html_e( 'Their Fanvue entitlement status (follower or subscriber)', 'creatorreactor' ); ?></li>
+			</ul>
+			<p><?php esc_html_e( 'Entitlements are matched using:', 'creatorreactor' ); ?></p>
+			<ul style="list-style: disc; margin-left: 1.5em;">
+				<li><?php esc_html_e( 'The user’s email address, or', 'creatorreactor' ); ?></li>
+				<li><?php esc_html_e( 'Their linked WordPress account', 'creatorreactor' ); ?></li>
+			</ul>
+
+			<hr />
+
+			<h3><?php esc_html_e( '2. Using Shortcodes', 'creatorreactor' ); ?></h3>
+			<p><?php esc_html_e( 'Add these inside:', 'creatorreactor' ); ?></p>
+			<ul style="list-style: disc; margin-left: 1.5em;">
+				<li><?php esc_html_e( 'Posts', 'creatorreactor' ); ?></li>
+				<li><?php esc_html_e( 'Pages', 'creatorreactor' ); ?></li>
+				<li><?php esc_html_e( 'Any shortcode-enabled block', 'creatorreactor' ); ?></li>
+			</ul>
+
+			<h4><?php esc_html_e( 'Available Shortcodes', 'creatorreactor' ); ?></h4>
+			<p><strong><?php esc_html_e( 'Follower-only content', 'creatorreactor' ); ?></strong></p>
+			<pre class="creatorreactor-guide-code" style="white-space: pre-wrap; word-break: break-word; background: #f6f7f7; padding: 12px; border: 1px solid #c3c4c7;"><code><?php echo esc_html( "[follower]\nThis content is only visible to followers.\n[/follower]" ); ?></code></pre>
+
+			<p><strong><?php esc_html_e( 'Subscriber-only content', 'creatorreactor' ); ?></strong></p>
+			<pre class="creatorreactor-guide-code" style="white-space: pre-wrap; word-break: break-word; background: #f6f7f7; padding: 12px; border: 1px solid #c3c4c7;"><code><?php echo esc_html( "[subscriber]\nThis content is only visible to paid subscribers.\n[/subscriber]" ); ?></code></pre>
+			<p><?php esc_html_e( 'Supports:', 'creatorreactor' ); ?></p>
+			<ul style="list-style: disc; margin-left: 1.5em;">
+				<li><?php esc_html_e( 'General subscriber access: fanvue_subscriber', 'creatorreactor' ); ?></li>
+				<li><?php esc_html_e( 'Tier-based access: fanvue_subscriber_<tiername>', 'creatorreactor' ); ?></li>
+			</ul>
+
+			<hr />
+
+			<p><strong><?php esc_html_e( 'Not logged in only', 'creatorreactor' ); ?></strong></p>
+			<pre class="creatorreactor-guide-code" style="white-space: pre-wrap; word-break: break-word; background: #f6f7f7; padding: 12px; border: 1px solid #c3c4c7;"><code><?php echo esc_html( "[not_logged_in]\nPlease log in to view this content.\n[/not_logged_in]" ); ?></code></pre>
+
+			<hr />
+
+			<p><strong><?php esc_html_e( 'Fanvue login button', 'creatorreactor' ); ?></strong></p>
+			<pre class="creatorreactor-guide-code" style="white-space: pre-wrap; word-break: break-word; background: #f6f7f7; padding: 12px; border: 1px solid #c3c4c7;"><code><?php echo esc_html( '[fanvue_login_button]' ); ?></code></pre>
+			<p><?php esc_html_e( 'Displays a “Login with Fanvue” link.', 'creatorreactor' ); ?></p>
+			<p><?php esc_html_e( 'What happens after login:', 'creatorreactor' ); ?></p>
+			<ul style="list-style: disc; margin-left: 1.5em;">
+				<li><?php esc_html_e( 'If the Fanvue email matches an existing WordPress user → user is logged in', 'creatorreactor' ); ?></li>
+				<li><?php esc_html_e( 'If no match → a new account is created (if registration is enabled)', 'creatorreactor' ); ?></li>
+			</ul>
+
+			<hr />
+
+			<h3><?php esc_html_e( '3. Using Blocks or Elementor', 'creatorreactor' ); ?></h3>
+			<p><strong><?php esc_html_e( 'Block Editor (Gutenberg)', 'creatorreactor' ); ?></strong></p>
+			<ul style="list-style: disc; margin-left: 1.5em;">
+				<li><?php esc_html_e( 'Look for blocks under “CreatorReactor”', 'creatorreactor' ); ?></li>
+				<li><?php esc_html_e( 'Same behavior as shortcodes (no difference in logic)', 'creatorreactor' ); ?></li>
+			</ul>
+			<p><strong><?php esc_html_e( 'Elementor', 'creatorreactor' ); ?></strong></p>
+			<ul style="list-style: disc; margin-left: 1.5em;">
+				<li><?php esc_html_e( 'Use widgets in the “CreatorReactor” category', 'creatorreactor' ); ?></li>
+				<li><?php esc_html_e( 'Identical functionality to shortcodes', 'creatorreactor' ); ?></li>
+			</ul>
+
+			<hr />
+
+			<h3><?php esc_html_e( '4. OAuth Setup (Required for Login)', 'creatorreactor' ); ?></h3>
+			<p><?php esc_html_e( 'Add this redirect URI to your Fanvue app:', 'creatorreactor' ); ?></p>
+			<p><code style="word-break: break-all; display: inline-block; max-width: 100%;"><?php echo esc_html( $fan_callback ); ?></code></p>
+			<p class="description"><?php esc_html_e( 'This endpoint handles login and account linking.', 'creatorreactor' ); ?></p>
+
+			<hr />
+
+			<h3><?php esc_html_e( '5. Developer Notes (Optional)', 'creatorreactor' ); ?></h3>
+			<ul style="list-style: disc; margin-left: 1.5em;">
+				<li><?php esc_html_e( 'The plugin automatically detects the editor context (Elementor vs Block Editor)', 'creatorreactor' ); ?></li>
+				<li>
+					<?php esc_html_e( 'Detection is handled by:', 'creatorreactor' ); ?>
+					<code>CreatorReactor\Editor_Context</code>
+					<?php esc_html_e( '— file:', 'creatorreactor' ); ?>
+					<code>includes/class-editor-context.php</code>
+				</li>
+			</ul>
+			<p><?php esc_html_e( 'This ensures consistent behavior across:', 'creatorreactor' ); ?></p>
+			<ul style="list-style: disc; margin-left: 1.5em;">
+				<li><?php esc_html_e( 'Admin editor', 'creatorreactor' ); ?></li>
+				<li><?php esc_html_e( 'Stored post format', 'creatorreactor' ); ?></li>
+				<li><?php esc_html_e( 'Frontend rendering', 'creatorreactor' ); ?></li>
+			</ul>
+
+			<hr />
+
+			<h3><?php esc_html_e( 'Key Takeaways', 'creatorreactor' ); ?></h3>
+			<ul style="list-style: disc; margin-left: 1.5em;">
+				<li><?php esc_html_e( 'Use shortcodes, blocks, or widgets interchangeably', 'creatorreactor' ); ?></li>
+				<li><?php esc_html_e( 'Content is shown based on Fanvue follower/subscriber status', 'creatorreactor' ); ?></li>
+				<li><?php esc_html_e( 'OAuth enables automatic login + account linking', 'creatorreactor' ); ?></li>
+				<li><?php esc_html_e( 'Works across Elementor and Gutenberg without extra setup', 'creatorreactor' ); ?></li>
+			</ul>
+
+				</div>
+			</details>
+
+			<div class="creatorreactor-section creatorreactor-shortcodes-reference" style="margin-top: 20px;">
+				<h2><?php esc_html_e( 'Shortcodes (quick reference)', 'creatorreactor' ); ?></h2>
+				<p class="description"><?php esc_html_e( 'Same behavior is available as Gutenberg blocks (CreatorReactor category) and Elementor widgets when those editors are active.', 'creatorreactor' ); ?></p>
+				<table class="widefat striped" style="margin-top: 12px;">
+					<thead>
+						<tr>
+							<th scope="col" style="width: 38%;"><?php esc_html_e( 'Shortcode', 'creatorreactor' ); ?></th>
+							<th scope="col"><?php esc_html_e( 'What it does', 'creatorreactor' ); ?></th>
+						</tr>
+					</thead>
+					<tbody>
+						<tr>
+							<td><code style="word-break: break-word;">[follower] … [/follower]</code></td>
+							<td><?php esc_html_e( 'Shows inner content only when the visitor is logged in and has an active follower entitlement (e.g. fanvue_follower), matched by linked WP user or email.', 'creatorreactor' ); ?></td>
+						</tr>
+						<tr>
+							<td><code style="word-break: break-word;">[subscriber] … [/subscriber]</code></td>
+							<td><?php esc_html_e( 'Shows inner content only when logged in with an active paid subscriber tier (fanvue_subscriber or fanvue_subscriber_<tier>).', 'creatorreactor' ); ?></td>
+						</tr>
+						<tr>
+							<td><code style="word-break: break-word;">[not_logged_in] … [/not_logged_in]</code></td>
+							<td><?php esc_html_e( 'Shows inner content only to visitors who are not logged in (e.g. prompts to sign in).', 'creatorreactor' ); ?></td>
+						</tr>
+						<tr>
+							<td><code>[fanvue_login_button]</code></td>
+							<td><?php esc_html_e( 'Renders a “Login with Fanvue” link (self-closing). Creator/direct mode only; add the plugin’s fan OAuth callback URL to your Fanvue app. After login, WP user is matched or created by email if registration is allowed.', 'creatorreactor' ); ?></td>
+						</tr>
+					</tbody>
+				</table>
+			</div>
+		</div>
+		<?php
+	}
+
+	/**
+	 * General settings tab: site-wide plugin options.
+	 *
+	 * @param array<string, mixed> $opts Options from {@see get_options()}.
+	 */
+	private static function render_general_tab_body( array $opts ) {
+		$social_ok = self::is_fan_social_login_configured();
+		$checked   = $social_ok && ! empty( $opts['replace_wp_login_with_social'] );
+		?>
 		<div class="creatorreactor-section">
-			<h2><?php esc_html_e( 'Shortcodes', 'creatorreactor' ); ?></h2>
-			<p class="creatorreactor-muted"><?php esc_html_e( 'Use these in posts, pages, or blocks that render shortcodes. Tier gates match active entitlements (synced subscribers and followers) for the logged-in user’s email or linked WordPress user ID.', 'creatorreactor' ); ?></p>
-			<table class="widefat striped" style="max-width: 920px;">
-				<thead>
+			<h2><?php esc_html_e( 'General', 'creatorreactor' ); ?></h2>
+			<form method="post" action="<?php echo esc_url( admin_url( 'options.php' ) ); ?>">
+				<?php settings_fields( self::OPTION_NAME ); ?>
+				<table class="form-table" role="presentation">
 					<tr>
-						<th scope="col"><?php esc_html_e( 'Shortcode', 'creatorreactor' ); ?></th>
-						<th scope="col"><?php esc_html_e( 'Description', 'creatorreactor' ); ?></th>
+						<th scope="row"><?php esc_html_e( 'Login', 'creatorreactor' ); ?></th>
+						<td>
+							<input type="hidden" name="<?php echo esc_attr( self::OPTION_NAME ); ?>[replace_wp_login_with_social]" value="0" />
+							<label for="creatorreactor_replace_wp_login_with_social">
+								<input type="checkbox" id="creatorreactor_replace_wp_login_with_social" name="<?php echo esc_attr( self::OPTION_NAME ); ?>[replace_wp_login_with_social]" value="1" <?php checked( $checked ); ?> <?php disabled( ! $social_ok ); ?> />
+								<?php esc_html_e( 'Add social login button to the WordPress login page?', 'creatorreactor' ); ?>
+							</label>
+							<?php if ( ! $social_ok ) : ?>
+								<p class="description creatorreactor-general-login-error">
+									<?php esc_html_e( 'You must set up at least one social login provider in this plugin before this option can be enabled.', 'creatorreactor' ); ?>
+								</p>
+							<?php endif; ?>
+						</td>
 					</tr>
-				</thead>
-				<tbody>
-					<tr>
-						<td><code>[follower] … [/follower]</code></td>
-						<td><?php esc_html_e( 'Shows inner content only to logged-in users with an active follower tier (e.g. fanvue_follower).', 'creatorreactor' ); ?></td>
-					</tr>
-					<tr>
-						<td><code>[subscriber] … [/subscriber]</code></td>
-						<td><?php esc_html_e( 'Shows inner content only to logged-in users with an active paid subscriber tier (e.g. fanvue_subscriber or fanvue_subscriber_tiername).', 'creatorreactor' ); ?></td>
-					</tr>
-					<tr>
-						<td><code>[not_logged_in] … [/not_logged_in]</code></td>
-						<td><?php esc_html_e( 'Shows inner content only to visitors who are not logged in.', 'creatorreactor' ); ?></td>
-					</tr>
-					<tr>
-						<td><code>[fanvue_oauth]</code></td>
-						<td><?php esc_html_e( 'Outputs a “Login with Fanvue” link (Creator/direct mode only). After authorization, the visitor is signed in to WordPress when their Fanvue account email matches an existing user, or a new account is created if registration is open.', 'creatorreactor' ); ?></td>
-					</tr>
-				</tbody>
-			</table>
-			<p class="description" style="max-width: 920px; margin-top: 14px;">
-				<?php esc_html_e( 'Fanvue app redirect URI for front-end login (add alongside your existing callback if needed):', 'creatorreactor' ); ?>
-				<br />
-				<code style="word-break: break-all;"><?php echo esc_html( $fan_callback ); ?></code>
-			</p>
+				</table>
+				<?php submit_button( __( 'Save Changes', 'creatorreactor' ) ); ?>
+			</form>
 		</div>
 		<?php
 	}
@@ -1055,10 +1296,6 @@ class Admin_Settings {
 										<span class="dashicons dashicons-info" aria-hidden="true"></span>
 										<span class="screen-reader-text"><?php esc_html_e( 'Details', 'creatorreactor' ); ?></span>
 									</button>
-									<a class="button button-small creatorreactor-user-action creatorreactor-user-action-crm" href="<?php echo esc_url( self::CRM_APP_URL ); ?>" target="_blank" rel="noopener noreferrer" title="<?php esc_attr_e( 'Open in CRM', 'creatorreactor' ); ?>">
-										<span class="dashicons dashicons-external" aria-hidden="true"></span>
-										<span class="screen-reader-text"><?php esc_html_e( 'Open in CRM', 'creatorreactor' ); ?></span>
-									</a>
 									<button type="button" class="button button-small creatorreactor-user-action creatorreactor-user-action-sync" title="<?php esc_attr_e( 'Sync status', 'creatorreactor' ); ?>">
 										<span class="dashicons dashicons-update" aria-hidden="true"></span>
 										<span class="screen-reader-text"><?php esc_html_e( 'Sync status', 'creatorreactor' ); ?></span>
@@ -1281,6 +1518,33 @@ class Admin_Settings {
 	}
 
 	/**
+	 * AJAX: latest entitlement row details for a WordPress user (used on wp-admin user profile).
+	 */
+	public static function ajax_get_user_entitlement_details() {
+		check_ajax_referer( 'creatorreactor_user_profile_details', 'security' );
+
+		$user_id = isset( $_POST['user_id'] ) ? absint( wp_unslash( $_POST['user_id'] ) ) : 0;
+		if ( $user_id < 1 ) {
+			wp_send_json_error( __( 'Invalid WordPress user.', 'creatorreactor' ), 400 );
+		}
+		if ( ! current_user_can( 'edit_user', $user_id ) ) {
+			wp_send_json_error( __( 'Forbidden.', 'creatorreactor' ), 403 );
+		}
+
+		$user = get_user_by( 'id', $user_id );
+		if ( ! ( $user instanceof \WP_User ) ) {
+			wp_send_json_error( __( 'WordPress user not found.', 'creatorreactor' ), 404 );
+		}
+
+		$row = self::get_latest_entitlement_row_for_wp_user( $user_id, (string) $user->user_email );
+		if ( ! is_array( $row ) ) {
+			wp_send_json_error( __( 'No entitlement record found for this user.', 'creatorreactor' ), 404 );
+		}
+
+		wp_send_json_success( self::users_tab_row_details_payload( $row ) );
+	}
+
+	/**
 	 * AJAX: strip capabilities from the linked WP user and mark the entitlement inactive.
 	 */
 	public static function ajax_deactivate_wp_user() {
@@ -1377,12 +1641,66 @@ class Admin_Settings {
 
 	public static function enqueue_assets( $hook_suffix ) {
 		$hook_suffix = is_string( $hook_suffix ) ? $hook_suffix : '';
-		$slug        = self::PAGE_SLUG;
-		$allowed     = (
-			'settings_page_' . $slug === $hook_suffix
-			|| 'options-general_page_' . $slug === $hook_suffix
-		);
-		if ( ! $allowed ) {
+		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : '';
+		$is_plugin_page   = ( $page === self::PAGE_SLUG || $page === self::PAGE_SETTINGS_SLUG );
+		$is_user_profile  = in_array( $hook_suffix, [ 'profile.php', 'user-edit.php' ], true );
+		if ( ! $is_plugin_page && ! $is_user_profile ) {
+			return;
+		}
+
+		if ( $is_user_profile ) {
+			$profile_css = '
+			#creatorreactor-user-details-modal.creatorreactor-modal { z-index: 100001; }
+			#creatorreactor-user-details-modal .creatorreactor-user-details-close {
+				border: 0;
+				background: transparent;
+				color: #50575e;
+				cursor: pointer;
+				font-size: 22px;
+				line-height: 1;
+				padding: 0 4px;
+			}
+			#creatorreactor-user-details-modal .creatorreactor-modal-body dl {
+				margin: 0;
+				display: grid;
+				grid-template-columns: 9.5em 1fr;
+				gap: 8px 16px;
+				font-size: 13px;
+			}
+			#creatorreactor-user-details-modal .creatorreactor-modal-body dt { margin: 0; color: #646970; font-weight: 600; }
+			#creatorreactor-user-details-modal .creatorreactor-modal-body dd { margin: 0; word-break: break-word; }
+			.creatorreactor-modal { position: fixed; inset: 0; display: none; z-index: 100000; }
+			.creatorreactor-modal[aria-hidden="false"] { display: block; }
+			.creatorreactor-modal-backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.45); }
+			.creatorreactor-modal-dialog { position: relative; width: min(620px, calc(100% - 32px)); max-height: calc(100vh - 64px); margin: 32px auto; background: #fff; border-radius: 8px; border: 1px solid #dcdcde; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25); overflow: auto; }
+			.creatorreactor-modal-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 18px 10px; border-bottom: 1px solid #dcdcde; }
+			.creatorreactor-modal-header h3 { margin: 0; font-size: 16px; }
+			.creatorreactor-modal-body { padding: 14px 18px; }
+			';
+
+			wp_register_style( 'creatorreactor-user-profile', false, [], CREATORREACTOR_VERSION );
+			wp_enqueue_style( 'creatorreactor-user-profile' );
+			wp_add_inline_style( 'creatorreactor-user-profile', $profile_css );
+
+			wp_register_script(
+				'creatorreactor-user-profile',
+				CREATORREACTOR_PLUGIN_URL . 'js/creatorreactor-user-profile.js',
+				[ 'jquery' ],
+				CREATORREACTOR_VERSION,
+				true
+			);
+			wp_enqueue_script( 'creatorreactor-user-profile' );
+			wp_localize_script(
+				'creatorreactor-user-profile',
+				'creatorreactorUserProfile',
+				[
+					'ajaxUrl'           => admin_url( 'admin-ajax.php' ),
+					'nonce'             => wp_create_nonce( 'creatorreactor_user_profile_details' ),
+					'detailsLoading'    => __( 'Loading…', 'creatorreactor' ),
+					'detailsLoadError'  => __( 'Could not load record details.', 'creatorreactor' ),
+					'noEntitlementText' => __( 'No entitlement record found for this user.', 'creatorreactor' ),
+				]
+			);
 			return;
 		}
 
@@ -1394,6 +1712,48 @@ class Admin_Settings {
 		.creatorreactor-section { background: #fff; border: 1px solid #dcdcde; border-radius: 4px; padding: 20px; margin-bottom: 20px; }
 		.creatorreactor-section h2 { margin-top: 0; padding-bottom: 10px; border-bottom: 1px solid #dcdcde; font-size: 16px; }
 		.creatorreactor-section h3 { margin-top: 0; font-size: 14px; }
+		details.creatorreactor-shortcodes-guide-details { padding: 0; }
+		details.creatorreactor-shortcodes-guide-details > summary.creatorreactor-shortcodes-guide-summary {
+			display: flex;
+			flex-direction: row;
+			align-items: center;
+			gap: 10px;
+			margin: 0;
+			padding: 18px 20px 10px 20px;
+			cursor: pointer;
+			font-size: 16px;
+			font-weight: 600;
+			line-height: 1.4;
+			list-style: none;
+		}
+		details.creatorreactor-shortcodes-guide-details > summary.creatorreactor-shortcodes-guide-summary::-webkit-details-marker {
+			display: none;
+		}
+		details.creatorreactor-shortcodes-guide-details > summary .creatorreactor-shortcodes-guide-summary-chevron {
+			flex-shrink: 0;
+			display: inline-block;
+			width: 0;
+			height: 0;
+			border-style: solid;
+			border-width: 5px 0 5px 7px;
+			border-color: transparent transparent transparent #50575e;
+			transition: transform 0.15s ease;
+			transform-origin: 35% 50%;
+		}
+		details.creatorreactor-shortcodes-guide-details[open] > summary .creatorreactor-shortcodes-guide-summary-chevron {
+			transform: rotate(90deg);
+		}
+		details.creatorreactor-shortcodes-guide-details[open] > summary.creatorreactor-shortcodes-guide-summary {
+			border-bottom: 1px solid #dcdcde;
+			padding-bottom: 10px;
+			margin-bottom: 0;
+		}
+		details.creatorreactor-shortcodes-guide-details .creatorreactor-shortcodes-guide-inner {
+			padding: 16px 20px 20px;
+		}
+		details.creatorreactor-shortcodes-guide-details .creatorreactor-shortcodes-guide-inner > h3:first-child {
+			margin-top: 0;
+		}
 		.creatorreactor-users-toolbar {
 			display: flex;
 			align-items: center;
@@ -1480,6 +1840,7 @@ class Admin_Settings {
 		.form-table textarea { width: 100%; max-width: 400px; }
 		input.creatorreactor-oauth-client-secret { -webkit-text-security: disc; font-family: Consolas, Monaco, monospace; }
 		.form-table .description { color: #646970; font-size: 13px; }
+		.creatorreactor-general-login-error.description { color: #d63638; margin-top: 8px; }
 		.creatorreactor-status-badge { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; text-transform: uppercase; }
 		.creatorreactor-status-green { background: #edfaef; color: #1a7f37; }
 		.creatorreactor-status-badge.creatorreactor-status-healthy {
@@ -1982,12 +2343,29 @@ class Admin_Settings {
 				});
 			}
 
-			function relockOAuthConfigurationTab() {
+			function oauthCredentialsIndicateLocked() {
+				var container = document.querySelector(".creatorreactor-oauth-configuration");
+				if (!container) {
+					return true;
+				}
+				var idInp = container.querySelector("input[name*=\"creatorreactor_oauth_client_id\"]");
+				var secInp = container.querySelector(".creatorreactor-oauth-client-secret");
+				var modeInp = document.querySelector("input.creatorreactor-auth-mode-input:checked");
+				var agency = modeInp && modeInp.value === "agency";
+				var idVal = idInp ? String(idInp.value || "").trim() : "";
+				var secVal = secInp ? String(secInp.value || "").trim() : "";
+				if (agency) {
+					return idVal !== "";
+				}
+				return idVal !== "" || secVal !== "";
+			}
+
+			function setOAuthLockFromCredentials() {
 				var lockBtn = document.querySelector(".creatorreactor-oauth-tab-lock");
 				if (!lockBtn) {
 					return;
 				}
-				lockBtn.setAttribute("aria-pressed", "true");
+				lockBtn.setAttribute("aria-pressed", oauthCredentialsIndicateLocked() ? "true" : "false");
 				applyOAuthTabLockState();
 			}
 
@@ -2006,6 +2384,9 @@ class Admin_Settings {
 					inp.disabled = false;
 				});
 				container.querySelectorAll("input, select, textarea, button").forEach(function(el) {
+					if (el.classList.contains("creatorreactor-copy-redirect-uri")) {
+						return;
+					}
 					if (el.closest(".creatorreactor-advanced")) {
 						if (el.classList.contains("creatorreactor-advanced-endpoint-input")) {
 							return;
@@ -2139,7 +2520,7 @@ class Admin_Settings {
 						}
 						restoreFieldValues(oauthDynamic, prevOauth);
 						restoreFieldValues(syncDynamic, prevSync);
-						relockOAuthConfigurationTab();
+						setOAuthLockFromCredentials();
 					})
 					.catch(function() {})
 					.finally(function() {
@@ -2186,9 +2567,6 @@ class Admin_Settings {
 						window.history.replaceState({}, "", url.toString());
 					}
 
-					if (tabName === "settings") {
-						relockOAuthConfigurationTab();
-					}
 				}
 
 				tabLinks.forEach(function(link) {
@@ -2198,7 +2576,17 @@ class Admin_Settings {
 					});
 				});
 
-				var currentTab = new URLSearchParams(window.location.search).get("tab") || "dashboard";
+				var fallbackTab = "dashboard";
+				var activeLink = document.querySelector(".creatorreactor-tab-link.nav-tab-active");
+				if (activeLink) {
+					fallbackTab = activeLink.getAttribute("data-tab") || fallbackTab;
+				} else if (tabLinks.length) {
+					fallbackTab = tabLinks[0].getAttribute("data-tab") || fallbackTab;
+				}
+				var currentTab = new URLSearchParams(window.location.search).get("tab") || fallbackTab;
+				if (!document.querySelector(".creatorreactor-tab-link[data-tab=\"" + currentTab + "\"]")) {
+					currentTab = fallbackTab;
+				}
 				activateTab(currentTab, false);
 			}
 
@@ -2367,9 +2755,6 @@ class Admin_Settings {
 				if (settingsContent) {
 					settingsContent.classList.toggle("creatorreactor-settings-subtab-sync", subtab === "sync");
 				}
-				if (subtab === "oauth") {
-					relockOAuthConfigurationTab();
-				}
 			}
 
 			var sidebarLinks = document.querySelectorAll(".creatorreactor-sidebar-link");
@@ -2410,6 +2795,122 @@ class Admin_Settings {
 		wp_add_inline_script( 'creatorreactor-admin', $js );
 	}
 
+	/**
+	 * @param int    $wp_user_id WordPress user ID.
+	 * @param string $user_email WordPress user email.
+	 * @return array<string, mixed>|null
+	 */
+	private static function get_latest_entitlement_row_for_wp_user( $wp_user_id, $user_email = '' ) {
+		$wp_user_id = (int) $wp_user_id;
+		if ( $wp_user_id < 1 ) {
+			return null;
+		}
+
+		global $wpdb;
+		$table        = Entitlements::get_table_name();
+		$table_exists = $wpdb->get_var( $wpdb->prepare( 'SHOW TABLES LIKE %s', $table ) );
+		if ( $table_exists !== $table ) {
+			return null;
+		}
+
+		Entitlements::maybe_add_product_column();
+		Entitlements::maybe_add_display_name_column();
+		Entitlements::maybe_add_creatorreactor_user_uuid_column();
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from trusted prefix.
+		$row = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT * FROM {$table} WHERE wp_user_id = %d ORDER BY (status = %s) DESC, updated_at DESC, id DESC LIMIT 1",
+				$wp_user_id,
+				Entitlements::STATUS_ACTIVE
+			),
+			ARRAY_A
+		);
+		if ( is_array( $row ) ) {
+			return $row;
+		}
+
+		$user_email = sanitize_email( (string) $user_email );
+		if ( $user_email === '' || ! is_email( $user_email ) ) {
+			return null;
+		}
+
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from trusted prefix.
+		$row = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT * FROM {$table} WHERE email = %s ORDER BY (status = %s) DESC, updated_at DESC, id DESC LIMIT 1",
+				$user_email,
+				Entitlements::STATUS_ACTIVE
+			),
+			ARRAY_A
+		);
+
+		return is_array( $row ) ? $row : null;
+	}
+
+	/**
+	 * Add CreatorReactor UUID field on wp-admin user profile pages.
+	 *
+	 * @param \WP_User $user User object for the profile screen.
+	 */
+	public static function render_user_profile_creatorreactor_uuid_field( $user ) {
+		if ( ! ( $user instanceof \WP_User ) ) {
+			return;
+		}
+		if ( ! current_user_can( 'edit_user', (int) $user->ID ) ) {
+			return;
+		}
+
+		$uuid = get_user_meta( (int) $user->ID, Entitlements::USERMETA_CREATORREACTOR_UUID, true );
+		$uuid = is_string( $uuid ) ? sanitize_text_field( $uuid ) : '';
+
+		$row         = self::get_latest_entitlement_row_for_wp_user( (int) $user->ID, (string) $user->user_email );
+		$has_details = is_array( $row );
+		?>
+		<h2><?php esc_html_e( 'CreatorReactor', 'creatorreactor' ); ?></h2>
+		<table class="form-table" role="presentation">
+			<tr>
+				<th><label for="creatorreactor_user_uuid_field"><?php esc_html_e( 'CreatorReactor user UUID', 'creatorreactor' ); ?></label></th>
+				<td>
+					<input
+						type="text"
+						id="creatorreactor_user_uuid_field"
+						class="regular-text code creatorreactor-user-uuid-field"
+						value="<?php echo esc_attr( $uuid ); ?>"
+						readonly
+						data-user-id="<?php echo esc_attr( (string) $user->ID ); ?>"
+						data-has-details="<?php echo $has_details ? '1' : '0'; ?>"
+					/>
+					<p class="description">
+						<?php esc_html_e( 'Read-only external identity used for cross-platform tracking.', 'creatorreactor' ); ?>
+						<button
+							type="button"
+							class="button-link creatorreactor-open-user-entitlement-details"
+							data-user-id="<?php echo esc_attr( (string) $user->ID ); ?>"
+							data-has-details="<?php echo $has_details ? '1' : '0'; ?>"
+						><?php esc_html_e( 'View entitlement details', 'creatorreactor' ); ?></button>
+					</p>
+				</td>
+			</tr>
+		</table>
+		<?php
+		if ( ! self::$printed_profile_details_modal ) {
+			self::$printed_profile_details_modal = true;
+			?>
+			<div id="creatorreactor-user-details-modal" class="creatorreactor-modal" aria-hidden="true" role="presentation">
+				<div class="creatorreactor-modal-backdrop" aria-hidden="true"></div>
+				<div class="creatorreactor-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="creatorreactor-user-details-modal-title">
+					<div class="creatorreactor-modal-header">
+						<h3 id="creatorreactor-user-details-modal-title"><?php esc_html_e( 'Entitlement record', 'creatorreactor' ); ?></h3>
+						<button type="button" class="creatorreactor-user-details-close" aria-label="<?php esc_attr_e( 'Close', 'creatorreactor' ); ?>">&times;</button>
+					</div>
+					<div class="creatorreactor-modal-body" id="creatorreactor-user-details-modal-body"></div>
+				</div>
+			</div>
+			<?php
+		}
+	}
+
 	public static function get_status_summary() {
 		$opts = self::get_options();
 		$broker_mode = ! empty( $opts['broker_mode'] );
@@ -2431,16 +2932,35 @@ class Admin_Settings {
 	}
 
 	public static function add_menu() {
-		add_options_page(
-			__( 'CreatorReactor Settings', 'creatorreactor' ),
+		add_menu_page(
 			__( 'CreatorReactor', 'creatorreactor' ),
+			__( 'CreatorReactor', 'creatorreactor' ),
+			'manage_options',
+			self::PAGE_SLUG,
+			[ __CLASS__, 'render_page' ],
+			'',
+			3
+		);
+		remove_submenu_page( self::PAGE_SLUG, self::PAGE_SLUG );
+		add_submenu_page(
+			self::PAGE_SLUG,
+			__( 'CreatorReactor', 'creatorreactor' ),
+			__( 'Dashboard', 'creatorreactor' ),
 			'manage_options',
 			self::PAGE_SLUG,
 			[ __CLASS__, 'render_page' ]
 		);
+		add_submenu_page(
+			self::PAGE_SLUG,
+			__( 'CreatorReactor Settings', 'creatorreactor' ),
+			__( 'Settings', 'creatorreactor' ),
+			'manage_options',
+			self::PAGE_SETTINGS_SLUG,
+			[ __CLASS__, 'render_settings_page' ]
+		);
 	}
 
-	public static function render_page() {
+	public static function render_page( $default_tab = 'dashboard', $default_subtab = 'oauth' ) {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return;
 		}
@@ -2452,14 +2972,51 @@ class Admin_Settings {
 		$current_product_label = Entitlements::product_label( Entitlements::PRODUCT_FANVUE );
 		$secret_mask = ! empty( $opts['creatorreactor_oauth_client_secret'] ) ? '********' : '';
 		$broker_mode         = ! empty( $opts['broker_mode'] );
+		$oauth_locked_initial = self::oauth_config_should_start_locked( $opts, $broker_mode );
 		$authentication_mode = $broker_mode ? self::AUTH_MODE_AGENCY : self::AUTH_MODE_CREATOR;
 		$connection_test = get_option( self::OPTION_CONNECTION_TEST, [] );
-		$allowed_tabs = [ 'dashboard', 'users', 'shortcodes', 'settings' ];
-		$requested_tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : 'dashboard';
-		$active_tab = in_array( $requested_tab, $allowed_tabs, true ) ? $requested_tab : 'dashboard';
+		$current_page_slug = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : self::PAGE_SLUG;
+		$is_settings_page   = ( self::PAGE_SETTINGS_SLUG === $current_page_slug );
+		$tab_links          = [];
+		if ( $is_settings_page ) {
+			$allowed_tabs = [ 'general', 'users', 'shortcodes', 'settings' ];
+			$tab_links = [
+				'general'    => [
+					'label'     => __( 'General', 'creatorreactor' ),
+					'page_slug' => self::PAGE_SETTINGS_SLUG,
+					'args'      => [ 'tab' => 'general' ],
+				],
+				'users'      => [
+					'label'     => __( 'Users', 'creatorreactor' ),
+					'page_slug' => self::PAGE_SETTINGS_SLUG,
+					'args'      => [ 'tab' => 'users' ],
+				],
+				'shortcodes' => [
+					'label'     => __( 'Shortcodes', 'creatorreactor' ),
+					'page_slug' => self::PAGE_SETTINGS_SLUG,
+					'args'      => [ 'tab' => 'shortcodes' ],
+				],
+				'settings'   => [
+					'label'     => $current_product_label,
+					'page_slug' => self::PAGE_SETTINGS_SLUG,
+					'args'      => [ 'tab' => 'settings', 'subtab' => 'oauth' ],
+				],
+			];
+		} else {
+			$allowed_tabs = [ 'dashboard' ];
+			$tab_links = [
+				'dashboard' => [
+					'label'     => __( 'Dashboard', 'creatorreactor' ),
+					'page_slug' => self::PAGE_SLUG,
+					'args'      => [ 'tab' => 'dashboard' ],
+				],
+			];
+		}
+		$requested_tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : $default_tab;
+		$active_tab = in_array( $requested_tab, $allowed_tabs, true ) ? $requested_tab : $default_tab;
 		$allowed_subtabs = [ 'oauth', 'sync' ];
-		$requested_subtab = isset( $_GET['subtab'] ) ? sanitize_key( wp_unslash( $_GET['subtab'] ) ) : 'oauth';
-		$active_subtab = in_array( $requested_subtab, $allowed_subtabs, true ) ? $requested_subtab : 'oauth';
+		$requested_subtab = isset( $_GET['subtab'] ) ? sanitize_key( wp_unslash( $_GET['subtab'] ) ) : $default_subtab;
+		$active_subtab = in_array( $requested_subtab, $allowed_subtabs, true ) ? $requested_subtab : $default_subtab;
 		$users_snapshot = self::get_users_tab_snapshot();
 		$user_totals      = $users_snapshot['totals'];
 		$user_rows        = $users_snapshot['rows'];
@@ -2478,23 +3035,27 @@ class Admin_Settings {
 				<div class="notice notice-success is-dismissible"><p><?php esc_html_e( 'Saved sync log entries were removed.', 'creatorreactor' ); ?></p></div>
 			<?php endif; ?>
 
+			<?php settings_errors( self::OPTION_NAME ); ?>
+
+		<?php if ( ! empty( $tab_links ) ) : ?>
 			<nav class="nav-tab-wrapper creatorreactor-tab-nav" aria-label="<?php esc_attr_e( 'CreatorReactor sections', 'creatorreactor' ); ?>">
-				<a href="<?php echo esc_url( admin_url( 'options-general.php?page=' . self::PAGE_SLUG . '&tab=dashboard' ) ); ?>" class="nav-tab creatorreactor-tab-link <?php echo 'dashboard' === $active_tab ? 'nav-tab-active' : ''; ?>" data-tab="dashboard"><?php esc_html_e( 'Dashboard', 'creatorreactor' ); ?></a>
-				<a href="<?php echo esc_url( admin_url( 'options-general.php?page=' . self::PAGE_SLUG . '&tab=users' ) ); ?>" class="nav-tab creatorreactor-tab-link <?php echo 'users' === $active_tab ? 'nav-tab-active' : ''; ?>" data-tab="users"><?php esc_html_e( 'Users', 'creatorreactor' ); ?></a>
-				<a href="<?php echo esc_url( admin_url( 'options-general.php?page=' . self::PAGE_SLUG . '&tab=shortcodes' ) ); ?>" class="nav-tab creatorreactor-tab-link <?php echo 'shortcodes' === $active_tab ? 'nav-tab-active' : ''; ?>" data-tab="shortcodes"><?php esc_html_e( 'Shortcodes', 'creatorreactor' ); ?></a>
-				<a href="<?php echo esc_url( admin_url( 'options-general.php?page=' . self::PAGE_SLUG . '&tab=settings&subtab=oauth' ) ); ?>" class="nav-tab creatorreactor-tab-link <?php echo 'settings' === $active_tab ? 'nav-tab-active' : ''; ?>" data-tab="settings"><?php echo esc_html( $current_product_label ); ?></a>
+				<?php foreach ( $tab_links as $tab_slug => $tab_config ) : ?>
+					<?php $tab_url = self::admin_page_url( $tab_config['args'], $tab_config['page_slug'] ); ?>
+					<a href="<?php echo esc_url( $tab_url ); ?>" class="nav-tab creatorreactor-tab-link <?php echo $tab_slug === $active_tab ? 'nav-tab-active' : ''; ?>" data-tab="<?php echo esc_attr( $tab_slug ); ?>"><?php echo esc_html( $tab_config['label'] ); ?></a>
+				<?php endforeach; ?>
 			</nav>
+		<?php endif; ?>
 
-			<form method="post" action="options.php">
-				<?php settings_fields( self::OPTION_NAME ); ?>
-				<?php settings_errors( self::OPTION_NAME ); ?>
+		<?php if ( $is_settings_page ) : ?>
+		<form method="post" action="options.php">
+			<?php settings_fields( self::OPTION_NAME ); ?>
 
-<div class="creatorreactor-tab-panel <?php echo 'settings' === $active_tab ? 'is-active' : ''; ?>" data-tab="settings">
-	<div class="creatorreactor-settings-container">
+		<div class="creatorreactor-tab-panel <?php echo 'settings' === $active_tab ? 'is-active' : ''; ?>" data-tab="settings">
+		<div class="creatorreactor-settings-container">
 		<div class="creatorreactor-settings-sidebar">
 			<nav class="creatorreactor-sidebar-nav">
-				<a href="<?php echo esc_url( admin_url( 'options-general.php?page=' . self::PAGE_SLUG . '&tab=settings&subtab=oauth' ) ); ?>" class="creatorreactor-sidebar-link <?php echo 'oauth' === $active_subtab ? 'is-active' : ''; ?>" data-subtab="oauth"><?php esc_html_e( 'OAuth', 'creatorreactor' ); ?></a>
-				<a href="<?php echo esc_url( admin_url( 'options-general.php?page=' . self::PAGE_SLUG . '&tab=settings&subtab=sync' ) ); ?>" class="creatorreactor-sidebar-link <?php echo 'sync' === $active_subtab ? 'is-active' : ''; ?>" data-subtab="sync"><?php esc_html_e( 'Sync', 'creatorreactor' ); ?></a>
+				<a href="<?php echo esc_url( self::admin_page_url( [ 'tab' => 'settings', 'subtab' => 'oauth' ], self::PAGE_SETTINGS_SLUG ) ); ?>" class="creatorreactor-sidebar-link <?php echo 'oauth' === $active_subtab ? 'is-active' : ''; ?>" data-subtab="oauth"><?php esc_html_e( 'OAuth', 'creatorreactor' ); ?></a>
+				<a href="<?php echo esc_url( self::admin_page_url( [ 'tab' => 'settings', 'subtab' => 'sync' ], self::PAGE_SETTINGS_SLUG ) ); ?>" class="creatorreactor-sidebar-link <?php echo 'sync' === $active_subtab ? 'is-active' : ''; ?>" data-subtab="sync"><?php esc_html_e( 'Sync', 'creatorreactor' ); ?></a>
 			</nav>
 		</div>
 		<div class="creatorreactor-settings-content<?php echo 'sync' === $active_subtab ? ' creatorreactor-settings-subtab-sync' : ''; ?>">
@@ -2536,10 +3097,10 @@ class Admin_Settings {
 			<div class="creatorreactor-settings-panel <?php echo 'oauth' === $active_subtab ? 'is-active' : ''; ?>" data-subtab="oauth">
 				<div class="creatorreactor-settings-panel-header creatorreactor-oauth-panel-header">
 					<h2><?php esc_html_e( 'OAuth', 'creatorreactor' ); ?></h2>
-					<button type="button" class="button creatorreactor-oauth-tab-lock" aria-pressed="true"
+					<button type="button" class="button creatorreactor-oauth-tab-lock" aria-pressed="<?php echo $oauth_locked_initial ? 'true' : 'false'; ?>"
 						data-label-locked="<?php echo esc_attr( __( 'OAuth configuration locked — click to unlock editing', 'creatorreactor' ) ); ?>"
 						data-label-unlocked="<?php echo esc_attr( __( 'OAuth configuration unlocked — click to lock', 'creatorreactor' ) ); ?>"
-						aria-label="<?php echo esc_attr( __( 'OAuth configuration locked — click to unlock editing', 'creatorreactor' ) ); ?>">
+						aria-label="<?php echo esc_attr( $oauth_locked_initial ? __( 'OAuth configuration locked — click to unlock editing', 'creatorreactor' ) : __( 'OAuth configuration unlocked — click to lock', 'creatorreactor' ) ); ?>">
 						<span class="dashicons dashicons-lock creatorreactor-oauth-tab-lock-icon-on" aria-hidden="true"></span>
 						<span class="dashicons dashicons-unlock creatorreactor-oauth-tab-lock-icon-off" aria-hidden="true"></span>
 					</button>
@@ -2555,32 +3116,49 @@ class Admin_Settings {
 				</div>
 			</div>
 			<div class="creatorreactor-settings-actions">
-				<a class="button" href="<?php echo esc_url( admin_url( 'options-general.php?page=' . self::PAGE_SLUG . '&tab=settings&subtab=' . rawurlencode( $active_subtab ) ) ); ?>"><?php esc_html_e( 'Cancel', 'creatorreactor' ); ?></a>
+				<a class="button" href="<?php echo esc_url( self::admin_page_url( [ 'tab' => 'settings', 'subtab' => $active_subtab ], self::PAGE_SETTINGS_SLUG ) ); ?>"><?php esc_html_e( 'Cancel', 'creatorreactor' ); ?></a>
 				<?php submit_button( __( 'Save Settings', 'creatorreactor' ) ); ?>
 			</div>
 			</div>
 		</div>
 	</div>
 </div>
-			</form>
+		</form>
 
-			<div class="creatorreactor-tab-panel <?php echo 'users' === $active_tab ? 'is-active' : ''; ?>" data-tab="users">
-				<div class="creatorreactor-section">
-					<h2><?php esc_html_e( 'Users', 'creatorreactor' ); ?></h2>
-					<p class="creatorreactor-muted"><?php esc_html_e( 'Each record shows its source product (fanvue, OnlyFans, or another configured product key).', 'creatorreactor' ); ?></p>
-					<div id="creatorreactor-users-panel" class="creatorreactor-users-panel">
-						<?php echo self::render_users_tab_panel_html( $user_totals, $user_rows ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in renderer. ?>
-					</div>
+		<div class="creatorreactor-tab-panel <?php echo 'users' === $active_tab ? 'is-active' : ''; ?>" data-tab="users">
+			<div class="creatorreactor-section">
+				<h2><?php esc_html_e( 'Users', 'creatorreactor' ); ?></h2>
+				<p class="creatorreactor-muted"><?php esc_html_e( 'Each record shows its source product (fanvue, OnlyFans, or another configured product key).', 'creatorreactor' ); ?></p>
+				<div id="creatorreactor-users-panel" class="creatorreactor-users-panel">
+					<?php echo self::render_users_tab_panel_html( $user_totals, $user_rows ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- escaped in renderer. ?>
 				</div>
 			</div>
+		</div>
 
-			<div class="creatorreactor-tab-panel <?php echo 'shortcodes' === $active_tab ? 'is-active' : ''; ?>" data-tab="shortcodes">
-				<?php self::render_shortcodes_tab_body(); ?>
+		<div id="creatorreactor-user-details-modal" class="creatorreactor-modal" aria-hidden="true" role="presentation">
+			<div class="creatorreactor-modal-backdrop" aria-hidden="true"></div>
+			<div class="creatorreactor-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="creatorreactor-user-details-modal-title">
+				<div class="creatorreactor-modal-header">
+					<h3 id="creatorreactor-user-details-modal-title"><?php esc_html_e( 'Entitlement record', 'creatorreactor' ); ?></h3>
+					<button type="button" class="creatorreactor-user-details-close" aria-label="<?php esc_attr_e( 'Close', 'creatorreactor' ); ?>">&times;</button>
+				</div>
+				<div class="creatorreactor-modal-body" id="creatorreactor-user-details-modal-body"></div>
 			</div>
+		</div>
 
-			<div class="creatorreactor-tab-panel <?php echo 'dashboard' === $active_tab ? 'is-active' : ''; ?>" data-tab="dashboard">
-				<?php
-				$connection_test_ran = ! empty( $connection_test ) && is_array( $connection_test );
+		<div class="creatorreactor-tab-panel <?php echo 'shortcodes' === $active_tab ? 'is-active' : ''; ?>" data-tab="shortcodes">
+			<?php self::render_shortcodes_tab_body(); ?>
+		</div>
+
+		<div class="creatorreactor-tab-panel <?php echo 'general' === $active_tab ? 'is-active' : ''; ?>" data-tab="general">
+			<?php self::render_general_tab_body( $opts ); ?>
+		</div>
+		<?php endif; ?>
+
+		<?php if ( ! $is_settings_page ) : ?>
+		<div class="creatorreactor-tab-panel <?php echo 'dashboard' === $active_tab ? 'is-active' : ''; ?>" data-tab="dashboard">
+			<?php
+			$connection_test_ran = ! empty( $connection_test ) && is_array( $connection_test );
 				$connection_test_passed = $connection_test_ran && ! empty( $connection_test['success'] );
 				$connection_state = 'yellow';
 				$connection_failure_message = '';
@@ -2619,9 +3197,13 @@ class Admin_Settings {
 						$maybe_connect = Broker_Client::get_connect_url();
 						$connect_url = ( is_string( $maybe_connect ) && $maybe_connect !== '' ) ? $maybe_connect : '';
 					} elseif ( ! empty( $opts['creatorreactor_oauth_client_id'] ) ) {
-						$connect_url = admin_url(
-							'options-general.php?page=' . self::PAGE_SLUG . '&tab=dashboard&creatorreactor_oauth_start=1&_wpnonce=' . wp_create_nonce( 'creatorreactor_oauth_start' )
-						);
+					$connect_url = self::admin_page_url(
+						[
+							'tab'                       => 'dashboard',
+							'creatorreactor_oauth_start' => 1,
+							'_wpnonce'                  => wp_create_nonce( 'creatorreactor_oauth_start' ),
+						]
+					);
 					}
 					?>
 
@@ -2793,18 +3375,13 @@ class Admin_Settings {
 				</div>
 			</div>
 
-			<div id="creatorreactor-user-details-modal" class="creatorreactor-modal" aria-hidden="true" role="presentation">
-				<div class="creatorreactor-modal-backdrop" aria-hidden="true"></div>
-				<div class="creatorreactor-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="creatorreactor-user-details-modal-title">
-					<div class="creatorreactor-modal-header">
-						<h3 id="creatorreactor-user-details-modal-title"><?php esc_html_e( 'Entitlement record', 'creatorreactor' ); ?></h3>
-						<button type="button" class="creatorreactor-user-details-close" aria-label="<?php esc_attr_e( 'Close', 'creatorreactor' ); ?>">&times;</button>
-					</div>
-					<div class="creatorreactor-modal-body" id="creatorreactor-user-details-modal-body"></div>
-				</div>
-			</div>
 		</div>
+		<?php endif; ?>
 		<?php
+	}
+
+	public static function render_settings_page() {
+		self::render_page( 'settings', 'oauth' );
 	}
 
 	/**
@@ -2920,7 +3497,7 @@ class Admin_Settings {
 		}
 		check_admin_referer( 'creatorreactor_clear_sync_logs' );
 		self::clear_sync_logs();
-		wp_safe_redirect( admin_url( 'options-general.php?page=' . self::PAGE_SLUG . '&tab=users&sync_log_cleared=1' ) );
+		wp_safe_redirect( self::admin_page_url( [ 'tab' => 'users', 'sync_log_cleared' => 1 ], self::PAGE_SETTINGS_SLUG ) );
 		exit;
 	}
 
@@ -2942,7 +3519,7 @@ class Admin_Settings {
 		}
 		check_admin_referer( 'creatorreactor_clear_connection_logs' );
 		self::clear_connection_logs();
-		wp_safe_redirect( admin_url( 'options-general.php?page=' . self::PAGE_SLUG . '&tab=dashboard&connection_log_cleared=1' ) );
+		wp_safe_redirect( self::admin_page_url( [ 'tab' => 'dashboard', 'connection_log_cleared' => 1 ] ) );
 		exit;
 	}
 }

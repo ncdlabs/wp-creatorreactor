@@ -10,7 +10,7 @@ cd "$(dirname "$0")"
 
 rm -f "$OUTPUT"
 
-zip -r "$OUTPUT" creatorreactor.php includes/ js/ languages/ -x "*.DS_Store" "*/.git/*"
+zip -r "$OUTPUT" creatorreactor.php includes/ js/ css/ templates/ img/ assets/ languages/ -x "*.DS_Store" "*/.git/*"
 
 echo "Created: $OUTPUT"
 ls -lh "$OUTPUT"

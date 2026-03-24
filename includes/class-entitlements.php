@@ -42,7 +42,50 @@ class Entitlements {
 
 	const USERMETA_CREATORREACTOR_UUID = 'creatorreactor_user_uuid';
 
+	/**
+	 * JSON snapshot of active-style entitlements per product (fanvue, onlyfans, …) for fast reads without querying the entitlements table.
+	 * Refreshed on {@see 'wp_login'} (including after Fanvue OAuth). Schema version in `v`.
+	 */
+	const USERMETA_SOCIAL_ENTITLEMENTS = 'creatorreactor_social_entitlements';
+
+	const SOCIAL_ENTITLEMENTS_SNAPSHOT_VERSION = 1;
+
 	private static $schema_checked = false;
+
+	/** @var array<string, int|null> In-request cache for {@see resolve_wp_user_id_for_fanvue_sync()}. */
+	private static $fanvue_sync_user_resolve_cache = [];
+
+	public static function init() {
+		add_action( 'wp_login', [ __CLASS__, 'on_wp_login_refresh_social_entitlements' ], 15, 2 );
+	}
+
+	/**
+	 * @param string         $user_login Login name (required by hook signature).
+	 * @param \WP_User|false $user       User object.
+	 */
+	public static function on_wp_login_refresh_social_entitlements( $user_login, $user ) {
+		if ( ! $user instanceof \WP_User ) {
+			return;
+		}
+
+		$fan_uuid = get_user_meta( (int) $user->ID, self::USERMETA_CREATORREACTOR_UUID, true );
+		$fan_uuid = is_string( $fan_uuid ) ? sanitize_text_field( $fan_uuid ) : '';
+		$is_fan_linked = get_user_meta( (int) $user->ID, Onboarding::META_FANVUE_OAUTH_LINKED, true ) === '1';
+		$email         = is_string( $user->user_email ) ? sanitize_email( $user->user_email ) : '';
+		if ( ( $is_fan_linked || $fan_uuid !== '' ) && $email !== '' && apply_filters( 'creatorreactor_sync_fan_entitlement_on_login', true, $user ) ) {
+			CreatorReactor_Client::sync_entitlement_for_fan_after_login(
+				$fan_uuid,
+				(int) $user->ID,
+				$email,
+				is_string( $user->display_name ) ? $user->display_name : ''
+			);
+		}
+
+		if ( ! apply_filters( 'creatorreactor_refresh_social_entitlements_on_login', true, $user ) ) {
+			return;
+		}
+		self::refresh_social_entitlements_user_meta( (int) $user->ID, 'wp_login' );
+	}
 
 	public static function get_table_name() {
 		global $wpdb;
@@ -82,6 +125,7 @@ class Entitlements {
 				creatorreactor_user_uuid varchar(36) DEFAULT NULL,
 				status varchar(20) NOT NULL DEFAULT 'unknown',
 				tier varchar(100) DEFAULT NULL,
+				fanvue_sync_snapshot longtext DEFAULT NULL,
 				updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 				expires_at datetime NOT NULL,
 				PRIMARY KEY (id),
@@ -97,6 +141,7 @@ class Entitlements {
 			self::maybe_add_product_column();
 			self::maybe_add_display_name_column();
 			self::maybe_add_creatorreactor_user_uuid_column();
+			self::maybe_add_fanvue_sync_snapshot_column();
 			self::$schema_checked = true;
 		} catch ( \Throwable $e ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
@@ -122,6 +167,7 @@ class Entitlements {
 		self::maybe_add_product_column();
 		self::maybe_add_display_name_column();
 		self::maybe_add_creatorreactor_user_uuid_column();
+		self::maybe_add_fanvue_sync_snapshot_column();
 		self::$schema_checked = true;
 	}
 
@@ -309,6 +355,89 @@ class Entitlements {
 		}
 	}
 
+	public static function maybe_add_fanvue_sync_snapshot_column() {
+		global $wpdb;
+		$table = self::get_table_name();
+		if ( ! self::has_column( 'fanvue_sync_snapshot' ) ) {
+			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from trusted prefix.
+			$wpdb->query( "ALTER TABLE {$table} ADD COLUMN fanvue_sync_snapshot longtext DEFAULT NULL AFTER tier" );
+		}
+	}
+
+	/**
+	 * Clear per-request cache used while syncing Fanvue lists (call at start of a full sync).
+	 */
+	public static function clear_fanvue_sync_user_resolve_cache() {
+		self::$fanvue_sync_user_resolve_cache = [];
+	}
+
+	/**
+	 * SQL fragment args: rows whose tier is a stored follower value (legacy or * _follower).
+	 *
+	 * @global \wpdb $wpdb
+	 * @return array{0: string, 1: string, 2: string} [ sql, arg_legacy_tier, arg_like_pattern ]
+	 */
+	private static function follower_tier_sql_match() {
+		global $wpdb;
+		$like = '%' . $wpdb->esc_like( '_follower' );
+		return [ '(tier <=> %s OR tier LIKE %s)', self::TIER_FOLLOWER, $like ];
+	}
+
+	/**
+	 * During sync: attach entitlements to an existing WordPress user only (by UUID meta or email).
+	 * New accounts are created only when the fan uses the Fanvue OAuth login button ({@see Fan_OAuth}), not during sync.
+	 *
+	 * @param string $email List email from API (may be empty).
+	 * @param string $uuid  Fanvue user UUID.
+	 * @return int|null WordPress user ID, or null if no matching user exists yet.
+	 */
+	public static function resolve_wp_user_id_for_fanvue_sync( $email, $uuid ) {
+		$uuid = is_string( $uuid ) ? sanitize_text_field( trim( $uuid ) ) : '';
+		if ( $uuid === '' ) {
+			return null;
+		}
+
+		$email = is_string( $email ) ? sanitize_email( trim( $email ) ) : '';
+		$cache_key = strtolower( $uuid ) . '|' . strtolower( $email );
+		if ( array_key_exists( $cache_key, self::$fanvue_sync_user_resolve_cache ) ) {
+			return self::$fanvue_sync_user_resolve_cache[ $cache_key ];
+		}
+
+		$by_uuid = get_users(
+			[
+				'meta_key'    => self::USERMETA_CREATORREACTOR_UUID,
+				'meta_value'  => $uuid,
+				'number'      => 1,
+				'count_total' => false,
+				'fields'      => 'ID',
+			]
+		);
+		$uid_uuid = ! empty( $by_uuid[0] ) ? (int) $by_uuid[0] : 0;
+
+		$uid_email = 0;
+		if ( $email !== '' && is_email( $email ) ) {
+			$user = get_user_by( 'email', $email );
+			if ( $user ) {
+				$uid_email = (int) $user->ID;
+			}
+		}
+
+		if ( $uid_uuid > 0 && $uid_email > 0 && $uid_uuid !== $uid_email ) {
+			self::$fanvue_sync_user_resolve_cache[ $cache_key ] = $uid_uuid;
+			return $uid_uuid;
+		}
+
+		$chosen = $uid_uuid > 0 ? $uid_uuid : $uid_email;
+		if ( $chosen > 0 ) {
+			update_user_meta( $chosen, self::USERMETA_CREATORREACTOR_UUID, $uuid );
+			self::$fanvue_sync_user_resolve_cache[ $cache_key ] = $chosen;
+			return $chosen;
+		}
+
+		self::$fanvue_sync_user_resolve_cache[ $cache_key ] = null;
+		return null;
+	}
+
 	/**
 	 * Surface $wpdb errors to last error + sync log (WordPress does not throw on SQL errors).
 	 *
@@ -329,7 +458,7 @@ class Entitlements {
 		return true;
 	}
 
-	public static function upsert_by_creatorreactor_uuid( $creatorreactor_uuid, $status, $expires_at, $wp_user_id = null, $email = '', $tier = null, $display_name = null, $product = self::PRODUCT_FANVUE ) {
+	public static function upsert_by_creatorreactor_uuid( $creatorreactor_uuid, $status, $expires_at, $wp_user_id = null, $email = '', $tier = null, $display_name = null, $product = self::PRODUCT_FANVUE, $fanvue_sync_snapshot = null ) {
 		try {
 			self::maybe_ensure_schema();
 			global $wpdb;
@@ -340,6 +469,10 @@ class Entitlements {
 			$email        = sanitize_email( $email );
 			$tier         = $tier !== null ? sanitize_text_field( $tier ) : null;
 			$display_name = $display_name !== null && $display_name !== '' ? sanitize_text_field( wp_strip_all_tags( (string) $display_name ) ) : null;
+			$snapshot     = null;
+			if ( is_string( $fanvue_sync_snapshot ) && $fanvue_sync_snapshot !== '' ) {
+				$snapshot = $fanvue_sync_snapshot;
+			}
 
 			$existing = $wpdb->get_var(
 				$wpdb->prepare(
@@ -352,26 +485,46 @@ class Entitlements {
 				return false;
 			}
 
+			$wp_uid = ( $wp_user_id !== null && (int) $wp_user_id > 0 ) ? (int) $wp_user_id : null;
+			if ( $existing && $wp_uid === null ) {
+				$prev = $wpdb->get_var( $wpdb->prepare( "SELECT wp_user_id FROM {$table} WHERE id = %d LIMIT 1", (int) $existing ) );
+				if ( self::report_db_error( 'Entitlements SELECT wp_user_id' ) ) {
+					return false;
+				}
+				if ( $prev !== null && (string) $prev !== '' && (int) $prev > 0 ) {
+					$wp_uid = (int) $prev;
+				}
+			}
+
 			$data = [
-				'product'          => $product,
+				'product'                  => $product,
 				'creatorreactor_user_uuid' => $creatorreactor_uuid,
-				'status'           => $status,
-				'expires_at'       => $expires_at,
-				'updated_at'       => current_time( 'mysql' ),
-				'wp_user_id'       => $wp_user_id ? (int) $wp_user_id : null,
-				'email'            => $email !== '' ? $email : null,
-				'display_name'     => $display_name,
-				'tier'             => $tier,
+				'status'                   => $status,
+				'expires_at'               => $expires_at,
+				'updated_at'               => current_time( 'mysql' ),
+				'wp_user_id'               => $wp_uid,
+				'email'                    => $email !== '' ? $email : null,
+				'display_name'             => $display_name,
+				'tier'                     => $tier,
 			];
-			$format = [ '%s', '%s', '%s', '%s', '%s', '%d', '%s', '%s', '%s' ];
+			if ( $snapshot !== null ) {
+				$data['fanvue_sync_snapshot'] = $snapshot;
+			}
 
 			if ( $existing ) {
 				unset( $data['updated_at'] );
+				if ( $snapshot === null ) {
+					unset( $data['fanvue_sync_snapshot'] );
+				}
+				$formats = [];
+				foreach ( array_keys( $data ) as $_k ) {
+					$formats[] = ( $_k === 'wp_user_id' ) ? '%d' : '%s';
+				}
 				$result = $wpdb->update(
 					$table,
 					$data,
 					[ 'id' => (int) $existing ],
-					[ '%s', '%s', '%s', '%s', '%d', '%s', '%s', '%s' ],
+					$formats,
 					[ '%d' ]
 				);
 				if ( self::report_db_error( 'Entitlements UPDATE' ) ) {
@@ -380,6 +533,10 @@ class Entitlements {
 				return $result !== false;
 			}
 
+			$format = [];
+			foreach ( array_keys( $data ) as $_k ) {
+				$format[] = ( $_k === 'wp_user_id' ) ? '%d' : '%s';
+			}
 			$result = $wpdb->insert( $table, $data, $format );
 			if ( self::report_db_error( 'Entitlements INSERT' ) ) {
 				return false;
@@ -393,44 +550,127 @@ class Entitlements {
 		}
 	}
 
-	public static function mark_missing_as_inactive( array $active_creatorreactor_uuids, $expires_at, $product = self::PRODUCT_FANVUE ) {
+	/**
+	 * Mark paid subscriber rows missing from the latest API pull as inactive (does not touch follower-tier rows).
+	 */
+	public static function mark_missing_subscribers_as_inactive( array $active_creatorreactor_uuids, $expires_at, $product = self::PRODUCT_FANVUE ) {
 		try {
 			self::maybe_ensure_schema();
 			global $wpdb;
-			$table = self::get_table_name();
+			$table   = self::get_table_name();
 			$product = self::normalize_product( $product );
+			list( $ft_sql, $ft_legacy, $ft_like ) = self::follower_tier_sql_match();
+
 			if ( empty( $active_creatorreactor_uuids ) ) {
 				$wpdb->query(
 					$wpdb->prepare(
-						"UPDATE {$table} SET status = %s, expires_at = %s, updated_at = %s WHERE status = %s AND product = %s",
-						self::STATUS_INACTIVE,
-						$expires_at,
-						current_time( 'mysql' ),
-						self::STATUS_ACTIVE,
-						$product
+						"UPDATE {$table} SET status = %s, expires_at = %s, updated_at = %s WHERE status = %s AND product = %s AND creatorreactor_user_uuid IS NOT NULL AND creatorreactor_user_uuid != '' AND NOT ($ft_sql)",
+						array_merge(
+							[
+								self::STATUS_INACTIVE,
+								$expires_at,
+								current_time( 'mysql' ),
+								self::STATUS_ACTIVE,
+								$product,
+							],
+							[ $ft_legacy, $ft_like ]
+						)
 					)
 				);
-				self::report_db_error( 'Entitlements mark_missing_as_inactive (empty active set)' );
+				self::report_db_error( 'Entitlements mark_missing_subscribers_as_inactive (empty active set)' );
 				return (int) $wpdb->rows_affected;
 			}
 
 			$placeholders = implode( ',', array_fill( 0, count( $active_creatorreactor_uuids ), '%s' ) );
 			$query        = $wpdb->prepare(
-				"UPDATE {$table} SET status = %s, expires_at = %s, updated_at = %s WHERE status = %s AND product = %s AND creatorreactor_user_uuid NOT IN ($placeholders)",
+				"UPDATE {$table} SET status = %s, expires_at = %s, updated_at = %s WHERE status = %s AND product = %s AND creatorreactor_user_uuid IS NOT NULL AND creatorreactor_user_uuid != '' AND NOT ($ft_sql) AND creatorreactor_user_uuid NOT IN ($placeholders)",
 				array_merge(
-					[ self::STATUS_INACTIVE, $expires_at, current_time( 'mysql' ), self::STATUS_ACTIVE, $product ],
+					[
+						self::STATUS_INACTIVE,
+						$expires_at,
+						current_time( 'mysql' ),
+						self::STATUS_ACTIVE,
+						$product,
+						$ft_legacy,
+						$ft_like,
+					],
 					array_map( 'sanitize_text_field', $active_creatorreactor_uuids )
 				)
 			);
 			$wpdb->query( $query );
-			self::report_db_error( 'Entitlements mark_missing_as_inactive' );
+			self::report_db_error( 'Entitlements mark_missing_subscribers_as_inactive' );
 			return (int) $wpdb->rows_affected;
 		} catch ( \Throwable $e ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				error_log( 'CreatorReactor mark_missing_as_inactive error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
+				error_log( 'CreatorReactor mark_missing_subscribers_as_inactive error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
 			}
 			return 0;
 		}
+	}
+
+	/**
+	 * Mark follower-tier rows missing from the latest followers API pull as inactive.
+	 */
+	public static function mark_missing_followers_as_inactive( array $active_follower_uuids, $expires_at, $product = self::PRODUCT_FANVUE ) {
+		try {
+			self::maybe_ensure_schema();
+			global $wpdb;
+			$table   = self::get_table_name();
+			$product = self::normalize_product( $product );
+			list( $ft_sql, $ft_legacy, $ft_like ) = self::follower_tier_sql_match();
+
+			if ( empty( $active_follower_uuids ) ) {
+				$wpdb->query(
+					$wpdb->prepare(
+						"UPDATE {$table} SET status = %s, expires_at = %s, updated_at = %s WHERE status = %s AND product = %s AND creatorreactor_user_uuid IS NOT NULL AND creatorreactor_user_uuid != '' AND ($ft_sql)",
+						array_merge(
+							[
+								self::STATUS_INACTIVE,
+								$expires_at,
+								current_time( 'mysql' ),
+								self::STATUS_ACTIVE,
+								$product,
+							],
+							[ $ft_legacy, $ft_like ]
+						)
+					)
+				);
+				self::report_db_error( 'Entitlements mark_missing_followers_as_inactive (empty active set)' );
+				return (int) $wpdb->rows_affected;
+			}
+
+			$placeholders = implode( ',', array_fill( 0, count( $active_follower_uuids ), '%s' ) );
+			$query        = $wpdb->prepare(
+				"UPDATE {$table} SET status = %s, expires_at = %s, updated_at = %s WHERE status = %s AND product = %s AND ($ft_sql) AND creatorreactor_user_uuid NOT IN ($placeholders)",
+				array_merge(
+					[
+						self::STATUS_INACTIVE,
+						$expires_at,
+						current_time( 'mysql' ),
+						self::STATUS_ACTIVE,
+						$product,
+						$ft_legacy,
+						$ft_like,
+					],
+					array_map( 'sanitize_text_field', $active_follower_uuids )
+				)
+			);
+			$wpdb->query( $query );
+			self::report_db_error( 'Entitlements mark_missing_followers_as_inactive' );
+			return (int) $wpdb->rows_affected;
+		} catch ( \Throwable $e ) {
+			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				error_log( 'CreatorReactor mark_missing_followers_as_inactive error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
+			}
+			return 0;
+		}
+	}
+
+	/**
+	 * @deprecated Use {@see mark_missing_subscribers_as_inactive()} plus {@see mark_missing_followers_as_inactive()}.
+	 */
+	public static function mark_missing_as_inactive( array $active_creatorreactor_uuids, $expires_at, $product = self::PRODUCT_FANVUE ) {
+		return self::mark_missing_subscribers_as_inactive( $active_creatorreactor_uuids, $expires_at, $product );
 	}
 
 	public static function get_active_subscribers( $tier = null, $product = null ) {
@@ -525,6 +765,138 @@ class Entitlements {
 	}
 
 	/**
+	 * Follower-tier rows that stay entitlement-bearing while status is inactive (sync/mark-missing convention).
+	 *
+	 * @return array<int, array<string, mixed>>
+	 */
+	private static function get_inactive_unexpired_follower_entitlement_rows_for_wp_user( $user_id ) {
+		$user = get_userdata( (int) $user_id );
+		if ( ! $user ) {
+			return [];
+		}
+		global $wpdb;
+		$table = self::get_table_name();
+		$now   = current_time( 'mysql' );
+		list( $ft_sql, $ft_legacy, $ft_like ) = self::follower_tier_sql_match();
+		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from trusted prefix.
+		$rows = $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT * FROM {$table} WHERE status = %s AND expires_at > %s AND (wp_user_id = %d OR email = %s) AND ($ft_sql)",
+				array_merge(
+					[ self::STATUS_INACTIVE, $now, (int) $user_id, $user->user_email ],
+					[ $ft_legacy, $ft_like ]
+				)
+			),
+			ARRAY_A
+		);
+		return is_array( $rows ) ? $rows : [];
+	}
+
+	/**
+	 * Build a portable snapshot array: one entry per product with subscriber/follower flags and tier list.
+	 *
+	 * @param string $source How the snapshot was triggered (e.g. wp_login, fanvue_oauth).
+	 * @return array<string, mixed>
+	 */
+	public static function build_social_entitlements_snapshot( $user_id, $source = 'db' ) {
+		$user_id = (int) $user_id;
+		$merged  = [];
+		foreach ( self::get_active_entitlement_rows_for_wp_user( $user_id ) as $row ) {
+			if ( isset( $row['id'] ) ) {
+				$merged[ (int) $row['id'] ] = $row;
+			}
+		}
+		foreach ( self::get_inactive_unexpired_follower_entitlement_rows_for_wp_user( $user_id ) as $row ) {
+			if ( isset( $row['id'] ) ) {
+				$merged[ (int) $row['id'] ] = $row;
+			}
+		}
+
+		$by_product = [];
+		foreach ( $merged as $row ) {
+			$p = self::normalize_product( $row['product'] ?? self::PRODUCT_FANVUE );
+			if ( ! isset( $by_product[ $p ] ) ) {
+				$by_product[ $p ] = [
+					'subscriber' => false,
+					'follower'   => false,
+					'tiers'      => [],
+					'uuids'      => [],
+				];
+			}
+			$tier = isset( $row['tier'] ) ? (string) $row['tier'] : '';
+			$st   = isset( $row['status'] ) ? (string) $row['status'] : '';
+			if ( $tier !== '' && ! in_array( $tier, $by_product[ $p ]['tiers'], true ) ) {
+				$by_product[ $p ]['tiers'][] = $tier;
+			}
+			$ext_uuid = isset( $row['creatorreactor_user_uuid'] ) ? sanitize_text_field( (string) $row['creatorreactor_user_uuid'] ) : '';
+			if ( $ext_uuid !== '' && ! in_array( $ext_uuid, $by_product[ $p ]['uuids'], true ) ) {
+				$by_product[ $p ]['uuids'][] = $ext_uuid;
+			}
+			if ( self::tier_stored_is_follower( $tier ) && ( $st === self::STATUS_ACTIVE || $st === self::STATUS_INACTIVE ) ) {
+				$by_product[ $p ]['follower'] = true;
+			}
+			if ( self::tier_stored_is_subscriber( $tier ) && $st === self::STATUS_ACTIVE ) {
+				$by_product[ $p ]['subscriber'] = true;
+			}
+		}
+
+		$fanvue_uuid = get_user_meta( $user_id, self::USERMETA_CREATORREACTOR_UUID, true );
+		$fanvue_uuid = is_string( $fanvue_uuid ) ? sanitize_text_field( $fanvue_uuid ) : '';
+
+		return [
+			'v'          => self::SOCIAL_ENTITLEMENTS_SNAPSHOT_VERSION,
+			'updated_at' => gmdate( 'c' ),
+			'source'     => is_string( $source ) ? sanitize_key( $source ) : 'db',
+			'user_id'    => $user_id,
+			'by_product' => $by_product,
+			'linked'     => array_filter(
+				[
+					'fanvue_uuid' => $fanvue_uuid !== '' ? $fanvue_uuid : null,
+				]
+			),
+		];
+	}
+
+	/**
+	 * Persist {@see build_social_entitlements_snapshot()} as JSON user meta.
+	 *
+	 * @param string $source Trigger label stored in the snapshot.
+	 * @return bool True if meta was updated.
+	 */
+	public static function refresh_social_entitlements_user_meta( $user_id, $source = 'wp_login' ) {
+		$user_id = (int) $user_id;
+		if ( $user_id <= 0 ) {
+			return false;
+		}
+		$snapshot = self::build_social_entitlements_snapshot( $user_id, $source );
+		$json     = wp_json_encode( $snapshot, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+		if ( ! is_string( $json ) ) {
+			return false;
+		}
+		update_user_meta( $user_id, self::USERMETA_SOCIAL_ENTITLEMENTS, $json );
+		/**
+		 * Fires after the social entitlements snapshot user meta is refreshed.
+		 *
+		 * @param int                  $user_id  User ID.
+		 * @param array<string, mixed> $snapshot Decoded snapshot (same as stored).
+		 */
+		do_action( 'creatorreactor_social_entitlements_refreshed', $user_id, $snapshot );
+		return true;
+	}
+
+	/**
+	 * @return array<string, mixed>|null Decoded snapshot or null.
+	 */
+	public static function get_social_entitlements_snapshot( $user_id ) {
+		$raw = get_user_meta( (int) $user_id, self::USERMETA_SOCIAL_ENTITLEMENTS, true );
+		if ( ! is_string( $raw ) || $raw === '' ) {
+			return null;
+		}
+		$decoded = json_decode( $raw, true );
+		return is_array( $decoded ) ? $decoded : null;
+	}
+
+	/**
 	 * Whether a stored tier value represents a follower (not a paid subscriber tier).
 	 */
 	public static function tier_stored_is_follower( $tier ) {
@@ -550,6 +922,11 @@ class Entitlements {
 	 */
 	public static function wp_user_has_active_follower_entitlement( $user_id ) {
 		foreach ( self::get_active_entitlement_rows_for_wp_user( $user_id ) as $row ) {
+			if ( self::tier_stored_is_follower( $row['tier'] ?? '' ) ) {
+				return true;
+			}
+		}
+		foreach ( self::get_inactive_unexpired_follower_entitlement_rows_for_wp_user( $user_id ) as $row ) {
 			if ( self::tier_stored_is_follower( $row['tier'] ?? '' ) ) {
 				return true;
 			}

@@ -1,0 +1,246 @@
+<?php
+/**
+ * Embedded Terms of Service & Privacy Notice (modal body). Override via {@see 'creatorreactor_terms_of_service_html'}.
+ * Contact placeholders: {@see 'creatorreactor_tos_contact_email'} and {@see 'creatorreactor_tos_contact_url'}.
+ *
+ * @package CreatorReactor
+ * @return string HTML (sanitized again at runtime with wp_kses).
+ */
+
+if ( ! defined( 'ABSPATH' ) ) {
+	exit;
+}
+
+$effective_display = esc_html( wp_date( 'F j, Y' ) );
+
+$raw_email = get_option( 'admin_email' );
+$raw_email = is_string( $raw_email ) ? $raw_email : '';
+$contact_email = apply_filters( 'creatorreactor_tos_contact_email', $raw_email );
+$contact_email = is_string( $contact_email ) ? $contact_email : $raw_email;
+
+$contact_url = apply_filters( 'creatorreactor_tos_contact_url', home_url( '/' ) );
+$contact_url = is_string( $contact_url ) ? $contact_url : home_url( '/' );
+
+$mailto_attr = esc_attr( $contact_email );
+$email_html  = esc_html( $contact_email );
+$url_href    = esc_url( $contact_url );
+$url_text    = esc_html( $contact_url );
+
+return <<<HTML
+<section class="cr-tos" id="creatorreactor-tos-embedded">
+	<h2 class="cr-tos__title">CreatorReactor Terms of Service &amp; Privacy Notice</h2>
+	<p class="cr-tos__meta"><strong>Effective Date:</strong> {$effective_display}<br />
+	<strong>Last Updated:</strong> March 22, 2026</p>
+	<p>These Terms of Service and Privacy Notice (“Terms”) govern your use of CreatorReactor authentication and onboarding services (“Service”). By logging in via social authentication (e.g., Fanvue) and completing onboarding, you (“User,” “you”) agree to these Terms.</p>
+
+	<hr class="cr-tos__sep" />
+
+	<h3 class="cr-tos__heading">1. Scope of Service</h3>
+	<p>CreatorReactor provides authentication, identity management, analytics, and communication tools for creators and their audiences.</p>
+	<p>This includes:</p>
+	<ul class="cr-tos__list">
+		<li>OAuth-based login (e.g., Fanvue)</li>
+		<li>First-time onboarding data collection</li>
+		<li>Ongoing account and engagement functionality</li>
+	</ul>
+
+	<hr class="cr-tos__sep" />
+
+	<h3 class="cr-tos__heading">2. Personal Data We Collect</h3>
+	<p>We collect only data necessary to operate the Service.</p>
+	<h4 class="cr-tos__subheading">Data You Provide</h4>
+	<ul class="cr-tos__list">
+		<li>Email address (required)</li>
+		<li>Telephone number (optional)</li>
+		<li>Address (optional)</li>
+		<li>Display name / username (optional)</li>
+		<li>Country / region (optional or auto-detected)</li>
+		<li>Communication preferences</li>
+	</ul>
+	<h4 class="cr-tos__subheading">Data from OAuth Providers</h4>
+	<ul class="cr-tos__list">
+		<li>Basic profile information (subject to provider permissions)</li>
+	</ul>
+	<h4 class="cr-tos__subheading">Automatically Collected Data</h4>
+	<ul class="cr-tos__list">
+		<li>IP address</li>
+		<li>Device/browser metadata</li>
+		<li>Usage activity within the Service</li>
+	</ul>
+
+	<hr class="cr-tos__sep" />
+
+	<h3 class="cr-tos__heading">3. Legal Basis for Processing (GDPR)</h3>
+	<p>If you are located in the European Economic Area (EEA), we process your data under the following legal bases:</p>
+	<ul class="cr-tos__list">
+		<li>Contractual necessity – to provide login and access to creator services</li>
+		<li>Consent – for marketing communications and optional data collection</li>
+		<li>Legitimate interest – for analytics, fraud prevention, and service improvement</li>
+	</ul>
+
+	<hr class="cr-tos__sep" />
+
+	<h3 class="cr-tos__heading">4. How We Use Your Data</h3>
+	<p>We use your data to:</p>
+	<ul class="cr-tos__list">
+		<li>Authenticate and manage your account</li>
+		<li>Provide access to creator content</li>
+		<li>Enable creator analytics and audience insights</li>
+		<li>Send communications (only where permitted)</li>
+		<li>Improve performance and user experience</li>
+	</ul>
+	<p>We do not sell personal data.</p>
+
+	<hr class="cr-tos__sep" />
+
+	<h3 class="cr-tos__heading">5. Communications and Consent</h3>
+	<ul class="cr-tos__list">
+		<li>Email communications are opt-out by default (you may opt out anytime)</li>
+		<li>SMS communications require explicit consent (opt-in)</li>
+		<li>You can unsubscribe at any time via links or account settings</li>
+	</ul>
+
+	<hr class="cr-tos__sep" />
+
+	<h3 class="cr-tos__heading">6. Data Sharing</h3>
+	<p>We may share your data with:</p>
+	<ul class="cr-tos__list">
+		<li>The creator whose platform you are using</li>
+		<li>Service providers (hosting, analytics, authentication)</li>
+		<li>Legal authorities when required by law</li>
+	</ul>
+	<p>We do not sell or rent your personal information (as defined under CCPA).</p>
+
+	<hr class="cr-tos__sep" />
+
+	<h3 class="cr-tos__heading">7. Your Rights (GDPR &amp; CCPA)</h3>
+	<h4 class="cr-tos__subheading">GDPR Rights (EEA Users)</h4>
+	<p>You have the right to:</p>
+	<ul class="cr-tos__list">
+		<li>Access your personal data</li>
+		<li>Correct inaccurate data</li>
+		<li>Request deletion (“Right to be Forgotten”)</li>
+		<li>Restrict or object to processing</li>
+		<li>Data portability</li>
+		<li>Withdraw consent at any time</li>
+	</ul>
+	<h4 class="cr-tos__subheading">CCPA Rights (California Residents)</h4>
+	<p>You have the right to:</p>
+	<ul class="cr-tos__list">
+		<li>Know what personal data is collected</li>
+		<li>Request deletion of your data</li>
+		<li>Opt out of sale (we do not sell data)</li>
+		<li>Non-discrimination for exercising rights</li>
+	</ul>
+	<p>To exercise rights, contact: <a href="mailto:{$mailto_attr}">{$email_html}</a></p>
+
+	<hr class="cr-tos__sep" />
+
+	<h3 class="cr-tos__heading">8. Data Retention</h3>
+	<p>We retain personal data only as long as necessary for:</p>
+	<ul class="cr-tos__list">
+		<li>Providing the Service</li>
+		<li>Legal compliance</li>
+		<li>Legitimate business operations</li>
+	</ul>
+	<p>Data may be deleted upon request, subject to legal obligations.</p>
+
+	<hr class="cr-tos__sep" />
+
+	<h3 class="cr-tos__heading">9. Data Security</h3>
+	<p>We implement reasonable safeguards including:</p>
+	<ul class="cr-tos__list">
+		<li>Encryption (where applicable)</li>
+		<li>Access controls</li>
+		<li>Secure infrastructure practices</li>
+	</ul>
+	<p>No system is guaranteed 100% secure.</p>
+
+	<hr class="cr-tos__sep" />
+
+	<h3 class="cr-tos__heading">10. International Data Transfers</h3>
+	<p>Your data may be processed in the United States or other jurisdictions.</p>
+	<p>Where required, we use safeguards such as:</p>
+	<ul class="cr-tos__list">
+		<li>Standard Contractual Clauses (SCCs)</li>
+		<li>Equivalent data protection measures</li>
+	</ul>
+
+	<hr class="cr-tos__sep" />
+
+	<h3 class="cr-tos__heading">11. Cookies and Tracking</h3>
+	<p>We may use cookies or similar technologies for:</p>
+	<ul class="cr-tos__list">
+		<li>Authentication</li>
+		<li>Session management</li>
+		<li>Analytics</li>
+	</ul>
+	<p>Where required by law, consent will be obtained before non-essential cookies are used.</p>
+
+	<hr class="cr-tos__sep" />
+
+	<h3 class="cr-tos__heading">12. Third-Party Services</h3>
+	<p>This Service depends on third-party platforms (e.g., Fanvue, WordPress hosting).</p>
+	<p>Your use of those services is governed by their respective policies.</p>
+
+	<hr class="cr-tos__sep" />
+
+	<h3 class="cr-tos__heading">13. Age Restrictions</h3>
+	<p>You must be at least 18 years old or the legal age in your jurisdiction.</p>
+	<p>We do not knowingly collect data from minors.</p>
+
+	<hr class="cr-tos__sep" />
+
+	<h3 class="cr-tos__heading">14. Termination</h3>
+	<p>We may suspend or terminate access if:</p>
+	<ul class="cr-tos__list">
+		<li>These Terms are violated</li>
+		<li>Required by law</li>
+		<li>The Service is discontinued</li>
+	</ul>
+
+	<hr class="cr-tos__sep" />
+
+	<h3 class="cr-tos__heading">15. Disclaimer of Warranties</h3>
+	<p>The Service is provided “as is” without warranties of any kind.</p>
+
+	<hr class="cr-tos__sep" />
+
+	<h3 class="cr-tos__heading">16. Limitation of Liability</h3>
+	<p>To the maximum extent permitted by law, CreatorReactor is not liable for:</p>
+	<ul class="cr-tos__list">
+		<li>Indirect or consequential damages</li>
+		<li>Data loss or service interruptions</li>
+		<li>Third-party platform issues</li>
+	</ul>
+
+	<hr class="cr-tos__sep" />
+
+	<h3 class="cr-tos__heading">17. Changes to These Terms</h3>
+	<p>We may update these Terms periodically.</p>
+	<p>Continued use of the Service constitutes acceptance of updates.</p>
+
+	<hr class="cr-tos__sep" />
+
+	<h3 class="cr-tos__heading">18. Contact Information</h3>
+	<p><strong>CreatorReactor Support</strong><br />
+	Email: <a href="mailto:{$mailto_attr}">{$email_html}</a><br />
+	Website: <a href="{$url_href}" target="_blank" rel="noopener noreferrer">{$url_text}</a></p>
+
+	<hr class="cr-tos__sep" />
+
+	<h3 class="cr-tos__heading">19. Acknowledgement and Consent</h3>
+	<p>By checking “I agree to the Terms of Service”:</p>
+	<ul class="cr-tos__list">
+		<li>You confirm you have read and understood these Terms</li>
+		<li>You consent to the collection and use of your data as described</li>
+		<li>You understand your rights under GDPR and CCPA</li>
+	</ul>
+
+	<hr class="cr-tos__sep" />
+
+	<h3 class="cr-tos__heading">20. Do Not Sell My Personal Information (CCPA)</h3>
+	<p>CreatorReactor does not sell personal information.</p>
+	<p>If this changes, users will be provided with a clear opt-out mechanism.</p>
+</section>
+HTML;

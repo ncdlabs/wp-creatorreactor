@@ -20,6 +20,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 class CreatorReactor_OAuth {
 
 	const OPTION_TOKENS          = 'creatorreactor_oauth_tokens';
+	/** Encrypted Fanvue OAuth token row (visitor) stored on the WP user after Fan OAuth. */
+	const USERMETA_FAN_OAUTH_TOKENS = 'creatorreactor_fan_oauth_tokens';
 	const TRANSIENT_PKCE_PREFIX  = 'creatorreactor_oauth_pkce_';
 	const PKCE_TTL               = 600;
 	const AUTH_URL               = 'https://auth.fanvue.com/oauth2/auth';
@@ -33,10 +35,9 @@ class CreatorReactor_OAuth {
 
 	/**
 	 * Fanvue OAuth Quick Start scopes (see api.fanvue.com/docs/authentication/quick-start).
-	 * Do not add `read:fan` here: many Fanvue apps are not allowed to request it; add it under Advanced → Scopes only
-	 * after enabling that scope for your app (required for GET /subscribers and GET /followers).
+	 * Add `read:fan` here if your app allows it (required for GET /subscribers and GET /followers).
 	 */
-	const DEFAULT_SCOPES = 'openid offline_access offline read:self';
+	const DEFAULT_SCOPES = 'openid offline_access offline read:self read:fan';
 
 	/**
 	 * Normalize space-separated OAuth scopes: trim, collapse whitespace, dedupe tokens. Empty uses {@see DEFAULT_SCOPES}.
@@ -109,6 +110,67 @@ class CreatorReactor_OAuth {
 	public static function init() {
 		add_action( 'rest_api_init', [ __CLASS__, 'register_routes' ] );
 		add_filter( 'rest_authentication_errors', [ __CLASS__, 'allow_oauth_callback_without_nonce' ], 99 );
+	}
+
+	/**
+	 * Option name for PKCE row (DB, autoload=off). Avoids transients on non-shared object cache across PHP nodes.
+	 *
+	 * @param string $state OAuth state value.
+	 */
+	private static function pkce_option_name( $state ) {
+		if ( ! is_string( $state ) || $state === '' || ! preg_match( '/^[a-zA-Z0-9]+$/', $state ) ) {
+			return '';
+		}
+		return self::TRANSIENT_PKCE_PREFIX . $state;
+	}
+
+	/**
+	 * @param string               $state   OAuth state.
+	 * @param array<string, mixed> $payload PKCE + merge data (redirect_uri, redirect_to, fan_oauth, …).
+	 */
+	public static function store_pkce_payload( $state, array $payload ) {
+		$name = self::pkce_option_name( $state );
+		if ( $name === '' ) {
+			return;
+		}
+		update_option(
+			$name,
+			[
+				'exp'     => time() + self::PKCE_TTL,
+				'payload' => $payload,
+			],
+			false
+		);
+	}
+
+	/**
+	 * @param string $state OAuth state.
+	 * @return array<string, mixed>|false
+	 */
+	public static function get_pkce_payload( $state ) {
+		$name = self::pkce_option_name( $state );
+		if ( $name === '' ) {
+			return false;
+		}
+		$row = get_option( $name, null );
+		if ( ! is_array( $row ) || ! isset( $row['exp'], $row['payload'] ) ) {
+			return false;
+		}
+		if ( (int) $row['exp'] < time() ) {
+			delete_option( $name );
+			return false;
+		}
+		return is_array( $row['payload'] ) ? $row['payload'] : false;
+	}
+
+	/**
+	 * @param string $state OAuth state.
+	 */
+	public static function delete_pkce_payload( $state ) {
+		$name = self::pkce_option_name( $state );
+		if ( $name !== '' ) {
+			delete_option( $name );
+		}
 	}
 
 	public static function allow_oauth_callback_without_nonce( $result ) {
@@ -378,11 +440,8 @@ class CreatorReactor_OAuth {
 		}
 
 		// Persist exact redirect_uri used in the authorize request — token endpoint must match byte-for-byte.
-		set_transient(
-			self::TRANSIENT_PKCE_PREFIX . $state,
-			$payload,
-			self::PKCE_TTL
-		);
+		// DB option (autoload=off): transients often use object cache that is not shared across web nodes.
+		self::store_pkce_payload( $state, $payload );
 
 		$params = [
 			'client_id'             => $client_id,
@@ -393,7 +452,8 @@ class CreatorReactor_OAuth {
 			'code_challenge'       => $code_challenge,
 			'code_challenge_method' => 'S256',
 		];
-		
+		// Fanvue documents only the standard PKCE params above; OIDC `prompt` is not listed and can yield invalid_request.
+
 		$auth_base = self::get_authorization_endpoint( $opts );
 		Admin_Settings::log_connection(
 			'debug',
@@ -403,7 +463,7 @@ class CreatorReactor_OAuth {
 	}
 
 	private static function settings_redirect_url( array $query_args = [] ) {
-		$url = admin_url( 'options-general.php?page=' . Admin_Settings::PAGE_SLUG );
+		$url = admin_url( 'admin.php?page=' . Admin_Settings::PAGE_SETTINGS_SLUG );
 		if ( ! empty( $query_args ) ) {
 			$url = add_query_arg( $query_args, $url );
 		}
@@ -475,7 +535,7 @@ class CreatorReactor_OAuth {
 
 				$hint = '';
 				if ( $state && ! $code ) {
-					$pkce_probe = get_transient( self::TRANSIENT_PKCE_PREFIX . $state );
+					$pkce_probe = self::get_pkce_payload( $state );
 					if ( $pkce_probe === false ) {
 						$hint = ' PKCE state unknown or expired — often a repeat visit without the full redirect query.';
 					} elseif ( ! in_array( 'code', $key_names, true ) ) {
@@ -497,8 +557,8 @@ class CreatorReactor_OAuth {
 			$route = $request instanceof \WP_REST_Request ? $request->get_route() : '';
 			Admin_Settings::log_connection( 'info', 'OAuth callback: hit REST route ' . ( is_string( $route ) ? $route : '(unknown)' ) . '.' );
 
-			$pkce_payload = get_transient( self::TRANSIENT_PKCE_PREFIX . $state );
-			delete_transient( self::TRANSIENT_PKCE_PREFIX . $state );
+			$pkce_payload = self::get_pkce_payload( $state );
+			self::delete_pkce_payload( $state );
 
 			$code_verifier = null;
 			$redirect_uri  = null;
@@ -551,6 +611,14 @@ class CreatorReactor_OAuth {
 
 			self::store_tokens( $tokens );
 			Admin_Settings::log_connection( 'info', 'OAuth callback: success — tokens stored.' );
+
+			$sync_client = new CreatorReactor_Client();
+			$sync_ok = $sync_client->sync_subscribers_to_table();
+			Admin_Settings::log_connection(
+				$sync_ok ? 'info' : 'warning',
+				'OAuth callback: user list sync ' . ( $sync_ok ? 'completed' : 'failed or returned no data' ) . '.'
+			);
+
 			Admin_Settings::set_last_error( '' );
 			wp_safe_redirect(
 				self::settings_redirect_url(
@@ -733,6 +801,58 @@ class CreatorReactor_OAuth {
 			Admin_Settings::log_connection( 'error', 'OAuth: failed to encrypt tokens for storage (openssl or empty ciphertext).' );
 		}
 		update_option( self::OPTION_TOKENS, $encrypted );
+	}
+
+	/**
+	 * Encrypt a Fanvue token exchange row for pending registration (wp_options) or user meta.
+	 *
+	 * @param array<string, mixed> $tokens Keys access_token, refresh_token, expires_at (from {@see exchange_code_for_tokens()}).
+	 * @return string Non-empty ciphertext, or empty string on failure.
+	 */
+	public static function seal_fan_oauth_token_row( array $tokens ) {
+		$access = isset( $tokens['access_token'] ) && is_string( $tokens['access_token'] ) ? $tokens['access_token'] : '';
+		if ( $access === '' ) {
+			return '';
+		}
+		$token_data = [
+			'access_token'  => $access,
+			'refresh_token' => isset( $tokens['refresh_token'] ) && is_string( $tokens['refresh_token'] ) ? $tokens['refresh_token'] : '',
+			'expires_at'    => isset( $tokens['expires_at'] ) ? (int) $tokens['expires_at'] : 0,
+		];
+		return self::encrypt_tokens( $token_data );
+	}
+
+	/**
+	 * @param string $sealed Output of {@see seal_fan_oauth_token_row()}.
+	 * @return array<string, mixed>|null
+	 */
+	public static function unseal_fan_oauth_token_row( $sealed ) {
+		$sealed = is_string( $sealed ) ? $sealed : '';
+		if ( $sealed === '' ) {
+			return null;
+		}
+		$dec = self::decrypt_tokens( $sealed );
+		return is_array( $dec ) ? $dec : null;
+	}
+
+	/**
+	 * Persist Fanvue visitor OAuth tokens on a WordPress user (does not touch site/creator tokens).
+	 *
+	 * @param int   $user_id WordPress user ID.
+	 * @param array $tokens  Same shape as {@see seal_fan_oauth_token_row()}.
+	 * @return bool True if stored.
+	 */
+	public static function save_fan_oauth_tokens_to_user( $user_id, array $tokens ) {
+		$user_id = (int) $user_id;
+		if ( $user_id <= 0 ) {
+			return false;
+		}
+		$sealed = self::seal_fan_oauth_token_row( $tokens );
+		if ( $sealed === '' ) {
+			return false;
+		}
+		update_user_meta( $user_id, self::USERMETA_FAN_OAUTH_TOKENS, $sealed );
+		return true;
 	}
 
 	private static function encrypt_tokens( $data ) {

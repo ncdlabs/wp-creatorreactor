@@ -63,7 +63,7 @@ $redirect_uri_input_value = Admin_Settings::get_redirect_uri_input_value( $opts,
 						<button type="button" class="button creatorreactor-copy-redirect-uri" aria-label="<?php esc_attr_e( 'Copy redirect URI to clipboard', 'creatorreactor' ); ?>"><?php esc_html_e( 'Copy', 'creatorreactor' ); ?></button>
 					</div>
 					<?php if ( ! $broker_mode ) : ?>
-						<p class="description"><?php esc_html_e( 'Must match your Fanvue app redirect list exactly (same scheme, host, path, and trailing slash). Use Copy, register that URL in Fanvue, save here, then Connect.', 'creatorreactor' ); ?></p>
+						<p class="description"><?php esc_html_e( 'Site connection (admin “Connect” and API sync): register this URL in your Fanvue OAuth app, together with the Fan login URL in the next row. Both must match exactly (same scheme, host, path, and trailing slash). Use Copy, add both URLs in Fanvue, save here, then Connect.', 'creatorreactor' ); ?></p>
 					<?php else : ?>
 						<p class="description"><?php esc_html_e( 'Optional. When set, must match what the broker and OAuth provider expect. Default below is this site’s broker callback.', 'creatorreactor' ); ?></p>
 						<p class="description">
@@ -73,6 +73,18 @@ $redirect_uri_input_value = Admin_Settings::get_redirect_uri_input_value( $opts,
 					<?php endif; ?>
 				</td>
 			</tr>
+			<?php if ( ! $broker_mode ) : ?>
+			<tr>
+				<th scope="row"><?php esc_html_e( 'Fan login redirect URI', 'creatorreactor' ); ?></th>
+				<td>
+					<div class="creatorreactor-redirect-uri-row">
+						<input type="text" readonly class="regular-text code creatorreactor-oauth-redirect-uri-input" value="<?php echo esc_attr( Fan_OAuth::get_callback_redirect_uri() ); ?>" autocomplete="off" aria-readonly="true" />
+						<button type="button" class="button creatorreactor-copy-redirect-uri" aria-label="<?php esc_attr_e( 'Copy fan login redirect URI to clipboard', 'creatorreactor' ); ?>"><?php esc_html_e( 'Copy', 'creatorreactor' ); ?></button>
+					</div>
+					<p class="description"><?php esc_html_e( 'Visitor “Log in with Fanvue” (shortcode, block, or wp-login): register this second URL in the same Fanvue app’s redirect list as the URI above. Fan login is not used in Agency mode.', 'creatorreactor' ); ?></p>
+				</td>
+			</tr>
+			<?php endif; ?>
 		</table>
 	</div>
 	<div class="creatorreactor-subsection creatorreactor-advanced">

@@ -302,11 +302,13 @@ class CreatorReactor_Client {
 		];
 	}
 
-	public function list_subscribers( $page = 1, $size = 50 ) {
+	public function list_subscribers( $page = 1, $size = 50, $quiet = false ) {
 		try {
 			$token = $this->get_access_token();
 			if ( ! $token ) {
-				Admin_Settings::set_last_error( __( 'No OAuth token. Connect to creatorreactor in the OAuth tab, then run Sync again.', 'creatorreactor' ) );
+				if ( ! $quiet ) {
+					Admin_Settings::set_last_error( __( 'No OAuth token. Connect to creatorreactor in the OAuth tab, then run Sync again.', 'creatorreactor' ) );
+				}
 				return null;
 			}
 
@@ -339,14 +341,18 @@ class CreatorReactor_Client {
 			$code          = wp_remote_retrieve_response_code( $response );
 			$body_response = wp_remote_retrieve_body( $response );
 			if ( $code !== 200 ) {
-				Admin_Settings::set_last_error( self::format_list_endpoint_http_error( 'List subscribers', $code, $body_response ) );
+				if ( ! $quiet ) {
+					Admin_Settings::set_last_error( self::format_list_endpoint_http_error( 'List subscribers', $code, $body_response ) );
+				}
 				return null;
 			}
 
 			$data = json_decode( $body_response, true );
 			if ( ! is_array( $data ) ) {
-				$snippet = is_string( $body_response ) && $body_response !== '' ? substr( wp_strip_all_tags( $body_response ), 0, 500 ) : '';
-				Admin_Settings::set_last_error( 'Invalid JSON from subscribers API.' . ( $snippet !== '' ? ' Response: ' . $snippet : '' ) );
+				if ( ! $quiet ) {
+					$snippet = is_string( $body_response ) && $body_response !== '' ? substr( wp_strip_all_tags( $body_response ), 0, 500 ) : '';
+					Admin_Settings::set_last_error( 'Invalid JSON from subscribers API.' . ( $snippet !== '' ? ' Response: ' . $snippet : '' ) );
+				}
 				return null;
 			}
 
@@ -355,17 +361,21 @@ class CreatorReactor_Client {
 				'pagination' => isset( $data['pagination'] ) && is_array( $data['pagination'] ) ? $data['pagination'] : [ 'page' => 1, 'size' => 0, 'hasMore' => false ],
 			];
 		} catch ( \Throwable $e ) {
-			Admin_Settings::set_critical_error( __( 'List subscribers failed:', 'creatorreactor' ) . ' ' . $e->getMessage() . ' (' . basename( $e->getFile() ) . ':' . $e->getLine() . ')' );
-			Admin_Settings::set_last_error( $e->getMessage() );
+			if ( ! $quiet ) {
+				Admin_Settings::set_critical_error( __( 'List subscribers failed:', 'creatorreactor' ) . ' ' . $e->getMessage() . ' (' . basename( $e->getFile() ) . ':' . $e->getLine() . ')' );
+				Admin_Settings::set_last_error( $e->getMessage() );
+			}
 			return null;
 		}
 	}
 
-	public function list_followers( $page = 1, $size = 50 ) {
+	public function list_followers( $page = 1, $size = 50, $quiet = false ) {
 		try {
 			$token = $this->get_access_token();
 			if ( ! $token ) {
-				Admin_Settings::set_last_error( __( 'No OAuth token. Connect to creatorreactor in the OAuth tab, then run Sync again.', 'creatorreactor' ) );
+				if ( ! $quiet ) {
+					Admin_Settings::set_last_error( __( 'No OAuth token. Connect to creatorreactor in the OAuth tab, then run Sync again.', 'creatorreactor' ) );
+				}
 				return null;
 			}
 
@@ -392,14 +402,18 @@ class CreatorReactor_Client {
 			$code          = wp_remote_retrieve_response_code( $response );
 			$body_response = wp_remote_retrieve_body( $response );
 			if ( $code !== 200 ) {
-				Admin_Settings::set_last_error( self::format_list_endpoint_http_error( 'List followers', $code, $body_response ) );
+				if ( ! $quiet ) {
+					Admin_Settings::set_last_error( self::format_list_endpoint_http_error( 'List followers', $code, $body_response ) );
+				}
 				return null;
 			}
 
 			$data = json_decode( $body_response, true );
 			if ( ! is_array( $data ) ) {
-				$snippet = is_string( $body_response ) && $body_response !== '' ? substr( wp_strip_all_tags( $body_response ), 0, 500 ) : '';
-				Admin_Settings::set_last_error( 'Invalid JSON from followers API.' . ( $snippet !== '' ? ' Response: ' . $snippet : '' ) );
+				if ( ! $quiet ) {
+					$snippet = is_string( $body_response ) && $body_response !== '' ? substr( wp_strip_all_tags( $body_response ), 0, 500 ) : '';
+					Admin_Settings::set_last_error( 'Invalid JSON from followers API.' . ( $snippet !== '' ? ' Response: ' . $snippet : '' ) );
+				}
 				return null;
 			}
 
@@ -408,8 +422,10 @@ class CreatorReactor_Client {
 				'pagination' => isset( $data['pagination'] ) && is_array( $data['pagination'] ) ? $data['pagination'] : [ 'page' => 1, 'size' => 0, 'hasMore' => false ],
 			];
 		} catch ( \Throwable $e ) {
-			Admin_Settings::set_critical_error( __( 'List followers failed:', 'creatorreactor' ) . ' ' . $e->getMessage() . ' (' . basename( $e->getFile() ) . ':' . $e->getLine() . ')' );
-			Admin_Settings::set_last_error( $e->getMessage() );
+			if ( ! $quiet ) {
+				Admin_Settings::set_critical_error( __( 'List followers failed:', 'creatorreactor' ) . ' ' . $e->getMessage() . ' (' . basename( $e->getFile() ) . ':' . $e->getLine() . ')' );
+				Admin_Settings::set_last_error( $e->getMessage() );
+			}
 			return null;
 		}
 	}
@@ -520,6 +536,207 @@ class CreatorReactor_Client {
 		return null;
 	}
 
+	/**
+	 * JSON blob of Fanvue list fields not stored in dedicated entitlement columns (handle, registeredAt, tier object, etc.).
+	 *
+	 * @param array<string, mixed> $item Subscriber or follower row from the API.
+	 * @return string|null JSON or null when nothing extra to store.
+	 */
+	public static function fanvue_list_item_sync_snapshot_json( $item ) {
+		if ( ! is_array( $item ) ) {
+			return null;
+		}
+		$skip_email = [ 'email', 'Email' ];
+		$extra      = [];
+		foreach ( $item as $k => $v ) {
+			if ( ! is_string( $k ) || $k === '' ) {
+				continue;
+			}
+			if ( $k === 'uuid' ) {
+				continue;
+			}
+			if ( in_array( $k, $skip_email, true ) ) {
+				continue;
+			}
+			if ( is_scalar( $v ) || $v === null ) {
+				$extra[ $k ] = $v;
+			} elseif ( is_array( $v ) ) {
+				$extra[ $k ] = $v;
+			}
+		}
+		if ( empty( $extra ) ) {
+			return null;
+		}
+		$json = wp_json_encode( $extra, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+		if ( ! is_string( $json ) || $json === '' || $json === '[]' || $json === '{}' ) {
+			return null;
+		}
+		return $json;
+	}
+
+	/**
+	 * Whether a subscriber or follower list item is the fan who just completed OAuth (UUID and/or email).
+	 *
+	 * @param array<string, mixed> $item List row from Fanvue API.
+	 */
+	private static function fan_list_item_matches_fan( array $item, $fan_uuid_norm, $email_norm ) {
+		$fan_uuid_norm = is_string( $fan_uuid_norm ) ? strtolower( trim( $fan_uuid_norm ) ) : '';
+		$email_norm    = is_string( $email_norm ) ? strtolower( trim( $email_norm ) ) : '';
+		if ( $fan_uuid_norm !== '' ) {
+			$u = isset( $item['uuid'] ) ? strtolower( trim( (string) $item['uuid'] ) ) : '';
+			if ( $u !== '' && $u === $fan_uuid_norm ) {
+				return true;
+			}
+		}
+		if ( $email_norm !== '' && ! empty( $item['email'] ) && is_string( $item['email'] ) ) {
+			$ie = strtolower( trim( $item['email'] ) );
+			if ( $ie !== '' && $ie === $email_norm ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * After Fanvue visitor OAuth: find this user in the site creator's subscriber/follower lists and upsert entitlements with wp_user_id.
+	 *
+	 * Uses the creator OAuth token stored in settings (same app as fan login). Requires read:fan on that token for list APIs.
+	 *
+	 * @param string $fan_uuid     Fanvue UUID from /me (may be empty).
+	 * @param int    $wp_user_id  WordPress user ID.
+	 * @param string $fan_email   Fan email (used for list matching and row storage).
+	 * @param string $display_name Fallback display name.
+	 * @return bool True if the user was found on a list and the entitlement row was updated.
+	 */
+	public static function sync_entitlement_for_fan_after_login( $fan_uuid, $wp_user_id, $fan_email, $display_name ) {
+		if ( Admin_Settings::is_broker_mode() ) {
+			return false;
+		}
+		$wp_user_id = (int) $wp_user_id;
+		if ( $wp_user_id <= 0 ) {
+			return false;
+		}
+		$fan_email = is_string( $fan_email ) ? sanitize_email( $fan_email ) : '';
+		if ( $fan_email === '' || ! is_email( $fan_email ) ) {
+			return false;
+		}
+		$email_norm    = strtolower( $fan_email );
+		$fan_uuid_norm = is_string( $fan_uuid ) ? strtolower( trim( $fan_uuid ) ) : '';
+
+		$token = self::get_access_token();
+		if ( ! $token ) {
+			return false;
+		}
+
+		$opts       = Admin_Settings::get_options();
+		$ttl        = (int) ( $opts['entitlement_cache_ttl_seconds'] ?? 900 );
+		$expires_at = gmdate( 'Y-m-d H:i:s', time() + max( 60, $ttl ) );
+		$client     = new self();
+		$size       = 50;
+
+		$page = 1;
+		do {
+			$result = $client->list_subscribers( $page, $size, true );
+			if ( $result === null ) {
+				break;
+			}
+			foreach ( $result['data'] as $item ) {
+				if ( ! is_array( $item ) || ! self::fan_list_item_matches_fan( $item, $fan_uuid_norm, $email_norm ) ) {
+					continue;
+				}
+				$row_uuid = isset( $item['uuid'] ) ? sanitize_text_field( (string) $item['uuid'] ) : '';
+				if ( $row_uuid === '' ) {
+					continue;
+				}
+				$row_email    = ! empty( $item['email'] ) && is_string( $item['email'] ) ? sanitize_email( $item['email'] ) : $fan_email;
+				$tier_raw     = isset( $item['tier'] ) ? $item['tier'] : null;
+				$tier         = self::normalize_tier( $tier_raw );
+				$stored_tier  = Entitlements::tier_stored_for_subscriber( Entitlements::PRODUCT_FANVUE, $tier );
+				$disp         = self::item_display_name( $item );
+				$disp_stored  = is_string( $disp ) && $disp !== '' ? $disp : ( is_string( $display_name ) ? sanitize_text_field( $display_name ) : '' );
+				$def          = self::tier_definition_from_item( $tier_raw );
+				$snapshot     = self::fanvue_list_item_sync_snapshot_json( $item );
+				Entitlements::upsert_by_creatorreactor_uuid(
+					$row_uuid,
+					Entitlements::STATUS_ACTIVE,
+					$expires_at,
+					$wp_user_id,
+					$row_email !== '' ? $row_email : $fan_email,
+					$stored_tier,
+					$disp_stored !== '' ? $disp_stored : null,
+					Entitlements::PRODUCT_FANVUE,
+					$snapshot
+				);
+				update_user_meta( $wp_user_id, Entitlements::USERMETA_CREATORREACTOR_UUID, $row_uuid );
+				$existing = get_option( Admin_Settings::OPTION_TIERS, [] );
+				$merged   = is_array( $existing ) ? $existing : [];
+				$merged[ $stored_tier ] = true;
+				update_option( Admin_Settings::OPTION_TIERS, array_keys( $merged ) );
+				if ( $def !== null ) {
+					$subs_tiers = get_option( Admin_Settings::OPTION_SUBSCRIPTION_TIERS, [] );
+					$by_id      = [];
+					if ( is_array( $subs_tiers ) ) {
+						foreach ( $subs_tiers as $row ) {
+							if ( is_array( $row ) && ! empty( $row['id'] ) ) {
+								$by_id[ (string) $row['id'] ] = $row;
+							}
+						}
+					}
+					$by_id[ $def['id'] ] = $def;
+					update_option( Admin_Settings::OPTION_SUBSCRIPTION_TIERS, array_values( $by_id ) );
+				}
+				return true;
+			}
+			$pagination = $result['pagination'];
+			$has_more   = ! empty( $pagination['hasMore'] );
+			$items      = $result['data'];
+			++$page;
+		} while ( $has_more && count( $items ) === $size );
+
+		$page = 1;
+		do {
+			$result = $client->list_followers( $page, $size, true );
+			if ( $result === null ) {
+				break;
+			}
+			foreach ( $result['data'] as $item ) {
+				if ( ! is_array( $item ) || ! self::fan_list_item_matches_fan( $item, $fan_uuid_norm, $email_norm ) ) {
+					continue;
+				}
+				$row_uuid = isset( $item['uuid'] ) ? sanitize_text_field( (string) $item['uuid'] ) : '';
+				if ( $row_uuid === '' && isset( $item['id'] ) && is_string( $item['id'] ) ) {
+					$row_uuid = sanitize_text_field( $item['id'] );
+				}
+				if ( $row_uuid === '' ) {
+					continue;
+				}
+				$row_email   = ! empty( $item['email'] ) && is_string( $item['email'] ) ? sanitize_email( $item['email'] ) : $fan_email;
+				$disp        = self::item_display_name( $item );
+				$disp_stored = is_string( $disp ) && $disp !== '' ? $disp : ( is_string( $display_name ) ? sanitize_text_field( $display_name ) : '' );
+				$snapshot    = self::fanvue_list_item_sync_snapshot_json( $item );
+				Entitlements::upsert_by_creatorreactor_uuid(
+					$row_uuid,
+					Entitlements::STATUS_ACTIVE,
+					$expires_at,
+					$wp_user_id,
+					$row_email !== '' ? $row_email : $fan_email,
+					Entitlements::tier_stored_for_follower( Entitlements::PRODUCT_FANVUE ),
+					$disp_stored !== '' ? $disp_stored : null,
+					Entitlements::PRODUCT_FANVUE,
+					$snapshot
+				);
+				update_user_meta( $wp_user_id, Entitlements::USERMETA_CREATORREACTOR_UUID, $row_uuid );
+				return true;
+			}
+			$pagination = $result['pagination'];
+			$has_more   = ! empty( $pagination['hasMore'] );
+			$items      = $result['data'];
+			++$page;
+		} while ( $has_more && count( $items ) === $size );
+
+		return false;
+	}
+
 	public function sync_subscribers_to_table( $cache_ttl_seconds = 900 ) {
 		return self::sync_subscribers_to_table_with_listers(
 			$cache_ttl_seconds,
@@ -543,13 +760,16 @@ class CreatorReactor_Client {
 	 */
 	public static function sync_subscribers_to_table_with_listers( $cache_ttl_seconds, callable $list_subscribers, callable $list_followers ) {
 		try {
-			$expires_at        = gmdate( 'Y-m-d H:i:s', time() + $cache_ttl_seconds );
-			$active_uuids      = [];
-			$seen_tiers        = [];
-			$tier_definitions  = [];
-			$page              = 1;
-			$size              = 50;
-			$any_ok            = false;
+			Entitlements::clear_fanvue_sync_user_resolve_cache();
+
+			$expires_at           = gmdate( 'Y-m-d H:i:s', time() + $cache_ttl_seconds );
+			$active_uuids         = [];
+			$active_follower_uuids = [];
+			$seen_tiers           = [];
+			$tier_definitions     = [];
+			$page                 = 1;
+			$size                 = 50;
+			$any_ok               = false;
 
 			do {
 				$result = $list_subscribers( $page, $size );
@@ -559,12 +779,16 @@ class CreatorReactor_Client {
 				$any_ok = true;
 				$items  = $result['data'];
 				foreach ( $items as $item ) {
+					if ( ! is_array( $item ) ) {
+						continue;
+					}
 					$uuid = isset( $item['uuid'] ) ? $item['uuid'] : null;
-					if ( ! $uuid ) {
+					if ( ! $uuid || ! is_string( $uuid ) ) {
 						continue;
 					}
 					$active_uuids[] = $uuid;
-					$email          = isset( $item['email'] ) ? $item['email'] : '';
+					$email_raw      = isset( $item['email'] ) ? $item['email'] : '';
+					$email          = is_string( $email_raw ) ? sanitize_email( $email_raw ) : '';
 					$tier_raw       = isset( $item['tier'] ) ? $item['tier'] : null;
 					$tier           = self::normalize_tier( $tier_raw );
 					$display_name   = self::item_display_name( $item );
@@ -578,14 +802,26 @@ class CreatorReactor_Client {
 					} else {
 						$seen_tiers[ $stored_tier ] = true;
 					}
-					Entitlements::upsert_by_creatorreactor_uuid( $uuid, Entitlements::STATUS_ACTIVE, $expires_at, null, $email, $stored_tier, $display_name, Entitlements::PRODUCT_FANVUE );
+					$wp_uid    = Entitlements::resolve_wp_user_id_for_fanvue_sync( $email, $uuid );
+					$snapshot  = self::fanvue_list_item_sync_snapshot_json( $item );
+					Entitlements::upsert_by_creatorreactor_uuid(
+						$uuid,
+						Entitlements::STATUS_ACTIVE,
+						$expires_at,
+						$wp_uid,
+						$email,
+						$stored_tier,
+						$display_name,
+						Entitlements::PRODUCT_FANVUE,
+						$snapshot
+					);
 				}
 				$pagination = $result['pagination'];
 				$has_more   = ! empty( $pagination['hasMore'] );
 				$page++;
 			} while ( $has_more && count( $items ) === $size );
 
-			Entitlements::mark_missing_as_inactive( $active_uuids, $expires_at, Entitlements::PRODUCT_FANVUE );
+			Entitlements::mark_missing_subscribers_as_inactive( $active_uuids, $expires_at, Entitlements::PRODUCT_FANVUE );
 
 			if ( $any_ok ) {
 				$existing = get_option( Admin_Settings::OPTION_TIERS, [] );
@@ -608,21 +844,29 @@ class CreatorReactor_Client {
 				}
 				$followers = $followers_result['data'];
 				foreach ( $followers as $follower ) {
+					if ( ! is_array( $follower ) ) {
+						continue;
+					}
 					$uuid = isset( $follower['uuid'] ) ? $follower['uuid'] : ( isset( $follower['id'] ) ? $follower['id'] : null );
 					if ( ! $uuid || ! is_string( $uuid ) ) {
 						continue;
 					}
-					$email        = isset( $follower['email'] ) ? (string) $follower['email'] : '';
-					$display_name = self::item_display_name( $follower );
+					$active_follower_uuids[] = $uuid;
+					$email_raw               = isset( $follower['email'] ) ? $follower['email'] : '';
+					$email                   = is_string( $email_raw ) ? sanitize_email( $email_raw ) : '';
+					$display_name            = self::item_display_name( $follower );
+					$wp_uid                  = Entitlements::resolve_wp_user_id_for_fanvue_sync( $email, $uuid );
+					$snapshot                = self::fanvue_list_item_sync_snapshot_json( $follower );
 					Entitlements::upsert_by_creatorreactor_uuid(
 						$uuid,
-						Entitlements::STATUS_INACTIVE,
+						Entitlements::STATUS_ACTIVE,
 						$expires_at,
-						null,
+						$wp_uid,
 						$email,
 						Entitlements::tier_stored_for_follower( Entitlements::PRODUCT_FANVUE ),
 						$display_name,
-						Entitlements::PRODUCT_FANVUE
+						Entitlements::PRODUCT_FANVUE,
+						$snapshot
 					);
 				}
 				if ( count( $followers ) > 0 ) {
@@ -632,6 +876,8 @@ class CreatorReactor_Client {
 				$has_more   = ! empty( $pagination['hasMore'] );
 				$followers_page++;
 			} while ( $has_more && count( $followers ) === $followers_size );
+
+			Entitlements::mark_missing_followers_as_inactive( $active_follower_uuids, $expires_at, Entitlements::PRODUCT_FANVUE );
 
 			return $any_ok;
 		} catch ( \Throwable $e ) {

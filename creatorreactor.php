@@ -57,9 +57,21 @@ add_action( 'plugins_loaded', 'creatorreactor_init' );
 
 function creatorreactor_activate() {
 	try {
+		$roles_to_create = [
+			'creatorreactor_follower'   => __( 'CreatorReactor Follower', 'creatorreactor' ),
+			'creatorreactor_subscriber' => __( 'CreatorReactor Subscriber', 'creatorreactor' ),
+		];
+		foreach ( $roles_to_create as $role_key => $role_label ) {
+			if ( ! get_role( $role_key ) ) {
+				add_role( $role_key, $role_label, [ 'read' => true ] );
+			}
+		}
+
 		CreatorReactor\Entitlements::create_table();
 		CreatorReactor\Admin_Settings::set_defaults();
 		CreatorReactor\Cron::schedule();
+		require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-creatorreactor-onboarding.php';
+		CreatorReactor\Onboarding::activate_flush_rewrite_rules();
 	} catch ( \Throwable $e ) {
 		CreatorReactor\Admin_Settings::set_critical_error(
 			__( 'Activation error:', 'creatorreactor' ) . ' ' . $e->getMessage() . ' (' . basename( $e->getFile() ) . ':' . $e->getLine() . ')'
@@ -68,6 +80,8 @@ function creatorreactor_activate() {
 			error_log( 'CreatorReactor activation error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
 		}
 	}
+	require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-editor-blocks-prompt.php';
+	CreatorReactor\Editor_Blocks_Prompt::on_activation();
 }
 register_activation_hook( __FILE__, 'creatorreactor_activate' );
 

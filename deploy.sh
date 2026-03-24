@@ -3,7 +3,7 @@ set -e
 
 SSH_HOST="u650398700@82.29.157.171"
 SSH_PORT="65002"
-REMOTE_PATH="/home/u650398700/domains/lightskyblue-lyrebird-554318.hostingersite.com/public_html/wp-content/plugins/creatorreactor-2.0.1/"
+REMOTE_PATH="/home/u650398700/domains/royalblue-porcupine-625519.hostingersite.com/public_html/wp-content/plugins/wp-creatorreactor"
 
 LOCAL_DIR="$(dirname "$0")"
 
@@ -14,9 +14,15 @@ rsync -avz --delete \
     -e "ssh -p $SSH_PORT" \
     --exclude='*.zip' \
     --exclude='.git' \
+    --exclude='.gitignore' \
     --exclude='deploy.sh' \
     --exclude='build-zip.sh' \
     --exclude='README.md' \
+    --exclude='.DS_Store' \
+    --exclude='Thumbs.db' \
+    --exclude='*.log' \
+    --exclude='*.cache' \
+    --exclude='composer.lock' \
     "$LOCAL_DIR/" \
     "$SSH_HOST:$REMOTE_PATH"
 
