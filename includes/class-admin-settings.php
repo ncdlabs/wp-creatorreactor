@@ -36,7 +36,7 @@ class Admin_Settings {
 	const LOG_TYPE_ERROR              = 'error';
 	const OPTION_TIERS               = 'creatorreactor_tiers';
 	const OPTION_SUBSCRIPTION_TIERS  = 'creatorreactor_subscription_tiers';
-	const ENCRYPTED_FIELDS            = [ 'creatorreactor_oauth_client_id', 'creatorreactor_oauth_client_secret' ];
+	const ENCRYPTED_FIELDS            = [ 'creatorreactor_oauth_client_id', 'creatorreactor_oauth_client_secret', 'creatorreactor_cloud_password' ];
 	/** @var string Mirrors {@see CreatorReactor_OAuth::DEFAULT_SCOPES} (Fanvue quick start; add read:fan in Advanced if your app allows it). */
 	const DEFAULT_CREATORREACTOR_SCOPES = CreatorReactor_OAuth::DEFAULT_SCOPES;
 	const PAGE_SLUG                   = 'creatorreactor';
@@ -191,6 +191,9 @@ class Admin_Settings {
 			'creatorreactor_oauth_scopes' => self::DEFAULT_CREATORREACTOR_SCOPES,
 			'creatorreactor_api_version' => '2025-06-26',
 			'creatorreactor_creator_id' => '',
+			'creatorreactor_cloud_active' => false,
+			'creatorreactor_cloud_id' => '',
+			'creatorreactor_cloud_password' => '',
 			'cron_interval_minutes' => 15,
 			'entitlement_cache_ttl_seconds' => 900,
 			'replace_wp_login_with_social' => false,
@@ -686,6 +689,35 @@ class Admin_Settings {
 			$opts['creatorreactor_creator_id'] = isset( $raw_opts['creatorreactor_creator_id'] ) ? sanitize_text_field( (string) $raw_opts['creatorreactor_creator_id'] ) : '';
 		}
 
+		if ( isset( $input['creatorreactor_cloud_id'] ) ) {
+			$opts['creatorreactor_cloud_id'] = sanitize_text_field( wp_unslash( $input['creatorreactor_cloud_id'] ) );
+		} else {
+			$opts['creatorreactor_cloud_id'] = isset( $raw_opts['creatorreactor_cloud_id'] ) ? sanitize_text_field( (string) $raw_opts['creatorreactor_cloud_id'] ) : '';
+		}
+
+		if ( array_key_exists( 'creatorreactor_cloud_active', $input ) ) {
+			$opts['creatorreactor_cloud_active'] = ! empty( $input['creatorreactor_cloud_active'] );
+		} else {
+			$opts['creatorreactor_cloud_active'] = ! empty( $raw_opts['creatorreactor_cloud_active'] );
+		}
+
+		$cloud_password = isset( $input['creatorreactor_cloud_password'] ) ? (string) wp_unslash( $input['creatorreactor_cloud_password'] ) : '';
+		if ( $cloud_password === '********' || $cloud_password === '' ) {
+			$opts['creatorreactor_cloud_password'] = isset( $raw_opts['creatorreactor_cloud_password'] ) ? $raw_opts['creatorreactor_cloud_password'] : '';
+		} else {
+			$encrypted_cloud_password = self::encrypt_value( $cloud_password );
+			if ( $encrypted_cloud_password === '' ) {
+				add_settings_error(
+					self::OPTION_NAME,
+					'creatorreactor_cloud_password_encrypt_failed',
+					__( 'Could not encrypt CreatorReactor Password (OpenSSL unavailable or encryption failed). The previous password was kept.', 'creatorreactor' )
+				);
+				$opts['creatorreactor_cloud_password'] = isset( $raw_opts['creatorreactor_cloud_password'] ) ? $raw_opts['creatorreactor_cloud_password'] : '';
+			} else {
+				$opts['creatorreactor_cloud_password'] = $encrypted_cloud_password;
+			}
+		}
+
 		if ( $opts['creatorreactor_oauth_redirect_uri'] === '' ) {
 			$opts['creatorreactor_oauth_redirect_uri'] = $opts['broker_mode']
 				? self::get_broker_default_redirect_uri()
@@ -1027,6 +1059,7 @@ class Admin_Settings {
 
 		$opts                = self::get_options();
 		$secret_mask         = ! empty( $opts['creatorreactor_oauth_client_secret'] ) ? '********' : '';
+		$cloud_password_mask = ! empty( $opts['creatorreactor_cloud_password'] ) ? '********' : '';
 		$current_product_label = Entitlements::product_label( Entitlements::PRODUCT_FANVUE );
 
 		ob_start();
@@ -1367,6 +1400,292 @@ class Admin_Settings {
 				</table>
 			</div>
 		</div>
+		<?php
+	}
+
+	/**
+	 * Full product documentation with table of contents and search.
+	 */
+	private static function render_documentation_tab_body() {
+		?>
+		<div class="creatorreactor-section creatorreactor-docs-shell">
+			<div class="creatorreactor-docs-header">
+				<h2><?php esc_html_e( 'Documentation', 'creatorreactor' ); ?></h2>
+				<div class="creatorreactor-docs-search-controls">
+					<input type="search" id="creatorreactor-docs-search" class="regular-text" placeholder="<?php esc_attr_e( 'Search documentation... (Press /)', 'creatorreactor' ); ?>" />
+					<button type="button" id="creatorreactor-docs-clear" class="button"><?php esc_html_e( 'Clear', 'creatorreactor' ); ?></button>
+				</div>
+			</div>
+			<div class="creatorreactor-docs-layout">
+				<nav class="creatorreactor-docs-toc" aria-label="<?php esc_attr_e( 'Documentation table of contents', 'creatorreactor' ); ?>">
+					<h3><?php esc_html_e( 'Contents', 'creatorreactor' ); ?></h3>
+					<ol>
+						<li><a href="#cr-docs-overview"><?php esc_html_e( 'Overview', 'creatorreactor' ); ?></a></li>
+						<li><a href="#cr-docs-dashboard"><?php esc_html_e( 'Dashboard & Module Status', 'creatorreactor' ); ?></a></li>
+						<li><a href="#cr-docs-general"><?php esc_html_e( 'General', 'creatorreactor' ); ?></a></li>
+						<li><a href="#cr-docs-fanvue"><?php esc_html_e( 'Fanvue', 'creatorreactor' ); ?></a></li>
+						<li><a href="#cr-docs-cloud"><?php esc_html_e( 'CreatorReactor Cloud', 'creatorreactor' ); ?></a></li>
+						<li><a href="#cr-docs-sync"><?php esc_html_e( 'Sync', 'creatorreactor' ); ?></a></li>
+						<li><a href="#cr-docs-shortcodes"><?php esc_html_e( 'Shortcodes', 'creatorreactor' ); ?></a></li>
+						<li><a href="#cr-docs-users"><?php esc_html_e( 'Users', 'creatorreactor' ); ?></a></li>
+						<li><a href="#cr-docs-debug"><?php esc_html_e( 'Debug', 'creatorreactor' ); ?></a></li>
+					</ol>
+				</nav>
+				<div class="creatorreactor-docs-content">
+					<p class="creatorreactor-docs-no-results" hidden><?php esc_html_e( 'No documentation sections match your search.', 'creatorreactor' ); ?></p>
+					<section id="cr-docs-overview" class="creatorreactor-doc-section">
+						<h3><?php esc_html_e( 'Overview', 'creatorreactor' ); ?></h3>
+						<p><?php esc_html_e( 'CreatorReactor is a WordPress access-control plugin that gates content and login behavior based on creator-platform entitlements. In production, the plugin handles OAuth connection, entitlement sync, user mapping, and role-aware content rendering.', 'creatorreactor' ); ?></p>
+						<p><?php esc_html_e( 'Core production flow: (1) configure authentication, (2) connect Fanvue or broker mode, (3) sync/refresh entitlements, (4) apply shortcodes or blocks to protected content, (5) validate with test users before go-live.', 'creatorreactor' ); ?></p>
+						<h4><?php esc_html_e( 'Production prerequisites', 'creatorreactor' ); ?></h4>
+						<ul>
+							<li><?php esc_html_e( 'WordPress administrator access and ability to install/activate plugins', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'Fanvue developer app credentials (Creator mode) or broker credentials (Agency mode)', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'Confirmed redirect URIs and HTTPS site URL in production', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'A test user matrix (follower, subscriber, no entitlement, logged-out)', 'creatorreactor' ); ?></li>
+						</ul>
+					</section>
+					<section id="cr-docs-dashboard" class="creatorreactor-doc-section">
+						<h3><?php esc_html_e( 'Dashboard & Module Status', 'creatorreactor' ); ?></h3>
+						<p><?php esc_html_e( 'The Dashboard summarizes operational health through module traffic lights. Use it as your first troubleshooting stop before checking logs.', 'creatorreactor' ); ?></p>
+						<ul>
+							<li><?php esc_html_e( 'Green: configured and currently functional', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'Yellow: installed but incomplete configuration or pending sync/connection', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'Red: critical error condition blocking normal operation', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'Gray: module not installed/enabled', 'creatorreactor' ); ?></li>
+						</ul>
+						<p><?php esc_html_e( 'For parent modules, gray child modules are treated as not installed; healthy installed children can still keep the parent green.', 'creatorreactor' ); ?></p>
+					</section>
+					<section id="cr-docs-general" class="creatorreactor-doc-section">
+						<h3><?php esc_html_e( 'General', 'creatorreactor' ); ?></h3>
+						<p><?php esc_html_e( 'General tab controls site-wide behavior independent of OAuth credentials.', 'creatorreactor' ); ?></p>
+						<h4><?php esc_html_e( 'Key options', 'creatorreactor' ); ?></h4>
+						<ul>
+							<li><?php esc_html_e( 'WordPress login social button behavior', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'Admin timezone display for user/sync timestamps', 'creatorreactor' ); ?></li>
+						</ul>
+						<p><?php esc_html_e( 'Recommendation: keep timezone aligned with your operations team so sync and error timelines are easy to correlate.', 'creatorreactor' ); ?></p>
+					</section>
+					<section id="cr-docs-fanvue" class="creatorreactor-doc-section">
+						<h3><?php esc_html_e( 'Fanvue', 'creatorreactor' ); ?></h3>
+						<p><?php esc_html_e( 'Use the Fanvue tab to configure authentication mode and OAuth settings for production access control.', 'creatorreactor' ); ?></p>
+						<h4><?php esc_html_e( 'Configuration steps', 'creatorreactor' ); ?></h4>
+						<ol>
+							<li><?php esc_html_e( 'Select authentication mode: Creator (direct OAuth) or Agency (broker).', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'Enter required credentials (Client ID/Secret for Creator mode, Broker URL/Site ID for Agency mode).', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'Verify redirect URIs in the provider app exactly match plugin values.', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'Save settings, then run Connect from the dashboard.', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'Run a connection test and confirm green status.', 'creatorreactor' ); ?></li>
+						</ol>
+						<p><?php esc_html_e( 'If connection fails, validate credentials, redirect URI accuracy, HTTPS, and provider-side app status before retrying.', 'creatorreactor' ); ?></p>
+					</section>
+					<section id="cr-docs-cloud" class="creatorreactor-doc-section">
+						<h3><?php esc_html_e( 'CreatorReactor Cloud', 'creatorreactor' ); ?></h3>
+						<p><?php esc_html_e( 'CreatorReactor Cloud settings control whether cloud integration is considered installed and provide cloud credentials used by cloud-dependent flows.', 'creatorreactor' ); ?></p>
+						<h4><?php esc_html_e( 'Fields', 'creatorreactor' ); ?></h4>
+						<ul>
+							<li><?php esc_html_e( 'Active: when checked, cloud module is installed/enabled; when unchecked, treated as uninstalled.', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'Your CreatorReactor ID: account identifier for cloud services.', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'CreatorReactor Password: encrypted at rest; leave masked value to keep existing secret.', 'creatorreactor' ); ?></li>
+						</ul>
+						<p><?php esc_html_e( 'Production tip: rotate cloud credentials through a planned maintenance window and verify module status returns to green immediately after update.', 'creatorreactor' ); ?></p>
+					</section>
+					<section id="cr-docs-sync" class="creatorreactor-doc-section">
+						<h3><?php esc_html_e( 'Sync', 'creatorreactor' ); ?></h3>
+						<p><?php esc_html_e( 'Sync settings define how frequently entitlement data is refreshed and how long cached entitlement checks are reused.', 'creatorreactor' ); ?></p>
+						<h4><?php esc_html_e( 'Operational guidance', 'creatorreactor' ); ?></h4>
+						<ul>
+							<li><?php esc_html_e( 'Use shorter intervals for high-change environments; longer intervals for lower API load.', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'After changing OAuth scopes or credentials, disconnect and reconnect before validating sync.', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'Use “Sync & refresh list” on Users tab for immediate verification after config changes.', 'creatorreactor' ); ?></li>
+						</ul>
+					</section>
+					<section id="cr-docs-shortcodes" class="creatorreactor-doc-section">
+						<h3><?php esc_html_e( 'Shortcodes', 'creatorreactor' ); ?></h3>
+						<p><?php esc_html_e( 'Shortcodes are the primary production mechanism for gating visibility by entitlement state, login state, and tier.', 'creatorreactor' ); ?></p>
+						<p><?php esc_html_e( 'Best practice: wrap premium sections with explicit fallback content for logged-out or non-entitled visitors to improve conversion and reduce support tickets.', 'creatorreactor' ); ?></p>
+						<?php self::render_shortcodes_tab_body(); ?>
+					</section>
+					<section id="cr-docs-users" class="creatorreactor-doc-section">
+						<h3><?php esc_html_e( 'Users', 'creatorreactor' ); ?></h3>
+						<p><?php esc_html_e( 'Users tab is your verification and audit surface for production records.', 'creatorreactor' ); ?></p>
+						<ul>
+							<li><?php esc_html_e( 'Inspect source product, status, tier, and linked WordPress user IDs.', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'Use details modal to confirm record-level payload and timestamps.', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'Use refresh actions after OAuth/sync changes to confirm effective state.', 'creatorreactor' ); ?></li>
+						</ul>
+					</section>
+					<section id="cr-docs-debug" class="creatorreactor-doc-section">
+						<h3><?php esc_html_e( 'Debug', 'creatorreactor' ); ?></h3>
+						<p><?php esc_html_e( 'Debug tab provides logs and recovery actions for incident response.', 'creatorreactor' ); ?></p>
+						<h4><?php esc_html_e( 'Troubleshooting runbook', 'creatorreactor' ); ?></h4>
+						<ol>
+							<li><?php esc_html_e( 'Check Dashboard module lights to identify failing area.', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'Review connection test details and latest connection log entries.', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'Validate credentials, redirect URIs, and mode selection.', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'Reconnect and run sync refresh; validate in Users tab.', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'After recovery, clear stale logs to simplify future diagnosis.', 'creatorreactor' ); ?></li>
+						</ol>
+						<h4><?php esc_html_e( 'Go-live checklist', 'creatorreactor' ); ?></h4>
+						<ul>
+							<li><?php esc_html_e( 'OAuth connection tested successfully', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'At least one entitlement sync verified in Users tab', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'Shortcode-protected pages tested with each user state', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'Cloud module configured (or intentionally disabled)', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'Debug logs reviewed and baseline captured', 'creatorreactor' ); ?></li>
+						</ul>
+					</section>
+				</div>
+			</div>
+		</div>
+		<script>
+		(function() {
+			var root = document.currentScript ? document.currentScript.previousElementSibling : null;
+			if (!root || root.dataset.docsSearchBound === "1") {
+				return;
+			}
+			root.dataset.docsSearchBound = "1";
+			var input = root.querySelector("#creatorreactor-docs-search");
+			var clearBtn = root.querySelector("#creatorreactor-docs-clear");
+			if (!input) {
+				return;
+			}
+			var sections = Array.prototype.slice.call(root.querySelectorAll(".creatorreactor-doc-section"));
+			var noResults = root.querySelector(".creatorreactor-docs-no-results");
+			var tocLinks = Array.prototype.slice.call(root.querySelectorAll(".creatorreactor-docs-toc a[href^=\"#\"]"));
+			var headingById = {};
+			var currentSectionId = null;
+			sections.forEach(function(section) {
+				var h = section.querySelector("h3");
+				if (h) {
+					headingById[section.id] = h;
+				}
+			});
+
+			function showOnlySection(sectionId) {
+				currentSectionId = sectionId;
+				sections.forEach(function(section) {
+					section.hidden = section.id !== sectionId;
+				});
+				tocLinks.forEach(function(link) {
+					var href = (link.getAttribute("href") || "").replace(/^#/, "");
+					link.classList.toggle("is-active", href === sectionId);
+				});
+			}
+
+			function clearHighlights() {
+				Object.keys(headingById).forEach(function(id) {
+					var h = headingById[id];
+					if (!h) {
+						return;
+					}
+					if (h.dataset.originalText !== undefined) {
+						h.textContent = h.dataset.originalText;
+					}
+					h.classList.remove("creatorreactor-docs-highlight");
+				});
+			}
+
+			function updateSearch() {
+				var q = (input.value || "").toLowerCase().trim();
+				var visibleCount = 0;
+				var firstMatchId = null;
+				clearHighlights();
+				tocLinks.forEach(function(link) {
+					var targetId = (link.getAttribute("href") || "").replace(/^#/, "");
+					var section = root.querySelector("#" + targetId);
+					if (!section) {
+						link.style.display = "none";
+						return;
+					}
+					var text = (section.textContent || "").toLowerCase();
+					var visible = q === "" || text.indexOf(q) !== -1;
+					link.style.display = visible ? "" : "none";
+					if (visible) {
+						visibleCount += 1;
+						if (!firstMatchId) {
+							firstMatchId = section.id;
+						}
+						var heading = headingById[section.id];
+						if (heading && q !== "") {
+							if (heading.dataset.originalText === undefined) {
+								heading.dataset.originalText = heading.textContent || "";
+							}
+							if ((heading.dataset.originalText || "").toLowerCase().indexOf(q) !== -1) {
+								heading.classList.add("creatorreactor-docs-highlight");
+							}
+						}
+					}
+				});
+				if (noResults) {
+					noResults.hidden = visibleCount !== 0;
+				}
+				if (visibleCount === 0) {
+					sections.forEach(function(section) {
+						section.hidden = true;
+					});
+					currentSectionId = null;
+					tocLinks.forEach(function(link) {
+						link.classList.remove("is-active");
+					});
+					return;
+				}
+				if (!currentSectionId || !firstMatchId) {
+					showOnlySection(firstMatchId);
+					return;
+				}
+				var currentLink = root.querySelector(".creatorreactor-docs-toc a[href=\"#" + currentSectionId + "\"]");
+				if (!currentLink || currentLink.style.display === "none") {
+					showOnlySection(firstMatchId);
+				} else {
+					showOnlySection(currentSectionId);
+				}
+			}
+
+			tocLinks.forEach(function(link) {
+				link.addEventListener("click", function(e) {
+					e.preventDefault();
+					var targetId = (link.getAttribute("href") || "").replace(/^#/, "");
+					if (!targetId || link.style.display === "none") {
+						return;
+					}
+					showOnlySection(targetId);
+				});
+			});
+
+			input.addEventListener("input", function() {
+				updateSearch();
+			});
+			if (clearBtn) {
+				clearBtn.addEventListener("click", function() {
+					input.value = "";
+					updateSearch();
+					input.focus();
+				});
+			}
+			document.addEventListener("keydown", function(e) {
+				if (!root.closest(".creatorreactor-tab-panel.is-active")) {
+					return;
+				}
+				var key = e.key || "";
+				if (key !== "/") {
+					return;
+				}
+				var target = e.target;
+				var tag = target && target.tagName ? String(target.tagName).toLowerCase() : "";
+				if (tag === "input" || tag === "textarea" || (target && target.isContentEditable)) {
+					return;
+				}
+				e.preventDefault();
+				input.focus();
+				input.select();
+			});
+			if (sections.length > 0) {
+				showOnlySection(sections[0].id);
+			}
+			updateSearch();
+		})();
+		</script>
 		<?php
 	}
 
@@ -2039,6 +2358,15 @@ class Admin_Settings {
 		include CREATORREACTOR_PLUGIN_DIR . 'includes/partials/sync-auth-mode-fields.php';
 	}
 
+	/**
+	 * @param array  $opts                Options from {@see self::get_options()}.
+	 * @param string $cloud_password_mask Mask for cloud password field.
+	 */
+	private static function render_cloud_dynamic_fields( $opts, $cloud_password_mask ) {
+		$option_name = self::OPTION_NAME;
+		include CREATORREACTOR_PLUGIN_DIR . 'includes/partials/cloud-auth-mode-fields.php';
+	}
+
 	public static function enqueue_assets( $hook_suffix ) {
 		$hook_suffix = is_string( $hook_suffix ) ? $hook_suffix : '';
 		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : '';
@@ -2271,7 +2599,12 @@ class Admin_Settings {
 			color: #b91c1c;
 			border: 1px solid #fecaca;
 		}
-		.creatorreactor-tab-nav { margin: 0 0 16px; }
+		.creatorreactor-tab-nav {
+			margin: 0 0 16px;
+			display: flex;
+			flex-wrap: nowrap;
+			align-items: flex-end;
+		}
 		.creatorreactor-tab-nav .nav-tab {
 			white-space: nowrap;
 		}
@@ -2363,6 +2696,63 @@ class Admin_Settings {
 		}
 		.creatorreactor-modules-shell h2 {
 			margin: 0;
+		}
+		.creatorreactor-module-list {
+			margin: 14px 0 0;
+			padding: 0;
+			list-style: none;
+			display: flex;
+			flex-direction: column;
+			gap: 12px;
+		}
+		.creatorreactor-module-item {
+			display: flex;
+			align-items: flex-start;
+			gap: 10px;
+		}
+		.creatorreactor-module-status-dot {
+			width: 12px;
+			height: 12px;
+			border-radius: 999px;
+			margin-top: 5px;
+			flex: 0 0 12px;
+			background: #9ca3af;
+		}
+		.creatorreactor-module-status-dot.is-green { background: #16a34a; }
+		.creatorreactor-module-status-dot.is-yellow { background: #eab308; }
+		.creatorreactor-module-status-dot.is-red { background: #dc2626; }
+		.creatorreactor-module-status-dot.is-gray { background: #9ca3af; }
+		.creatorreactor-module-content {
+			display: flex;
+			flex-direction: column;
+			gap: 4px;
+			min-width: 0;
+		}
+		.creatorreactor-module-label {
+			font-weight: 600;
+			color: var(--cr-text-strong);
+		}
+		.creatorreactor-module-meta {
+			font-size: 12px;
+			color: var(--cr-text-muted);
+			text-transform: capitalize;
+		}
+		.creatorreactor-module-children {
+			margin: 4px 0 0 0;
+			padding: 0;
+			list-style: none;
+			display: flex;
+			flex-direction: column;
+			gap: 6px;
+		}
+		.creatorreactor-module-child {
+			display: flex;
+			align-items: center;
+			gap: 8px;
+		}
+		.creatorreactor-module-child-label {
+			font-size: 13px;
+			color: var(--cr-text);
 		}
 		.creatorreactor-connection-actions {
 			display: flex;
@@ -2632,6 +3022,57 @@ class Admin_Settings {
 		.creatorreactor-danger-zone.expanded .creatorreactor-danger-zone-content {
 			max-height: 200px;
 		}
+		.creatorreactor-tab-nav .creatorreactor-tab-link-right { margin-left: auto; }
+		.creatorreactor-tab-nav .creatorreactor-tab-link-right + .creatorreactor-tab-link-right { margin-left: 0; }
+		.creatorreactor-docs-shell { max-width: none; }
+		.creatorreactor-docs-header {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 12px;
+		}
+		.creatorreactor-docs-search-controls {
+			display: inline-flex;
+			align-items: center;
+			gap: 8px;
+		}
+		.creatorreactor-docs-layout {
+			display: grid;
+			grid-template-columns: 260px minmax(0, 1fr);
+			gap: 24px;
+			margin-top: 12px;
+		}
+		.creatorreactor-docs-toc {
+			position: sticky;
+			top: 24px;
+			align-self: start;
+			background: #f6f7f7;
+			border: 1px solid #dcdcde;
+			border-radius: 8px;
+			padding: 14px;
+		}
+		.creatorreactor-docs-toc h3 { margin: 0 0 8px; font-size: 14px; }
+		.creatorreactor-docs-toc ol { margin: 0; padding-left: 18px; }
+		.creatorreactor-docs-toc li { margin: 6px 0; }
+		.creatorreactor-docs-toc a.is-active {
+			font-weight: 700;
+			text-decoration: underline;
+		}
+		.creatorreactor-docs-no-results {
+			margin: 0 0 12px;
+			padding: 10px 12px;
+			border: 1px solid #dcdcde;
+			border-radius: 6px;
+			background: #f6f7f7;
+		}
+		.creatorreactor-docs-highlight {
+			background: #fef3c7;
+			padding: 0 4px;
+			border-radius: 4px;
+		}
+		.creatorreactor-doc-section { margin-bottom: 24px; }
+		.creatorreactor-doc-section:last-child { margin-bottom: 0; }
+		.creatorreactor-doc-section[hidden] { display: none !important; }
 		.creatorreactor-settings-container { display: flex; gap: 20px; }
 		.creatorreactor-settings-sidebar { width: 160px; flex-shrink: 0; }
 		.creatorreactor-sidebar-nav { display: flex; flex-direction: column; }
@@ -2797,6 +3238,8 @@ class Admin_Settings {
 		}
 		input.creatorreactor-advanced-endpoint-input:not([readonly]) { cursor: text; }
 		@media (max-width: 960px) {
+			.creatorreactor-docs-layout { grid-template-columns: 1fr; }
+			.creatorreactor-docs-toc { position: static; }
 			.creatorreactor-settings-container { flex-direction: column; }
 			.creatorreactor-settings-sidebar { width: 100%; }
 			.creatorreactor-sidebar-nav {
@@ -3599,6 +4042,7 @@ class Admin_Settings {
 		$opts   = self::get_options();
 		$current_product_label = Entitlements::product_label( Entitlements::PRODUCT_FANVUE );
 		$secret_mask = ! empty( $opts['creatorreactor_oauth_client_secret'] ) ? '********' : '';
+		$cloud_password_mask = ! empty( $opts['creatorreactor_cloud_password'] ) ? '********' : '';
 		$broker_mode         = ! empty( $opts['broker_mode'] );
 		$oauth_locked_initial = self::oauth_config_should_start_locked( $opts, $broker_mode );
 		$authentication_mode = $broker_mode ? self::AUTH_MODE_AGENCY : self::AUTH_MODE_CREATOR;
@@ -3617,27 +4061,34 @@ class Admin_Settings {
 				],
 			];
 		} elseif ( $is_settings_page ) {
-			$allowed_tabs = [ 'general', 'shortcodes', 'settings', 'debug' ];
+			$allowed_tabs = [ 'general', 'cloud', 'settings', 'documentation', 'debug' ];
 			$tab_links = [
 				'general'    => [
 					'label'     => __( 'General', 'creatorreactor' ),
 					'page_slug' => self::PAGE_SETTINGS_SLUG,
 					'args'      => [ 'tab' => 'general' ],
 				],
-				'shortcodes' => [
-					'label'     => __( 'Shortcodes', 'creatorreactor' ),
+				'cloud'      => [
+					'label'     => __( 'CreatorReactor Cloud', 'creatorreactor' ),
 					'page_slug' => self::PAGE_SETTINGS_SLUG,
-					'args'      => [ 'tab' => 'shortcodes' ],
+					'args'      => [ 'tab' => 'cloud' ],
 				],
 				'settings'   => [
-					'label'     => $current_product_label,
+					'label'     => __( 'Fanvue', 'creatorreactor' ),
 					'page_slug' => self::PAGE_SETTINGS_SLUG,
 					'args'      => [ 'tab' => 'settings', 'subtab' => 'oauth' ],
+				],
+				'documentation' => [
+					'label'     => __( 'Documentation', 'creatorreactor' ),
+					'page_slug' => self::PAGE_SETTINGS_SLUG,
+					'args'      => [ 'tab' => 'documentation' ],
+					'align'     => 'right',
 				],
 				'debug'      => [
 					'label'     => __( 'Debug', 'creatorreactor' ),
 					'page_slug' => self::PAGE_SETTINGS_SLUG,
 					'args'      => [ 'tab' => 'debug' ],
+					'align'     => 'right',
 				],
 			];
 		} else {
@@ -3683,7 +4134,7 @@ class Admin_Settings {
 			<nav class="nav-tab-wrapper creatorreactor-tab-nav" aria-label="<?php esc_attr_e( 'CreatorReactor sections', 'creatorreactor' ); ?>">
 				<?php foreach ( $tab_links as $tab_slug => $tab_config ) : ?>
 					<?php $tab_url = self::admin_page_url( $tab_config['args'], $tab_config['page_slug'] ); ?>
-					<a href="<?php echo esc_url( $tab_url ); ?>" class="nav-tab creatorreactor-tab-link <?php echo $tab_slug === $active_tab ? 'nav-tab-active' : ''; ?>" data-tab="<?php echo esc_attr( $tab_slug ); ?>"><?php echo esc_html( $tab_config['label'] ); ?></a>
+					<a href="<?php echo esc_url( $tab_url ); ?>" class="nav-tab creatorreactor-tab-link <?php echo $tab_slug === $active_tab ? 'nav-tab-active' : ''; ?><?php echo ( isset( $tab_config['align'] ) && 'right' === $tab_config['align'] ) ? ' creatorreactor-tab-link-right' : ''; ?>" data-tab="<?php echo esc_attr( $tab_slug ); ?>"><?php echo esc_html( $tab_config['label'] ); ?></a>
 				<?php endforeach; ?>
 			</nav>
 		<?php endif; ?>
@@ -3788,15 +4239,30 @@ class Admin_Settings {
 			</div>
 		</div>
 
-		<div class="creatorreactor-tab-panel <?php echo 'shortcodes' === $active_tab ? 'is-active' : ''; ?>" data-tab="shortcodes">
-			<?php self::render_shortcodes_tab_body(); ?>
-		</div>
-
 		<div class="creatorreactor-tab-panel <?php echo 'general' === $active_tab ? 'is-active' : ''; ?>" data-tab="general">
 			<?php self::render_general_tab_body( $opts ); ?>
 		</div>
+		<div class="creatorreactor-tab-panel <?php echo 'cloud' === $active_tab ? 'is-active' : ''; ?>" data-tab="cloud">
+			<div class="creatorreactor-section">
+				<div class="creatorreactor-settings-form-card">
+					<div class="creatorreactor-settings-panel is-active" data-subtab="cloud">
+						<h2><?php esc_html_e( 'CreatorReactor Cloud', 'creatorreactor' ); ?></h2>
+						<div id="creatorreactor-cloud-dynamic" class="creatorreactor-auth-mode-dynamic" tabindex="-1">
+							<?php self::render_cloud_dynamic_fields( $opts, $cloud_password_mask ); ?>
+						</div>
+					</div>
+					<div class="creatorreactor-settings-actions">
+						<a class="button" href="<?php echo esc_url( self::admin_page_url( [ 'tab' => 'cloud' ], self::PAGE_SETTINGS_SLUG ) ); ?>"><?php esc_html_e( 'Cancel', 'creatorreactor' ); ?></a>
+						<?php submit_button( __( 'Save Settings', 'creatorreactor' ) ); ?>
+					</div>
+				</div>
+			</div>
+		</div>
 		<div class="creatorreactor-tab-panel <?php echo 'debug' === $active_tab ? 'is-active' : ''; ?>" data-tab="debug">
 			<?php self::render_debug_tab_body(); ?>
+		</div>
+		<div class="creatorreactor-tab-panel <?php echo 'documentation' === $active_tab ? 'is-active' : ''; ?>" data-tab="documentation">
+			<?php self::render_documentation_tab_body(); ?>
 		</div>
 		<?php endif; ?>
 
@@ -3842,6 +4308,94 @@ class Admin_Settings {
 					$connection_state = 'yellow';
 				}
 
+				$fanvue_client_id_present = ! empty( $opts['creatorreactor_oauth_client_id'] );
+				$fanvue_client_secret_present = ! empty( $opts['creatorreactor_oauth_client_secret'] );
+				$fanvue_oauth_is_configured = $fanvue_client_id_present && $fanvue_client_secret_present;
+				$fanvue_oauth_state = 'yellow';
+				if ( $has_critical_error ) {
+					$fanvue_oauth_state = 'red';
+				} elseif ( $status['connected'] ) {
+					$fanvue_oauth_state = 'green';
+				} elseif ( ! $fanvue_oauth_is_configured ) {
+					$fanvue_oauth_state = 'yellow';
+				}
+				$onlyfans_oauth_state = 'gray';
+				$cloud_is_active = ! empty( $opts['creatorreactor_cloud_active'] );
+				$cloud_id_present = ! empty( $opts['creatorreactor_cloud_id'] );
+				$cloud_password_present = ! empty( $opts['creatorreactor_cloud_password'] );
+				$cloud_credentials_ready = $cloud_id_present && $cloud_password_present;
+				$cloud_connected_state = 'gray';
+				if ( $cloud_is_active ) {
+					$cloud_connected_state = 'yellow';
+					if ( $has_critical_error ) {
+						$cloud_connected_state = 'red';
+					} elseif ( $status['connected'] ) {
+						$cloud_connected_state = 'green';
+					} elseif ( ! $cloud_credentials_ready ) {
+						$cloud_connected_state = 'yellow';
+					}
+				}
+				$cloud_data_sync_state = 'gray';
+				if ( $cloud_is_active ) {
+					$cloud_data_sync_state = 'yellow';
+					if ( $has_critical_error ) {
+						$cloud_data_sync_state = 'red';
+					} elseif ( $status['connected'] && ! empty( $status['last_sync'] ) ) {
+						$cloud_data_sync_state = 'green';
+					}
+				}
+				$modules = [
+					[
+						'label'    => __( 'Wordpress Gateway', 'creatorreactor' ),
+						'children' => [
+							[
+								'label' => __( 'Fanvue OAuth', 'creatorreactor' ),
+								'state' => $fanvue_oauth_state,
+							],
+							[
+								'label' => __( 'OnlyFans OAuth', 'creatorreactor' ),
+								'state' => $onlyfans_oauth_state,
+							],
+						],
+					],
+					[
+						'label'    => __( 'CreatorReactor Cloud', 'creatorreactor' ),
+						'children' => [
+							[
+								'label' => __( 'Connected to Cloud', 'creatorreactor' ),
+								'state' => $cloud_connected_state,
+							],
+							[
+								'label' => __( 'Data Sync', 'creatorreactor' ),
+								'state' => $cloud_data_sync_state,
+							],
+						],
+					],
+				];
+				foreach ( $modules as $module_index => $module ) {
+					$children_states = [];
+					if ( ! empty( $module['children'] ) && is_array( $module['children'] ) ) {
+						foreach ( $module['children'] as $child ) {
+							$child_state = isset( $child['state'] ) ? (string) $child['state'] : 'gray';
+							$children_states[] = in_array( $child_state, [ 'green', 'yellow', 'red', 'gray' ], true ) ? $child_state : 'gray';
+						}
+					}
+					$module_state = 'yellow';
+					if ( ! empty( $children_states ) ) {
+						if ( in_array( 'red', $children_states, true ) ) {
+							$module_state = 'red';
+						} elseif ( in_array( 'yellow', $children_states, true ) ) {
+							$module_state = 'yellow';
+						} elseif ( in_array( 'green', $children_states, true ) ) {
+							// Treat gray as "not installed": installed green modules keep parent green.
+							$module_state = 'green';
+						} else {
+							$module_state = 'gray';
+						}
+					}
+					$modules[ $module_index ]['state'] = $module_state;
+				}
+
 				$connection_card_class = 'creatorreactor-connection-card is-' . $connection_state;
 				?>
 				<div class="creatorreactor-dashboard-row">
@@ -3850,6 +4404,37 @@ class Admin_Settings {
 							<div class="creatorreactor-card-header">
 								<h2 class="creatorreactor-card-title"><?php esc_html_e( 'CreatorReactor Modules', 'creatorreactor' ); ?></h2>
 							</div>
+							<ul class="creatorreactor-module-list">
+								<?php foreach ( $modules as $module ) : ?>
+									<?php
+									$module_label = isset( $module['label'] ) ? (string) $module['label'] : '';
+									$module_state = isset( $module['state'] ) ? (string) $module['state'] : 'gray';
+									$module_state = in_array( $module_state, [ 'green', 'yellow', 'red', 'gray' ], true ) ? $module_state : 'gray';
+									$module_children = ! empty( $module['children'] ) && is_array( $module['children'] ) ? $module['children'] : [];
+									?>
+									<li class="creatorreactor-module-item">
+										<span class="creatorreactor-module-status-dot is-<?php echo esc_attr( $module_state ); ?>" aria-hidden="true"></span>
+										<div class="creatorreactor-module-content">
+											<span class="creatorreactor-module-label"><?php echo esc_html( $module_label ); ?></span>
+											<?php if ( ! empty( $module_children ) ) : ?>
+												<ul class="creatorreactor-module-children">
+													<?php foreach ( $module_children as $child ) : ?>
+														<?php
+														$child_label = isset( $child['label'] ) ? (string) $child['label'] : '';
+														$child_state = isset( $child['state'] ) ? (string) $child['state'] : 'gray';
+														$child_state = in_array( $child_state, [ 'green', 'yellow', 'red', 'gray' ], true ) ? $child_state : 'gray';
+														?>
+														<li class="creatorreactor-module-child">
+															<span class="creatorreactor-module-status-dot is-<?php echo esc_attr( $child_state ); ?>" aria-hidden="true"></span>
+															<span class="creatorreactor-module-child-label"><?php echo esc_html( $child_label ); ?></span>
+														</li>
+													<?php endforeach; ?>
+												</ul>
+											<?php endif; ?>
+										</div>
+									</li>
+								<?php endforeach; ?>
+							</ul>
 						</div>
 					</div>
 					<div class="creatorreactor-dashboard-col">
