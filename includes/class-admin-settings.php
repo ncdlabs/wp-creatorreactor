@@ -1048,6 +1048,8 @@ class Admin_Settings {
 		if ( $table_exists === $table_name ) {
 			Entitlements::maybe_add_product_column();
 			Entitlements::maybe_add_display_name_column();
+			Entitlements::maybe_add_fanvue_user_uuid_column();
+			Entitlements::maybe_add_creatorreactor_uuid_column();
 			Entitlements::maybe_add_creatorreactor_user_uuid_column();
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from trusted prefix.
 			$user_totals['total'] = (int) $wpdb->get_var( "SELECT COUNT(*) FROM {$table_name}" );
@@ -1058,7 +1060,7 @@ class Admin_Settings {
 				$wpdb->prepare( "SELECT COUNT(*) FROM {$table_name} WHERE status = %s", Entitlements::STATUS_INACTIVE )
 			);
 			// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from trusted prefix.
-			$user_rows = $wpdb->get_results( "SELECT id, wp_user_id, creatorreactor_user_uuid, product, display_name, email, status, tier, expires_at, updated_at FROM {$table_name} ORDER BY updated_at DESC LIMIT 50", ARRAY_A );
+			$user_rows = $wpdb->get_results( "SELECT id, wp_user_id, fanvue_user_uuid, creatorreactor_uuid, creatorreactor_user_uuid, product, display_name, email, status, tier, expires_at, updated_at FROM {$table_name} ORDER BY updated_at DESC LIMIT 50", ARRAY_A );
 			if ( ! is_array( $user_rows ) ) {
 				$user_rows = [];
 			}
@@ -1071,14 +1073,17 @@ class Admin_Settings {
 	}
 
 	/**
-	 * Labeled lines for the Users tab Details modal (full entitlements row + derived tier label).
+	 * Labeled lines for the Users tab Details modal (full CreatorReactor record + derived tier label).
 	 *
-	 * @param array<string, mixed> $row Entitlements row.
-	 * @return array{lines: array<int, array{label: string, value: string}>}
+	 * @param array<string, mixed> $row CreatorReactor record row.
+	 * @return array{lines: array<int, array<string, mixed>>}
 	 */
 	private static function users_tab_row_details_payload( array $row ) {
 		$tier_raw = isset( $row['tier'] ) && $row['tier'] !== null && (string) $row['tier'] !== ''
 			? (string) $row['tier']
+			: '';
+		$fanvue_tier_raw = isset( $row['fanvue_tier'] ) && $row['fanvue_tier'] !== null && (string) $row['fanvue_tier'] !== ''
+			? (string) $row['fanvue_tier']
 			: '';
 		$product_key = isset( $row['product'] ) && $row['product'] !== null && (string) $row['product'] !== ''
 			? Entitlements::normalize_product( (string) $row['product'] )
@@ -1089,7 +1094,12 @@ class Admin_Settings {
 
 		$lines = [
 			[
-				'label' => __( 'Entitlement ID', 'creatorreactor' ),
+				'section' => true,
+				'label'   => __( 'CreatorReactor Records', 'creatorreactor' ),
+				'value'   => '',
+			],
+			[
+				'label' => __( 'CreatorReactor Record ID', 'creatorreactor' ),
 				'value' => isset( $row['id'] ) ? (string) (int) $row['id'] : '-',
 			],
 			[
@@ -1101,11 +1111,11 @@ class Admin_Settings {
 				'value' => Entitlements::product_label( $row['product'] ?? Entitlements::PRODUCT_FANVUE ),
 			],
 			[
-				'label' => __( 'Display name', 'creatorreactor' ),
+				'label' => __( 'Display name (normalized)', 'creatorreactor' ),
 				'value' => (string) ( $row['display_name'] ?? '' ) !== '' ? (string) $row['display_name'] : '-',
 			],
 			[
-				'label' => __( 'Email', 'creatorreactor' ),
+				'label' => __( 'Email (normalized)', 'creatorreactor' ),
 				'value' => (string) ( $row['email'] ?? '' ) !== '' ? (string) $row['email'] : '-',
 			],
 			[
@@ -1135,6 +1145,40 @@ class Admin_Settings {
 			[
 				'label' => __( 'CreatorReactor user UUID', 'creatorreactor' ),
 				'value' => (string) ( $row['creatorreactor_user_uuid'] ?? '' ) !== '' ? (string) $row['creatorreactor_user_uuid'] : '-',
+			],
+			[
+				'section' => true,
+				'label'   => __( 'Fanvue Records', 'creatorreactor' ),
+				'value'   => '',
+			],
+			[
+				'label' => __( 'Fanvue email', 'creatorreactor' ),
+				'value' => (string) ( $row['fanvue_email'] ?? '' ) !== '' ? (string) $row['fanvue_email'] : ( (string) ( $row['email'] ?? '' ) !== '' ? (string) $row['email'] : '-' ),
+			],
+			[
+				'label' => __( 'Fanvue display name', 'creatorreactor' ),
+				'value' => (string) ( $row['fanvue_display_name'] ?? '' ) !== '' ? (string) $row['fanvue_display_name'] : ( (string) ( $row['display_name'] ?? '' ) !== '' ? (string) $row['display_name'] : '-' ),
+			],
+			[
+				'label' => __( 'Fanvue user UUID', 'creatorreactor' ),
+				'value' => (string) ( $row['fanvue_user_uuid'] ?? '' ) !== '' ? (string) $row['fanvue_user_uuid'] : '-',
+			],
+			[
+				'label' => __( 'Fanvue tier', 'creatorreactor' ),
+				'value' => $fanvue_tier_raw !== '' ? $fanvue_tier_raw : ( $tier_raw !== '' ? $tier_raw : '-' ),
+			],
+			[
+				'label' => __( 'CreatorReactor UUID', 'creatorreactor' ),
+				'value' => (string) ( $row['creatorreactor_uuid'] ?? '' ) !== '' ? (string) $row['creatorreactor_uuid'] : '-',
+			],
+			[
+				'section' => true,
+				'label'   => __( 'OnlyFans Records (coming soon)', 'creatorreactor' ),
+				'value'   => '',
+			],
+			[
+				'label' => __( 'Status', 'creatorreactor' ),
+				'value' => __( 'Coming soon', 'creatorreactor' ),
 			],
 		];
 
@@ -1309,14 +1353,6 @@ class Admin_Settings {
 						<tr>
 							<td><code style="word-break: break-word;">[has_tier tier="premium" product="fanvue"] … [/has_tier]</code></td>
 							<td><?php esc_html_e( 'Shows inner content when the logged-in user has an active entitlement for a specific tier; product is optional.', 'creatorreactor' ); ?></td>
-						</tr>
-						<tr>
-							<td><code style="word-break: break-word;">[onboarding_incomplete] … [/onboarding_incomplete]</code></td>
-							<td><?php esc_html_e( 'Shows inner content only while a logged-in user still needs to complete onboarding.', 'creatorreactor' ); ?></td>
-						</tr>
-						<tr>
-							<td><code style="word-break: break-word;">[onboarding_complete] … [/onboarding_complete]</code></td>
-							<td><?php esc_html_e( 'Shows inner content only after a logged-in user has completed onboarding.', 'creatorreactor' ); ?></td>
 						</tr>
 						<tr>
 							<td><code style="word-break: break-word;">[fanvue_connected] … [/fanvue_connected]</code></td>
@@ -1849,7 +1885,7 @@ class Admin_Settings {
 	}
 
 	/**
-	 * AJAX: full entitlement row as labeled lines for the Users tab Details modal (avoids fragile data-* JSON).
+	 * AJAX: full CreatorReactor record row as labeled lines for the Users tab Details modal (avoids fragile data-* JSON).
 	 */
 	public static function ajax_get_entitlement_details() {
 		check_ajax_referer( 'creatorreactor_users_table', 'security' );
@@ -1871,6 +1907,8 @@ class Admin_Settings {
 
 		Entitlements::maybe_add_product_column();
 		Entitlements::maybe_add_display_name_column();
+		Entitlements::maybe_add_fanvue_user_uuid_column();
+		Entitlements::maybe_add_creatorreactor_uuid_column();
 		Entitlements::maybe_add_creatorreactor_user_uuid_column();
 
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from trusted prefix.
@@ -1883,7 +1921,7 @@ class Admin_Settings {
 	}
 
 	/**
-	 * AJAX: latest entitlement row details for a WordPress user (used on wp-admin user profile).
+	 * AJAX: latest CreatorReactor record row details for a WordPress user (used on wp-admin user profile).
 	 */
 	public static function ajax_get_user_entitlement_details() {
 		check_ajax_referer( 'creatorreactor_user_profile_details', 'security' );
@@ -1903,7 +1941,7 @@ class Admin_Settings {
 
 		$row = self::get_latest_entitlement_row_for_wp_user( $user_id, (string) $user->user_email );
 		if ( ! is_array( $row ) ) {
-			wp_send_json_error( __( 'No entitlement record found for this user.', 'creatorreactor' ), 404 );
+			wp_send_json_error( __( 'No CreatorReactor record found for this user.', 'creatorreactor' ), 404 );
 		}
 
 		wp_send_json_success( self::users_tab_row_details_payload( $row ) );
@@ -2063,7 +2101,7 @@ class Admin_Settings {
 					'nonce'             => wp_create_nonce( 'creatorreactor_user_profile_details' ),
 					'detailsLoading'    => __( 'Loading…', 'creatorreactor' ),
 					'detailsLoadError'  => __( 'Could not load record details.', 'creatorreactor' ),
-					'noEntitlementText' => __( 'No entitlement record found for this user.', 'creatorreactor' ),
+					'noEntitlementText' => __( 'No CreatorReactor record found for this user.', 'creatorreactor' ),
 				]
 			);
 			return;
@@ -2277,8 +2315,7 @@ class Admin_Settings {
 		.creatorreactor-dashboard-row {
 			display: grid;
 			--cr-dashboard-row-gap: 20px;
-			--cr-dashboard-shell-padding: 28px;
-			grid-template-columns: minmax(280px, 1fr) minmax(320px, calc(50vw - (var(--cr-dashboard-row-gap) + (var(--cr-dashboard-shell-padding) * 2))));
+			grid-template-columns: repeat(2, minmax(0, 1fr));
 			gap: var(--cr-dashboard-row-gap);
 			align-items: start;
 		}
@@ -2360,7 +2397,7 @@ class Admin_Settings {
 			color: #991b1b;
 			font-weight: 600;
 		}
-		@media (max-width: 900px) {
+		@media (max-width: 640px) {
 			.creatorreactor-dashboard-row { grid-template-columns: 1fr; }
 			.creatorreactor-dashboard-grid { grid-template-columns: 1fr; }
 		}
@@ -2389,11 +2426,60 @@ class Admin_Settings {
 			color: #fff;
 			box-shadow: 0 8px 20px rgba(220, 38, 38, 0.28);
 		}
+		.creatorreactor-btn-disconnect.button-icon {
+			width: 42px;
+			min-width: 42px;
+			padding: 0 10px;
+			font-size: 14px;
+			line-height: 1;
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			margin-left: auto;
+			overflow: hidden;
+			white-space: nowrap;
+			transition: width 0.18s ease, transform 0.12s ease, box-shadow 0.16s ease, filter 0.12s ease;
+		}
 		.creatorreactor-btn-disconnect.button:hover,
 		.creatorreactor-btn-disconnect.button:focus {
 			background: #b91c1c;
 			border-color: #991b1b;
 			color: #fff;
+		}
+		.creatorreactor-btn-disconnect.button-icon:hover,
+		.creatorreactor-btn-disconnect.button-icon:focus {
+			transform: translateY(-1px);
+		}
+		.creatorreactor-btn-disconnect-icon {
+			display: inline-block;
+			font-weight: 700;
+			transform: translateY(-1px);
+		}
+		.creatorreactor-btn-disconnect-text {
+			display: inline-block;
+			width: 0;
+			opacity: 0;
+			overflow: hidden;
+			font-size: 11px;
+			letter-spacing: 0.06em;
+			transition: opacity 0.12s ease, width 0.18s ease, margin-left 0.18s ease;
+		}
+		.creatorreactor-btn-disconnect.button-icon:hover,
+		.creatorreactor-btn-disconnect.button-icon:focus,
+		.creatorreactor-btn-disconnect.button-icon:focus-visible {
+			width: 132px;
+		}
+		.creatorreactor-btn-disconnect.button-icon:hover .creatorreactor-btn-disconnect-icon,
+		.creatorreactor-btn-disconnect.button-icon:focus .creatorreactor-btn-disconnect-icon,
+		.creatorreactor-btn-disconnect.button-icon:focus-visible .creatorreactor-btn-disconnect-icon {
+			display: none;
+		}
+		.creatorreactor-btn-disconnect.button-icon:hover .creatorreactor-btn-disconnect-text,
+		.creatorreactor-btn-disconnect.button-icon:focus .creatorreactor-btn-disconnect-text,
+		.creatorreactor-btn-disconnect.button-icon:focus-visible .creatorreactor-btn-disconnect-text {
+			width: auto;
+			opacity: 1;
+			margin-left: 0;
 		}
 		.creatorreactor-connection-log {
 			margin-top: 20px;
@@ -2486,6 +2572,15 @@ class Admin_Settings {
 		}
 		#creatorreactor-user-details-modal .creatorreactor-modal-body dt { margin: 0; color: #646970; font-weight: 600; }
 		#creatorreactor-user-details-modal .creatorreactor-modal-body dd { margin: 0; word-break: break-word; }
+		#creatorreactor-user-details-modal .creatorreactor-modal-body dt.creatorreactor-details-section {
+			grid-column: 1 / span 2;
+			margin-top: 10px;
+			padding-top: 10px;
+			border-top: 1px solid #dcdcde;
+			color: #1d2327;
+			font-weight: 700;
+		}
+		#creatorreactor-user-details-modal .creatorreactor-modal-body dd.creatorreactor-details-section-spacer { display: none; }
 		/* Danger Zone Styles */
 		.creatorreactor-danger-zone {
 			background: #fff8f8;
@@ -3296,6 +3391,8 @@ class Admin_Settings {
 
 		Entitlements::maybe_add_product_column();
 		Entitlements::maybe_add_display_name_column();
+		Entitlements::maybe_add_fanvue_user_uuid_column();
+		Entitlements::maybe_add_creatorreactor_uuid_column();
 		Entitlements::maybe_add_creatorreactor_user_uuid_column();
 
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from trusted prefix.
@@ -3397,7 +3494,7 @@ class Admin_Settings {
 				<div class="creatorreactor-modal-backdrop" aria-hidden="true"></div>
 				<div class="creatorreactor-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="creatorreactor-user-details-modal-title">
 					<div class="creatorreactor-modal-header">
-						<h3 id="creatorreactor-user-details-modal-title"><?php esc_html_e( 'Entitlement record', 'creatorreactor' ); ?></h3>
+						<h3 id="creatorreactor-user-details-modal-title"><?php esc_html_e( 'CreatorReactor record', 'creatorreactor' ); ?></h3>
 						<button type="button" class="creatorreactor-user-details-close" aria-label="<?php esc_attr_e( 'Close', 'creatorreactor' ); ?>">&times;</button>
 					</div>
 					<div class="creatorreactor-modal-body" id="creatorreactor-user-details-modal-body"></div>
@@ -3658,7 +3755,7 @@ class Admin_Settings {
 			<div class="creatorreactor-modal-backdrop" aria-hidden="true"></div>
 			<div class="creatorreactor-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="creatorreactor-user-details-modal-title">
 				<div class="creatorreactor-modal-header">
-					<h3 id="creatorreactor-user-details-modal-title"><?php esc_html_e( 'Entitlement record', 'creatorreactor' ); ?></h3>
+					<h3 id="creatorreactor-user-details-modal-title"><?php esc_html_e( 'CreatorReactor record', 'creatorreactor' ); ?></h3>
 					<button type="button" class="creatorreactor-user-details-close" aria-label="<?php esc_attr_e( 'Close', 'creatorreactor' ); ?>">&times;</button>
 				</div>
 				<div class="creatorreactor-modal-body" id="creatorreactor-user-details-modal-body"></div>
@@ -3776,7 +3873,10 @@ class Admin_Settings {
 									<?php wp_nonce_field( 'creatorreactor_disconnect' ); ?>
 									<input type="hidden" name="action" value="creatorreactor_disconnect" />
 									<p class="submit">
-										<input type="submit" class="button creatorreactor-btn-disconnect" value="<?php esc_attr_e( 'Disconnect', 'creatorreactor' ); ?>" onclick="return confirm('<?php esc_attr_e( 'Are you sure you want to disconnect?', 'creatorreactor' ); ?>');" />
+										<button type="submit" class="button creatorreactor-btn-disconnect button-icon" title="<?php esc_attr_e( 'Disconnect', 'creatorreactor' ); ?>" aria-label="<?php esc_attr_e( 'Disconnect', 'creatorreactor' ); ?>" onclick="return confirm('<?php esc_attr_e( 'Are you sure you want to disconnect?', 'creatorreactor' ); ?>');">
+											<span class="creatorreactor-btn-disconnect-icon" aria-hidden="true">&times;</span>
+											<span class="creatorreactor-btn-disconnect-text" aria-hidden="true"><?php esc_html_e( 'DISCONNECT', 'creatorreactor' ); ?></span>
+										</button>
 									</p>
 								</form>
 							<?php elseif ( $connect_url ) : ?>

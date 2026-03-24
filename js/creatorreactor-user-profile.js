@@ -62,6 +62,10 @@
 					if (!line) {
 						continue;
 					}
+					if (line.section) {
+						parts.push('<dt class="creatorreactor-details-section">' + escapeHtml(line.label || '') + '</dt><dd class="creatorreactor-details-section-spacer"></dd>');
+						continue;
+					}
 					var value = line.value !== undefined && line.value !== null ? String(line.value) : '';
 					parts.push('<dt>' + escapeHtml(line.label || '') + '</dt><dd>' + escapeHtml(value) + '</dd>');
 				}
@@ -86,7 +90,7 @@
 			}
 			if (String(hasDetails) !== '1') {
 				openModal({
-					lines: [{ label: '', value: creatorreactorUserProfile.noEntitlementText || 'No entitlement record found for this user.' }]
+					lines: [{ label: '', value: creatorreactorUserProfile.noEntitlementText || 'No CreatorReactor record found for this user.' }]
 				});
 				return;
 			}

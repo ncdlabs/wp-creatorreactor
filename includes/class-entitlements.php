@@ -122,9 +122,14 @@ class Entitlements {
 				product varchar(50) NOT NULL DEFAULT 'fanvue',
 				email varchar(255) DEFAULT NULL,
 				display_name varchar(255) DEFAULT NULL,
+				fanvue_email varchar(255) DEFAULT NULL,
+				fanvue_display_name varchar(255) DEFAULT NULL,
+				fanvue_user_uuid varchar(36) DEFAULT NULL,
+				creatorreactor_uuid varchar(36) DEFAULT NULL,
 				creatorreactor_user_uuid varchar(36) DEFAULT NULL,
 				status varchar(20) NOT NULL DEFAULT 'unknown',
 				tier varchar(100) DEFAULT NULL,
+				fanvue_tier varchar(100) DEFAULT NULL,
 				fanvue_sync_snapshot longtext DEFAULT NULL,
 				updated_at datetime NOT NULL DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
 				expires_at datetime NOT NULL,
@@ -132,6 +137,9 @@ class Entitlements {
 				KEY wp_user_id (wp_user_id),
 				KEY product (product),
 				KEY email (email(191)),
+				KEY fanvue_email (fanvue_email(191)),
+				KEY fanvue_user_uuid (fanvue_user_uuid),
+				KEY creatorreactor_uuid (creatorreactor_uuid),
 				KEY creatorreactor_user_uuid (creatorreactor_user_uuid),
 				KEY status_expires (status, expires_at)
 			) {$charset};";
@@ -140,6 +148,9 @@ class Entitlements {
 			dbDelta( $sql );
 			self::maybe_add_product_column();
 			self::maybe_add_display_name_column();
+			self::maybe_add_fanvue_payload_columns();
+			self::maybe_add_fanvue_user_uuid_column();
+			self::maybe_add_creatorreactor_uuid_column();
 			self::maybe_add_creatorreactor_user_uuid_column();
 			self::maybe_add_fanvue_sync_snapshot_column();
 			self::$schema_checked = true;
@@ -166,6 +177,9 @@ class Entitlements {
 
 		self::maybe_add_product_column();
 		self::maybe_add_display_name_column();
+		self::maybe_add_fanvue_payload_columns();
+		self::maybe_add_fanvue_user_uuid_column();
+		self::maybe_add_creatorreactor_uuid_column();
 		self::maybe_add_creatorreactor_user_uuid_column();
 		self::maybe_add_fanvue_sync_snapshot_column();
 		self::$schema_checked = true;
@@ -328,6 +342,104 @@ class Entitlements {
 		}
 	}
 
+	public static function maybe_add_fanvue_payload_columns() {
+		global $wpdb;
+		$table = self::get_table_name();
+		if ( ! method_exists( $wpdb, 'query' ) ) {
+			return;
+		}
+		if ( ! self::has_column( 'fanvue_email' ) ) {
+			$wpdb->query( "ALTER TABLE {$table} ADD COLUMN fanvue_email varchar(255) DEFAULT NULL AFTER display_name" );
+		}
+		if ( ! self::has_column( 'fanvue_display_name' ) ) {
+			$wpdb->query( "ALTER TABLE {$table} ADD COLUMN fanvue_display_name varchar(255) DEFAULT NULL AFTER fanvue_email" );
+		}
+		if ( ! self::has_column( 'fanvue_tier' ) ) {
+			$wpdb->query( "ALTER TABLE {$table} ADD COLUMN fanvue_tier varchar(100) DEFAULT NULL AFTER tier" );
+		}
+
+		// Backfill Fanvue-prefixed columns from existing generic columns for upgraded installs.
+		$wpdb->query( "UPDATE {$table} SET fanvue_email = email WHERE product = 'fanvue' AND (fanvue_email IS NULL OR fanvue_email = '') AND email IS NOT NULL AND email != ''" );
+		$wpdb->query( "UPDATE {$table} SET fanvue_display_name = display_name WHERE product = 'fanvue' AND (fanvue_display_name IS NULL OR fanvue_display_name = '') AND display_name IS NOT NULL AND display_name != ''" );
+		$wpdb->query( "UPDATE {$table} SET fanvue_tier = tier WHERE product = 'fanvue' AND (fanvue_tier IS NULL OR fanvue_tier = '') AND tier IS NOT NULL AND tier != ''" );
+
+		if ( ! self::has_index( 'fanvue_email' ) ) {
+			$wpdb->query( "ALTER TABLE {$table} ADD KEY fanvue_email (fanvue_email(191))" );
+		}
+	}
+
+	public static function maybe_add_fanvue_user_uuid_column() {
+		global $wpdb;
+		$table = self::get_table_name();
+		if ( ! method_exists( $wpdb, 'query' ) ) {
+			return;
+		}
+		if ( ! self::has_column( 'fanvue_user_uuid' ) ) {
+			$wpdb->query( "ALTER TABLE {$table} ADD COLUMN fanvue_user_uuid varchar(36) DEFAULT NULL AFTER display_name" );
+		}
+		// Backfill for upgraded installs so existing rows remain queryable by Fanvue UUID.
+		$wpdb->query( "UPDATE {$table} SET fanvue_user_uuid = creatorreactor_user_uuid WHERE (fanvue_user_uuid IS NULL OR fanvue_user_uuid = '') AND creatorreactor_user_uuid IS NOT NULL AND creatorreactor_user_uuid != ''" );
+		if ( ! self::has_index( 'fanvue_user_uuid' ) ) {
+			$wpdb->query( "ALTER TABLE {$table} ADD KEY fanvue_user_uuid (fanvue_user_uuid)" );
+		}
+	}
+
+	public static function maybe_add_creatorreactor_uuid_column() {
+		global $wpdb;
+		$table = self::get_table_name();
+		if ( ! method_exists( $wpdb, 'query' ) ) {
+			return;
+		}
+		if ( ! self::has_column( 'creatorreactor_uuid' ) ) {
+			$wpdb->query( "ALTER TABLE {$table} ADD COLUMN creatorreactor_uuid varchar(36) DEFAULT NULL AFTER fanvue_user_uuid" );
+		}
+		// Backfill rows created before creatorreactor_uuid existed.
+		$rows = $wpdb->get_results( "SELECT id FROM {$table} WHERE creatorreactor_uuid IS NULL OR creatorreactor_uuid = '' LIMIT 1000", ARRAY_A );
+		if ( is_array( $rows ) && ! empty( $rows ) ) {
+			foreach ( $rows as $row ) {
+				$row_id = isset( $row['id'] ) ? (int) $row['id'] : 0;
+				if ( $row_id <= 0 ) {
+					continue;
+				}
+				if ( method_exists( $wpdb, 'update' ) ) {
+					$wpdb->update(
+						$table,
+						[ 'creatorreactor_uuid' => self::generate_creatorreactor_uuid() ],
+						[ 'id' => $row_id ],
+						[ '%s' ],
+						[ '%d' ]
+					);
+				}
+			}
+		}
+		if ( ! self::has_index( 'creatorreactor_uuid' ) ) {
+			$wpdb->query( "ALTER TABLE {$table} ADD KEY creatorreactor_uuid (creatorreactor_uuid)" );
+		}
+	}
+
+	/**
+	 * Generate a UUID for creatorreactor_uuid storage.
+	 *
+	 * @return string
+	 */
+	private static function generate_creatorreactor_uuid() {
+		$uuid = wp_generate_uuid4();
+		if ( ! is_string( $uuid ) || $uuid === '' ) {
+			$uuid = sprintf(
+				'%04x%04x-%04x-%04x-%04x-%04x%04x%04x',
+				wp_rand( 0, 0xffff ),
+				wp_rand( 0, 0xffff ),
+				wp_rand( 0, 0xffff ),
+				wp_rand( 0, 0x0fff ) | 0x4000,
+				wp_rand( 0, 0x3fff ) | 0x8000,
+				wp_rand( 0, 0xffff ),
+				wp_rand( 0, 0xffff ),
+				wp_rand( 0, 0xffff )
+			);
+		}
+		return sanitize_text_field( strtolower( $uuid ) );
+	}
+
 	/**
 	 * Ensure creatorreactor_user_uuid exists (older installs / dbDelta gaps may omit it).
 	 * Renames legacy column `uuid` if present.
@@ -463,7 +575,7 @@ class Entitlements {
 			self::maybe_ensure_schema();
 			global $wpdb;
 			$table = self::get_table_name();
-			$creatorreactor_uuid  = sanitize_text_field( $creatorreactor_uuid );
+			$fanvue_user_uuid     = sanitize_text_field( $creatorreactor_uuid );
 			$status       = in_array( $status, [ self::STATUS_ACTIVE, self::STATUS_INACTIVE, self::STATUS_UNKNOWN ], true ) ? $status : self::STATUS_UNKNOWN;
 			$product      = self::normalize_product( $product );
 			$email        = sanitize_email( $email );
@@ -476,9 +588,10 @@ class Entitlements {
 
 			$existing = $wpdb->get_var(
 				$wpdb->prepare(
-					"SELECT id FROM {$table} WHERE creatorreactor_user_uuid = %s AND product = %s LIMIT 1",
-					$creatorreactor_uuid,
-					$product
+					"SELECT id FROM {$table} WHERE product = %s AND (fanvue_user_uuid = %s OR ((fanvue_user_uuid IS NULL OR fanvue_user_uuid = '') AND creatorreactor_user_uuid = %s)) LIMIT 1",
+					$product,
+					$fanvue_user_uuid,
+					$fanvue_user_uuid
 				)
 			);
 			if ( self::report_db_error( 'Entitlements SELECT' ) ) {
@@ -498,7 +611,8 @@ class Entitlements {
 
 			$data = [
 				'product'                  => $product,
-				'creatorreactor_user_uuid' => $creatorreactor_uuid,
+				'fanvue_user_uuid'         => $fanvue_user_uuid,
+				'creatorreactor_user_uuid' => $fanvue_user_uuid,
 				'status'                   => $status,
 				'expires_at'               => $expires_at,
 				'updated_at'               => current_time( 'mysql' ),
@@ -507,6 +621,11 @@ class Entitlements {
 				'display_name'             => $display_name,
 				'tier'                     => $tier,
 			];
+			if ( $product === self::PRODUCT_FANVUE ) {
+				$data['fanvue_email']        = $email !== '' ? $email : null;
+				$data['fanvue_display_name'] = $display_name;
+				$data['fanvue_tier']         = $tier;
+			}
 			if ( $snapshot !== null ) {
 				$data['fanvue_sync_snapshot'] = $snapshot;
 			}
@@ -533,6 +652,7 @@ class Entitlements {
 				return $result !== false;
 			}
 
+			$data['creatorreactor_uuid'] = self::generate_creatorreactor_uuid();
 			$format = [];
 			foreach ( array_keys( $data ) as $_k ) {
 				$format[] = ( $_k === 'wp_user_id' ) ? '%d' : '%s';
@@ -746,6 +866,8 @@ class Entitlements {
 			', ',
 			[
 				'id',
+				'fanvue_user_uuid',
+				'creatorreactor_uuid',
 				'creatorreactor_user_uuid',
 				'email',
 				'display_name',
@@ -788,6 +910,8 @@ class Entitlements {
 			', ',
 			[
 				'id',
+				'fanvue_user_uuid',
+				'creatorreactor_uuid',
 				'creatorreactor_user_uuid',
 				'email',
 				'display_name',
@@ -849,7 +973,10 @@ class Entitlements {
 			if ( $tier !== '' && ! in_array( $tier, $by_product[ $p ]['tiers'], true ) ) {
 				$by_product[ $p ]['tiers'][] = $tier;
 			}
-			$ext_uuid = isset( $row['creatorreactor_user_uuid'] ) ? sanitize_text_field( (string) $row['creatorreactor_user_uuid'] ) : '';
+			$ext_uuid = isset( $row['creatorreactor_uuid'] ) ? sanitize_text_field( (string) $row['creatorreactor_uuid'] ) : '';
+			if ( $ext_uuid === '' ) {
+				$ext_uuid = isset( $row['creatorreactor_user_uuid'] ) ? sanitize_text_field( (string) $row['creatorreactor_user_uuid'] ) : '';
+			}
 			if ( $ext_uuid !== '' && ! in_array( $ext_uuid, $by_product[ $p ]['uuids'], true ) ) {
 				$by_product[ $p ]['uuids'][] = $ext_uuid;
 			}
@@ -863,6 +990,13 @@ class Entitlements {
 
 		$fanvue_uuid = get_user_meta( $user_id, self::USERMETA_CREATORREACTOR_UUID, true );
 		$fanvue_uuid = is_string( $fanvue_uuid ) ? sanitize_text_field( $fanvue_uuid ) : '';
+		$creatorreactor_uuid = '';
+		foreach ( $merged as $row ) {
+			$creatorreactor_uuid = isset( $row['creatorreactor_uuid'] ) ? sanitize_text_field( (string) $row['creatorreactor_uuid'] ) : '';
+			if ( $creatorreactor_uuid !== '' ) {
+				break;
+			}
+		}
 
 		return [
 			'v'          => self::SOCIAL_ENTITLEMENTS_SNAPSHOT_VERSION,
@@ -872,7 +1006,8 @@ class Entitlements {
 			'by_product' => $by_product,
 			'linked'     => array_filter(
 				[
-					'fanvue_uuid' => $fanvue_uuid !== '' ? $fanvue_uuid : null,
+					'fanvueUserUUID'      => $fanvue_uuid !== '' ? $fanvue_uuid : null,
+					'creatorReactorUUID'  => $creatorreactor_uuid !== '' ? $creatorreactor_uuid : null,
 				]
 			),
 		];

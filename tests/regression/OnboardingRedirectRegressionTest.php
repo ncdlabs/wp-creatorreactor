@@ -66,6 +66,20 @@ final class OnboardingRedirectRegressionTest extends BaseTestCase
             }
         );
         Functions\when('apply_filters')->alias(static fn ($tag, $value, ...$rest) => $value);
+        Functions\when('sanitize_text_field')->alias(
+            static fn ($value): string => trim((string) $value)
+        );
+        Functions\when('get_option')->alias(
+            static function ($key, $default = false) {
+                if ($key === 'creatorreactor_settings') {
+                    return [
+                        'creatorreactor_oauth_scopes' => 'openid offline_access',
+                        'display_timezone' => 'system',
+                    ];
+                }
+                return $default;
+            }
+        );
     }
 
     protected function tearDown(): void
@@ -104,12 +118,12 @@ final class OnboardingRedirectRegressionTest extends BaseTestCase
         );
     }
 
-    public function testGetPostOauthRedirectSendsIncompleteLinkedUserToOnboardingWithRedirect(): void
+    public function testGetPostOauthRedirectBypassesOnboardingAndReturnsHomepage(): void
     {
         $dest = Onboarding::get_post_oauth_redirect(42, 'https://example.com/protected-content');
 
         self::assertSame(
-            'https://example.com/?creatorreactor_onboarding=1&redirect_to=https%3A%2F%2Fexample.com%2Fprotected-content',
+            'https://example.com/',
             $dest
         );
     }
@@ -123,7 +137,7 @@ final class OnboardingRedirectRegressionTest extends BaseTestCase
         );
         Functions\expect('wp_safe_redirect')
             ->once()
-            ->with('https://example.com/wp-login.php?redirect_to=https%3A%2F%2Fexample.com%2F%3Fcreatorreactor_onboarding%3D1');
+            ->with('https://example.com/wp-login.php?redirect_to=https%3A%2F%2Fexample.com%2F');
         Functions\when('apply_filters')->alias(
             static fn ($tag, $value, ...$rest) => $tag === 'creatorreactor_onboarding_redirect_should_exit' ? false : $value
         );
@@ -152,5 +166,10 @@ final class OnboardingRedirectRegressionTest extends BaseTestCase
 
         Onboarding::handle_submit();
         self::assertTrue(true);
+    }
+
+    public function testUserNeedsOnboardingReturnsFalseByDefault(): void
+    {
+        self::assertFalse(Onboarding::user_needs_onboarding(42));
     }
 }

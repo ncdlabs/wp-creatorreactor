@@ -22,3 +22,4 @@ require_once __DIR__ . '/../includes/class-creatorreactor-banner.php';
 require_once __DIR__ . '/../includes/class-creatorreactor.php';
 require_once __DIR__ . '/../includes/class-creatorreactor-onboarding.php';
 require_once __DIR__ . '/../includes/class-creatorreactor-shortcodes.php';
+require_once __DIR__ . '/../includes/class-creatorreactor-fan-oauth.php';

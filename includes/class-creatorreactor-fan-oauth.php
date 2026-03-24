@@ -66,14 +66,17 @@ class Fan_OAuth {
 		}
 
 		$access_token = CreatorReactor_OAuth::get_fan_oauth_access_token_for_user( $uid );
-		if ( ! is_string( $access_token ) || $access_token === '' ) {
-			Admin_Settings::log_connection( 'debug', sprintf( 'Fan OAuth login sync skipped for WP user %d: no valid fan access token.', $uid ) );
-			return;
+		$profile      = null;
+		$profile_src  = 'live';
+		if ( is_string( $access_token ) && $access_token !== '' ) {
+			$profile = CreatorReactor_Client::fetch_profile_with_access_token( $access_token );
 		}
-
-		$profile = CreatorReactor_Client::fetch_profile_with_access_token( $access_token );
 		if ( ! is_array( $profile ) ) {
-			Admin_Settings::log_connection( 'debug', sprintf( 'Fan OAuth login sync skipped for WP user %d: profile fetch returned empty.', $uid ) );
+			$profile     = self::get_stored_profile_snapshot_for_user( $uid );
+			$profile_src = 'snapshot';
+		}
+		if ( ! is_array( $profile ) ) {
+			Admin_Settings::log_connection( 'debug', sprintf( 'Fan OAuth login sync skipped for WP user %d: no usable OAuth profile payload.', $uid ) );
 			return;
 		}
 
@@ -88,13 +91,33 @@ class Fan_OAuth {
 		Admin_Settings::log_connection(
 			'debug',
 			sprintf(
-				'Fan OAuth login sync complete for WP user %d: role=%s uuid=%s entitlement_sync=%s',
+				'Fan OAuth login sync complete for WP user %d: role=%s uuid=%s entitlement_sync=%s profile_source=%s',
 				$uid,
 				$oauth_role !== '' ? $oauth_role : 'unknown',
 				self::format_uuid_for_log( isset( $identity['uuid'] ) ? (string) $identity['uuid'] : '' ),
-				$did_sync ? 'yes' : 'no'
+				$did_sync ? 'yes' : 'no',
+				$profile_src
 			)
 		);
+	}
+
+	/**
+	 * Read/decode the stored OAuth profile snapshot for a user.
+	 *
+	 * @param int $wp_user_id WordPress user ID.
+	 * @return array<string, mixed>|null
+	 */
+	private static function get_stored_profile_snapshot_for_user( $wp_user_id ) {
+		$wp_user_id = (int) $wp_user_id;
+		if ( $wp_user_id <= 0 ) {
+			return null;
+		}
+		$snapshot = get_user_meta( $wp_user_id, Onboarding::META_FANVUE_PROFILE_SNAPSHOT, true );
+		if ( ! is_string( $snapshot ) || $snapshot === '' ) {
+			return null;
+		}
+		$decoded = json_decode( $snapshot, true );
+		return is_array( $decoded ) ? $decoded : null;
 	}
 
 	public static function allow_without_cookie_nonce( $result ) {
@@ -336,6 +359,7 @@ class Fan_OAuth {
 
 		$access = isset( $tokens['access_token'] ) ? $tokens['access_token'] : '';
 		$profile = CreatorReactor_Client::fetch_profile_with_access_token( $access );
+		self::log_oauth_profile_payload_debug( $profile );
 		$identity = self::identity_from_profile( $profile );
 
 		$has_email = $identity['email'] !== '' && is_email( $identity['email'] );
@@ -359,23 +383,25 @@ class Fan_OAuth {
 			$user = self::get_user_by_fanvue_uuid( $identity['uuid'] );
 		}
 		if ( ! $user ) {
-			$pending = Onboarding::store_pending_fanvue_registration( $identity, $redirect_to, $tokens, $profile );
-			if ( $pending === '' ) {
+			if ( ! $has_email ) {
 				wp_safe_redirect( add_query_arg( 'creatorreactor_fanvue', 'user', $redirect_to ) );
 				exit;
 			}
-			Onboarding::set_fan_pending_cookie( $pending );
-			$ob_url = Onboarding::get_onboarding_url_with_pending( $pending, $redirect_to );
-			$ob_log = 'Fan OAuth: new fan — pending registration stored; redirecting to onboarding (combine Fanvue data with form, then create WP user).';
-			if ( ! $has_email ) {
-				$ob_log .= ' Fanvue profile had no email.';
+			$identity_for_insert = [
+				'email'   => $identity['email'],
+				'uuid'    => $identity['uuid'],
+				'display' => $identity['display'],
+			];
+			$new_uid = self::insert_wp_user_from_fanvue_identity( $identity_for_insert );
+			if ( is_wp_error( $new_uid ) ) {
+				wp_safe_redirect( add_query_arg( 'creatorreactor_fanvue', 'user', $redirect_to ) );
+				exit;
 			}
-			if ( ! $has_uuid ) {
-				$ob_log .= ' Fanvue profile had no user id.';
+			$user = get_user_by( 'id', (int) $new_uid );
+			if ( ! ( $user instanceof \WP_User ) ) {
+				wp_safe_redirect( add_query_arg( 'creatorreactor_fanvue', 'user', $redirect_to ) );
+				exit;
 			}
-			Admin_Settings::log_connection( 'info', $ob_log );
-			wp_safe_redirect( $ob_url );
-			exit;
 		}
 
 		if ( ! $user ) {
@@ -429,6 +455,7 @@ class Fan_OAuth {
 		if ( $wp_user_id <= 0 || ! is_array( $identity ) || ! is_array( $profile ) ) {
 			return false;
 		}
+		self::sync_wp_profile_fields_from_oauth_profile( $wp_user_id, $profile );
 
 		$oauth_role = self::role_from_oauth_profile( $profile );
 		if ( $oauth_role !== '' ) {
@@ -529,6 +556,108 @@ class Fan_OAuth {
 	}
 
 	/**
+	 * Map Fanvue OAuth payload fields into WordPress profile fields/user meta.
+	 *
+	 * Mapping:
+	 * - fanvue_id   => user meta `fanvue_id`
+	 * - bio         => WP biographical info (`description`)
+	 * - displayName => WP `display_name`
+	 * - isCreator   => user meta `isFanvueCreator`
+	 * - createdAt   => user meta `fanvueAccountCreatedAt`
+	 * - updatedAt   => user meta `fanvueAccountUpdatedAt`
+	 * - avatarUrl   => user meta `avatarUrl`
+	 * - bannerUrl   => user meta `bannerUrl`
+	 *
+	 * @param int                  $wp_user_id WordPress user ID.
+	 * @param array<string, mixed> $profile    Raw OAuth profile payload.
+	 * @return void
+	 */
+	private static function sync_wp_profile_fields_from_oauth_profile( $wp_user_id, array $profile ) {
+		$data = $profile;
+		if ( isset( $profile['data'] ) && is_array( $profile['data'] ) ) {
+			$data = $profile['data'];
+		}
+		$user_data = ( isset( $data['user'] ) && is_array( $data['user'] ) ) ? $data['user'] : [];
+
+		$fanvue_id = self::first_scalar_field( $data, $user_data, [ 'fanvue_id', 'id', 'uuid', 'userId', 'user_id' ] );
+		if ( $fanvue_id !== '' ) {
+			update_user_meta( $wp_user_id, 'fanvue_id', sanitize_text_field( $fanvue_id ) );
+		}
+
+		$bio = self::first_scalar_field( $data, $user_data, [ 'bio' ] );
+		if ( $bio !== '' ) {
+			wp_update_user(
+				[
+					'ID'          => $wp_user_id,
+					'description' => sanitize_textarea_field( $bio ),
+				]
+			);
+		}
+
+		$display = self::first_scalar_field( $data, $user_data, [ 'displayName' ] );
+		if ( $display !== '' ) {
+			wp_update_user(
+				[
+					'ID'           => $wp_user_id,
+					'display_name' => sanitize_text_field( $display ),
+				]
+			);
+		}
+
+		$is_creator_raw = self::first_scalar_field( $data, $user_data, [ 'isCreator' ] );
+		if ( $is_creator_raw !== '' ) {
+			$is_creator_norm = in_array( strtolower( trim( $is_creator_raw ) ), [ '1', 'true', 'yes' ], true ) ? '1' : '0';
+			update_user_meta( $wp_user_id, 'isFanvueCreator', $is_creator_norm );
+		}
+
+		$created_at = self::first_scalar_field( $data, $user_data, [ 'createdAt' ] );
+		if ( $created_at !== '' ) {
+			update_user_meta( $wp_user_id, 'fanvueAccountCreatedAt', sanitize_text_field( $created_at ) );
+		}
+
+		$updated_at = self::first_scalar_field( $data, $user_data, [ 'updatedAt' ] );
+		if ( $updated_at !== '' ) {
+			update_user_meta( $wp_user_id, 'fanvueAccountUpdatedAt', sanitize_text_field( $updated_at ) );
+		}
+
+		$avatar = self::first_scalar_field( $data, $user_data, [ 'avatarUrl' ] );
+		if ( $avatar !== '' ) {
+			update_user_meta( $wp_user_id, 'avatarUrl', esc_url_raw( $avatar ) );
+		}
+
+		$banner = self::first_scalar_field( $data, $user_data, [ 'bannerUrl' ] );
+		if ( $banner !== '' ) {
+			update_user_meta( $wp_user_id, 'bannerUrl', esc_url_raw( $banner ) );
+		}
+	}
+
+	/**
+	 * Get first non-null scalar value from profile/data/user payload keys.
+	 *
+	 * @param array<string, mixed> $data      Primary payload map.
+	 * @param array<string, mixed> $user_data Nested user payload map.
+	 * @param array<int, string>   $keys      Candidate keys in priority order.
+	 * @return string
+	 */
+	private static function first_scalar_field( array $data, array $user_data, array $keys ) {
+		foreach ( $keys as $key ) {
+			if ( array_key_exists( $key, $data ) && $data[ $key ] !== null && is_scalar( $data[ $key ] ) ) {
+				if ( is_bool( $data[ $key ] ) ) {
+					return $data[ $key ] ? '1' : '0';
+				}
+				return trim( (string) $data[ $key ] );
+			}
+			if ( array_key_exists( $key, $user_data ) && $user_data[ $key ] !== null && is_scalar( $user_data[ $key ] ) ) {
+				if ( is_bool( $user_data[ $key ] ) ) {
+					return $user_data[ $key ] ? '1' : '0';
+				}
+				return trim( (string) $user_data[ $key ] );
+			}
+		}
+		return '';
+	}
+
+	/**
 	 * Decide which WordPress role should be applied from Fanvue OAuth profile data.
 	 *
 	 * @param array<string, mixed> $profile Raw OAuth profile payload.
@@ -579,6 +708,55 @@ class Fan_OAuth {
 			return $uuid;
 		}
 		return substr( $uuid, 0, 6 ) . '...' . substr( $uuid, -4 );
+	}
+
+	/**
+	 * Write a compact, redacted OAuth payload snapshot to debug logs for test verification.
+	 *
+	 * @param array<string, mixed>|null $profile OAuth profile payload from Fanvue /me endpoint.
+	 * @return void
+	 */
+	private static function log_oauth_profile_payload_debug( $profile ) {
+		if ( ! is_array( $profile ) ) {
+			Admin_Settings::log_connection( 'debug', 'Fan OAuth callback payload: empty or non-JSON profile.' );
+			return;
+		}
+
+		$safe_profile = $profile;
+		self::redact_profile_fields_recursive( $safe_profile );
+
+		$json = wp_json_encode( $safe_profile, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE );
+		if ( ! is_string( $json ) || $json === '' ) {
+			Admin_Settings::log_connection( 'debug', 'Fan OAuth callback payload: profile present but could not be encoded.' );
+			return;
+		}
+		if ( strlen( $json ) > 4000 ) {
+			$json = substr( $json, 0, 4000 ) . '... [truncated]';
+		}
+
+		Admin_Settings::log_connection( 'debug', 'Fan OAuth callback payload (redacted): ' . $json );
+	}
+
+	/**
+	 * Recursively redact sensitive keys before writing OAuth payload debug logs.
+	 *
+	 * @param mixed $value Nested payload value.
+	 * @return void
+	 */
+	private static function redact_profile_fields_recursive( &$value ) {
+		if ( ! is_array( $value ) ) {
+			return;
+		}
+		foreach ( $value as $key => &$child ) {
+			$key_s = is_string( $key ) ? strtolower( $key ) : '';
+			if ( in_array( $key_s, [ 'email', 'phone', 'token', 'access_token', 'refresh_token' ], true ) ) {
+				$child = '[redacted]';
+				continue;
+			}
+			if ( is_array( $child ) ) {
+				self::redact_profile_fields_recursive( $child );
+			}
+		}
 	}
 
 	/**

@@ -41,6 +41,22 @@ class Login_Page {
 		add_action( 'login_init', [ __CLASS__, 'maybe_offer_pending_fanvue_resume' ], 2 );
 		add_action( 'login_form_login', [ __CLASS__, 'on_login_form_login' ] );
 		add_action( 'login_init', [ __CLASS__, 'maybe_add_fanvue_oauth_login_notice' ] );
+		add_filter( 'login_redirect', [ __CLASS__, 'force_home_login_redirect' ], 20, 3 );
+	}
+
+	/**
+	 * Force post-login destination to the public homepage.
+	 *
+	 * @param string           $redirect_to           Requested redirect URL.
+	 * @param string           $requested_redirect_to Raw redirect_to from request.
+	 * @param \WP_User|\WP_Error $user               Authenticated user or error.
+	 * @return string
+	 */
+	public static function force_home_login_redirect( $redirect_to, $requested_redirect_to, $user ) {
+		if ( $user instanceof \WP_User ) {
+			return home_url( '/' );
+		}
+		return $redirect_to;
 	}
 
 	/**

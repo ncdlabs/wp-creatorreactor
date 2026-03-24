@@ -29,8 +29,6 @@ class Shortcodes {
 		add_shortcode( 'logged_in', [ __CLASS__, 'logged_in' ] );
 		add_shortcode( 'logged_in_no_role', [ __CLASS__, 'logged_in_no_role' ] );
 		add_shortcode( 'has_tier', [ __CLASS__, 'has_tier' ] );
-		add_shortcode( 'onboarding_incomplete', [ __CLASS__, 'onboarding_incomplete' ] );
-		add_shortcode( 'onboarding_complete', [ __CLASS__, 'onboarding_complete' ] );
 		add_shortcode( 'fanvue_connected', [ __CLASS__, 'fanvue_connected' ] );
 		add_shortcode( 'fanvue_not_connected', [ __CLASS__, 'fanvue_not_connected' ] );
 		add_shortcode( 'fanvue_login_button', [ __CLASS__, 'fanvue_oauth' ] );
@@ -49,7 +47,8 @@ class Shortcodes {
 			return;
 		}
 		$css   = '.creatorreactor-fanvue-oauth-link{cursor:pointer;pointer-events:auto;line-height:1.35;text-decoration:none;color:#2271b1}'
-			. '.creatorreactor-fanvue-oauth-text{display:block;margin-top:8px;font-size:14px;font-weight:600;text-align:center}';
+			. '.creatorreactor-fanvue-oauth-text{display:block;margin-top:8px;font-size:14px;font-weight:600;text-align:center}'
+			. '.creatorreactor-fanvue-oauth-link[aria-disabled="true"]{cursor:not-allowed;pointer-events:none;opacity:.55;filter:grayscale(100%)}';
 		$print = static function () use ( $css ) {
 			echo '<style id="creatorreactor-fanvue-oauth-css">' . $css . '</style>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 		};
@@ -152,34 +151,6 @@ class Shortcodes {
 			$product !== '' ? $product : null
 		);
 		if ( ! $has_entitlement ) {
-			return '';
-		}
-		return self::render_enclosed( $content );
-	}
-
-	/**
-	 * @param array<string, string> $atts Attributes.
-	 * @param string|null           $content Enclosed content.
-	 */
-	public static function onboarding_incomplete( $atts, $content = null ) {
-		if ( ! is_user_logged_in() ) {
-			return '';
-		}
-		if ( ! Onboarding::user_needs_onboarding( get_current_user_id() ) ) {
-			return '';
-		}
-		return self::render_enclosed( $content );
-	}
-
-	/**
-	 * @param array<string, string> $atts Attributes.
-	 * @param string|null           $content Enclosed content.
-	 */
-	public static function onboarding_complete( $atts, $content = null ) {
-		if ( ! is_user_logged_in() ) {
-			return '';
-		}
-		if ( Onboarding::user_needs_onboarding( get_current_user_id() ) ) {
 			return '';
 		}
 		return self::render_enclosed( $content );
@@ -299,9 +270,16 @@ class Shortcodes {
 
 		$img_url = CREATORREACTOR_PLUGIN_URL . 'img/login-fanvue.webp';
 		$label   = __( 'Log in with Fanvue', 'creatorreactor' );
+		$site_connected = Admin_Settings::is_connected();
+		$link_attrs = 'class="creatorreactor-fanvue-oauth-link" aria-label="' . esc_attr( $label ) . '"';
+		if ( ! $site_connected ) {
+			$link_attrs .= ' aria-disabled="true" role="button" tabindex="-1"';
+		} else {
+			$link_attrs .= ' href="' . esc_url( $href ) . '"';
+		}
 
 		return '<p class="creatorreactor-fanvue-oauth-wrap">'
-			. '<a class="creatorreactor-fanvue-oauth-link" href="' . esc_url( $href ) . '" aria-label="' . esc_attr( $label ) . '">'
+			. '<a ' . $link_attrs . '>'
 			. '<img src="' . esc_url( $img_url ) . '" alt="" class="creatorreactor-fanvue-oauth-img" width="220" decoding="async" />'
 			. '<span class="creatorreactor-fanvue-oauth-text">' . esc_html( $label ) . '</span>'
 			. '</a></p>';

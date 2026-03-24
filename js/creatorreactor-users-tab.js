@@ -277,6 +277,10 @@
 					if (!line) {
 						continue;
 					}
+					if (line.section) {
+						parts.push('<dt class="creatorreactor-details-section">' + escapeHtml(line.label || '') + '</dt><dd class="creatorreactor-details-section-spacer"></dd>');
+						continue;
+					}
 					var v =
 						line.value !== undefined && line.value !== null
 							? String(line.value)

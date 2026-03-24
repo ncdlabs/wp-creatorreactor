@@ -54,6 +54,20 @@ final class ShortcodesRegressionTest extends BaseTestCase
         Functions\when('sanitize_key')->alias(
             static fn ($value): string => strtolower(trim((string) $value))
         );
+        Functions\when('sanitize_text_field')->alias(
+            static fn ($value): string => trim((string) $value)
+        );
+        Functions\when('get_option')->alias(
+            static function ($key, $default = false) {
+                if ($key === 'creatorreactor_settings') {
+                    return [
+                        'creatorreactor_oauth_scopes' => 'openid offline_access',
+                        'display_timezone' => 'system',
+                    ];
+                }
+                return $default;
+            }
+        );
     }
 
     private function mockWpdb(array $results = [], $row = null): void
@@ -70,8 +84,6 @@ final class ShortcodesRegressionTest extends BaseTestCase
             'logged_in'              => 'logged_in',
             'logged_in_no_role'      => 'logged_in_no_role',
             'has_tier'               => 'has_tier',
-            'onboarding_incomplete'  => 'onboarding_incomplete',
-            'onboarding_complete'    => 'onboarding_complete',
             'fanvue_connected'       => 'fanvue_connected',
             'fanvue_not_connected'   => 'fanvue_not_connected',
             'fanvue_login_button'    => 'fanvue_oauth',
@@ -84,7 +96,7 @@ final class ShortcodesRegressionTest extends BaseTestCase
         }
 
         Shortcodes::register();
-        self::assertCount(11, $expect);
+        self::assertCount(9, $expect);
     }
 
     public function testLoggedOutRendersOnlyForGuests(): void
@@ -137,6 +149,7 @@ final class ShortcodesRegressionTest extends BaseTestCase
 
     public function testFollowerReturnsOnboardingGateNoticeWhenUserNeedsOnboarding(): void
     {
+        $this->mockWpdb([]);
         Functions\when('is_user_logged_in')->justReturn(true);
         Functions\when('get_current_user_id')->justReturn(55);
         Functions\when('get_user_meta')->alias(
@@ -153,7 +166,9 @@ final class ShortcodesRegressionTest extends BaseTestCase
                 return '';
             }
         );
-        Functions\when('apply_filters')->alias(static fn ($tag, $value, ...$rest) => $value);
+        Functions\when('apply_filters')->alias(
+            static fn ($tag, $value, ...$rest) => $tag === 'creatorreactor_user_needs_onboarding' ? true : $value
+        );
         Functions\when('home_url')->alias(static fn ($path = '/') => 'https://example.com' . $path);
         Functions\when('add_query_arg')->alias(
             static fn ($key, $value, $url) => $url . (str_contains($url, '?') ? '&' : '?') . $key . '=' . $value
@@ -170,6 +185,7 @@ final class ShortcodesRegressionTest extends BaseTestCase
 
     public function testSubscriberReturnsOnboardingGateNoticeWhenUserNeedsOnboarding(): void
     {
+        $this->mockWpdb([]);
         Functions\when('is_user_logged_in')->justReturn(true);
         Functions\when('get_current_user_id')->justReturn(77);
         Functions\when('get_user_meta')->alias(
@@ -186,7 +202,9 @@ final class ShortcodesRegressionTest extends BaseTestCase
                 return '';
             }
         );
-        Functions\when('apply_filters')->alias(static fn ($tag, $value, ...$rest) => $value);
+        Functions\when('apply_filters')->alias(
+            static fn ($tag, $value, ...$rest) => $tag === 'creatorreactor_user_needs_onboarding' ? true : $value
+        );
         Functions\when('home_url')->alias(static fn ($path = '/') => 'https://example.com' . $path);
         Functions\when('add_query_arg')->alias(
             static fn ($key, $value, $url) => $url . (str_contains($url, '?') ? '&' : '?') . $key . '=' . $value
@@ -218,13 +236,18 @@ final class ShortcodesRegressionTest extends BaseTestCase
                 return '';
             }
         );
-        Functions\when('apply_filters')->alias(static fn ($tag, $value, ...$rest) => $value);
+        Functions\when('apply_filters')->alias(
+            static fn ($tag, $value, ...$rest) => $tag === 'creatorreactor_user_needs_onboarding' ? true : $value
+        );
         Functions\when('home_url')->alias(static fn ($path = '/') => 'https://example.com' . $path);
         Functions\when('add_query_arg')->alias(
             static fn ($key, $value, $url) => $url . (str_contains($url, '?') ? '&' : '?') . $key . '=' . $value
         );
         Functions\when('wp_validate_redirect')->alias(static fn ($url, $fallback = '') => (string) $url);
         Functions\when('esc_url')->alias(static fn ($url): string => (string) $url);
+        Functions\when('shortcode_atts')->alias(
+            static fn ($pairs, $atts, $shortcode = '') => array_merge((array) $pairs, (array) $atts)
+        );
         Functions\expect('esc_html__')->atLeast()->once()->andReturnUsing(static fn ($text, $domain = null) => (string) $text);
         Functions\expect('do_shortcode')->never();
 

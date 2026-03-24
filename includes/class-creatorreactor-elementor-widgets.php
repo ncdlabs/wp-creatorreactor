@@ -257,50 +257,6 @@ final class Elementor_Widget_Has_Tier extends \Elementor\Widget_Base {
 /**
  * @package CreatorReactor
  */
-final class Elementor_Widget_Onboarding_Incomplete extends Elementor_Widget_Shortcode_Wrap {
-
-	public function get_name() {
-		return 'creatorreactor_onboarding_incomplete';
-	}
-
-	public function get_title() {
-		return __( 'CreatorReactor: Onboarding incomplete', 'creatorreactor' );
-	}
-
-	public function get_keywords() {
-		return [ 'creatorreactor', 'onboarding', 'incomplete', 'setup' ];
-	}
-
-	protected function shortcode_tag(): string {
-		return 'onboarding_incomplete';
-	}
-}
-
-/**
- * @package CreatorReactor
- */
-final class Elementor_Widget_Onboarding_Complete extends Elementor_Widget_Shortcode_Wrap {
-
-	public function get_name() {
-		return 'creatorreactor_onboarding_complete';
-	}
-
-	public function get_title() {
-		return __( 'CreatorReactor: Onboarding complete', 'creatorreactor' );
-	}
-
-	public function get_keywords() {
-		return [ 'creatorreactor', 'onboarding', 'complete', 'setup' ];
-	}
-
-	protected function shortcode_tag(): string {
-		return 'onboarding_complete';
-	}
-}
-
-/**
- * @package CreatorReactor
- */
 final class Elementor_Widget_Fanvue_Connected extends Elementor_Widget_Shortcode_Wrap {
 
 	public function get_name() {
@@ -431,7 +387,7 @@ final class Elementor_Widget_Onboarding extends \Elementor\Widget_Base {
 			'note',
 			[
 				'type' => \Elementor\Controls_Manager::RAW_HTML,
-				'raw'  => '<p class="elementor-descriptor">' . esc_html__( 'Outputs the same first-time Fanvue setup form as the [creatorreactor_onboarding] shortcode. After social login, users are redirected to /creatorreactor-onboarding/ until they complete it.', 'creatorreactor' ) . '</p>',
+				'raw'  => '<p class="elementor-descriptor">' . esc_html__( 'Fan onboarding is disabled. This widget mirrors the [creatorreactor_onboarding] shortcode status message.', 'creatorreactor' ) . '</p>',
 			]
 		);
 

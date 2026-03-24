@@ -365,7 +365,7 @@ class Onboarding {
 	 * @param string $redirect_to Intended destination after onboarding.
 	 */
 	public static function get_post_oauth_redirect( $user_id, $redirect_to ) {
-		$redirect_to = is_string( $redirect_to ) ? wp_validate_redirect( $redirect_to, home_url( '/' ) ) : home_url( '/' );
+		$redirect_to = home_url( '/' );
 		if ( self::user_needs_onboarding( (int) $user_id ) ) {
 			return self::get_onboarding_url( $redirect_to );
 		}
@@ -391,45 +391,11 @@ class Onboarding {
 	 */
 	public static function user_needs_onboarding( $user_id = null ) {
 		$user_id = $user_id === null ? get_current_user_id() : (int) $user_id;
-		if ( $user_id <= 0 ) {
-			return false;
-		}
-		$complete = get_user_meta( $user_id, self::META_COMPLETE, true );
-		if ( $complete === '1' || $complete === 1 || $complete === true ) {
-			return false;
-		}
-		if ( is_string( $complete ) && trim( $complete ) === '1' ) {
-			return false;
-		}
-		$linked = get_user_meta( $user_id, self::META_FANVUE_OAUTH_LINKED, true );
-		if ( $linked !== '1' && $linked !== 1 ) {
-			return (bool) apply_filters( 'creatorreactor_user_needs_onboarding', false, $user_id );
-		}
-		return (bool) apply_filters( 'creatorreactor_user_needs_onboarding', true, $user_id );
+		return (bool) apply_filters( 'creatorreactor_user_needs_onboarding', false, $user_id );
 	}
 
 	public static function enqueue_assets() {
-		$ver = defined( 'CREATORREACTOR_VERSION' ) ? CREATORREACTOR_VERSION : '1.0.0';
-		wp_enqueue_style(
-			'creatorreactor-onboarding',
-			CREATORREACTOR_PLUGIN_URL . 'css/creatorreactor-onboarding.css',
-			[],
-			$ver
-		);
-		wp_enqueue_script(
-			'creatorreactor-onboarding',
-			CREATORREACTOR_PLUGIN_URL . 'js/creatorreactor-onboarding.js',
-			[],
-			$ver,
-			true
-		);
-		wp_localize_script(
-			'creatorreactor-onboarding',
-			'creatorreactorOnboarding',
-			[
-				'tosError' => __( 'You must agree to the Terms of Service to continue.', 'creatorreactor' ),
-			]
-		);
+		// Onboarding UI is disabled.
 	}
 
 	public static function template_redirect() {
@@ -440,42 +406,9 @@ class Onboarding {
 			wp_safe_redirect( home_url( '/' ) );
 			exit;
 		}
-		if ( ! is_user_logged_in() ) {
-			$pend = self::get_request_pending_token();
-			if ( $pend !== '' && self::get_pending_fanvue_registration( $pend ) ) {
-				nocache_headers();
-				self::enqueue_assets();
-				$tpl = CREATORREACTOR_PLUGIN_DIR . 'templates/onboarding-shell.php';
-				if ( is_readable( $tpl ) ) {
-					require $tpl;
-				} else {
-					status_header( 500 );
-					echo esc_html__( 'Onboarding template is missing.', 'creatorreactor' );
-				}
-				exit;
-			}
-			if ( $pend !== '' ) {
-				self::clear_fan_pending_cookie();
-				wp_safe_redirect( wp_login_url( add_query_arg( 'creatorreactor_fanvue', 'pending_expired', home_url( '/' ) ) ) );
-				exit;
-			}
-			wp_safe_redirect( wp_login_url( self::get_onboarding_url( self::get_redirect_to_from_request() ) ) );
-			exit;
-		}
-		if ( ! self::user_needs_onboarding() ) {
-			$dest = self::strip_onboarding_args_from_redirect_url( self::get_redirect_to_from_request() );
-			wp_safe_redirect( wp_validate_redirect( $dest, home_url( '/' ) ) );
-			exit;
-		}
-		nocache_headers();
-		self::enqueue_assets();
-		$tpl = CREATORREACTOR_PLUGIN_DIR . 'templates/onboarding-shell.php';
-		if ( is_readable( $tpl ) ) {
-			require $tpl;
-		} else {
-			status_header( 500 );
-			echo esc_html__( 'Onboarding template is missing.', 'creatorreactor' );
-		}
+		self::clear_fan_pending_cookie();
+		$dest = self::strip_onboarding_args_from_redirect_url( self::get_redirect_to_from_request() );
+		wp_safe_redirect( wp_validate_redirect( $dest, home_url( '/' ) ) );
 		exit;
 	}
 
@@ -500,7 +433,7 @@ class Onboarding {
 			self::handle_submit_pending_fanvue( $pt );
 			return;
 		}
-		self::redirect_and_maybe_exit( wp_login_url( self::get_onboarding_url() ) );
+		self::redirect_and_maybe_exit( wp_login_url( home_url( '/' ) ) );
 	}
 
 	public static function handle_submit() {
@@ -522,19 +455,9 @@ class Onboarding {
 			return;
 		}
 
-		$email = isset( $_POST['creatorreactor_email'] ) ? sanitize_email( wp_unslash( $_POST['creatorreactor_email'] ) ) : '';
-		if ( $email === '' || ! is_email( $email ) ) {
-			self::redirect_with_error( 'invalid_email' );
-		}
-
 		$tos = isset( $_POST['creatorreactor_tos_accept'] ) ? (string) wp_unslash( $_POST['creatorreactor_tos_accept'] ) : '';
 		if ( $tos !== '1' ) {
 			self::redirect_with_error( 'tos_required' );
-		}
-
-		$other = email_exists( $email );
-		if ( $other && (int) $other !== (int) $uid ) {
-			self::redirect_with_error( 'email_in_use' );
 		}
 
 		$display = isset( $_POST['creatorreactor_display_name'] ) ? sanitize_text_field( wp_unslash( $_POST['creatorreactor_display_name'] ) ) : '';
@@ -549,10 +472,7 @@ class Onboarding {
 
 		$opt_out = isset( $_POST['creatorreactor_opt_out_emails'] ) && (string) wp_unslash( $_POST['creatorreactor_opt_out_emails'] ) === '1';
 
-		$update = [
-			'ID'         => $uid,
-			'user_email' => $email,
-		];
+		$update = [ 'ID' => $uid ];
 		if ( $display !== '' ) {
 			$update['display_name'] = $display;
 		}
@@ -582,7 +502,7 @@ class Onboarding {
 
 		Entitlements::refresh_social_entitlements_user_meta( $uid, 'onboarding' );
 
-		$dest = self::strip_onboarding_args_from_redirect_url( self::get_redirect_to_from_request() );
+		$dest = home_url( '/' );
 		self::redirect_and_maybe_exit( $dest );
 	}
 
@@ -628,11 +548,8 @@ class Onboarding {
 			exit;
 		}
 
-		$email = isset( $_POST['creatorreactor_email'] ) ? sanitize_email( wp_unslash( $_POST['creatorreactor_email'] ) ) : '';
+		$email = $session_email;
 		if ( $email === '' || ! is_email( $email ) ) {
-			self::redirect_with_error( 'invalid_email' );
-		}
-		if ( $session_email !== '' && strtolower( $email ) !== strtolower( $session_email ) ) {
 			self::redirect_with_error( 'invalid_email' );
 		}
 
@@ -749,7 +666,7 @@ class Onboarding {
 
 		Entitlements::refresh_social_entitlements_user_meta( $uid, 'onboarding' );
 
-		$dest = self::strip_onboarding_args_from_redirect_url( self::get_redirect_to_from_request() );
+		$dest = home_url( '/' );
 		self::redirect_and_maybe_exit( $dest );
 	}
 
@@ -830,80 +747,11 @@ class Onboarding {
 		if ( Admin_Settings::is_broker_mode() ) {
 			return '<p class="creatorreactor-onboarding-unavailable">' . esc_html__( 'Fan onboarding is not available in Agency (broker) mode.', 'creatorreactor' ) . '</p>';
 		}
-		if ( ! is_user_logged_in() ) {
-			$pend = self::get_request_pending_token();
-			if ( $pend !== '' && self::get_pending_fanvue_registration( $pend ) ) {
-				self::enqueue_assets();
-				ob_start();
-				echo '<div class="creatorreactor-onboarding-wrap creatorreactor-onboarding-shortcode">';
-				self::render_form();
-				echo '</div>';
-				return (string) ob_get_clean();
-			}
-			return '<p class="creatorreactor-onboarding-login-hint">' . esc_html__( 'Log in to continue setup.', 'creatorreactor' ) . '</p>';
-		}
-		if ( ! self::user_needs_onboarding() ) {
-			return '<p class="creatorreactor-onboarding-done">' . esc_html__( 'Your setup is already complete.', 'creatorreactor' ) . '</p>';
-		}
-		self::enqueue_assets();
-		ob_start();
-		echo '<div class="creatorreactor-onboarding-wrap creatorreactor-onboarding-shortcode">';
-		self::render_form();
-		echo '</div>';
-		return (string) ob_get_clean();
+		return '<p class="creatorreactor-onboarding-done">' . esc_html__( 'Fan onboarding is disabled.', 'creatorreactor' ) . '</p>';
 	}
 
 	public static function render_form() {
-		$pending_token = self::get_request_pending_token();
-		$pending_data  = ( $pending_token !== '' ) ? self::get_pending_fanvue_registration( $pending_token ) : null;
-
-		if ( is_array( $pending_data ) ) {
-			$redirect_to = self::get_redirect_to_from_request();
-			$err         = isset( $_GET['cr_ob_err'] ) ? sanitize_key( wp_unslash( $_GET['cr_ob_err'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-
-			$email   = isset( $pending_data['email'] ) ? (string) $pending_data['email'] : '';
-			$display = isset( $pending_data['display'] ) ? (string) $pending_data['display'] : '';
-
-			$registration_closed = ! get_option( 'users_can_register' );
-
-			$phone          = '';
-			$address        = '';
-			$country        = '';
-			$contact_pref   = 'email';
-			$opt_out_emails = false;
-
-			$terms_html = apply_filters( 'creatorreactor_terms_of_service_html', self::get_embedded_terms_html() );
-			$terms_html = is_string( $terms_html ) ? wp_kses( $terms_html, self::tos_wp_kses_allowed() ) : '';
-
-			include CREATORREACTOR_PLUGIN_DIR . 'templates/onboarding-form.php';
-			return;
-		}
-
-		$user = wp_get_current_user();
-		if ( ! $user || ! $user->ID ) {
-			return;
-		}
-		$pending_token       = '';
-		$registration_closed = false;
-		$redirect_to   = self::get_redirect_to_from_request();
-		$err           = isset( $_GET['cr_ob_err'] ) ? sanitize_key( wp_unslash( $_GET['cr_ob_err'] ) ) : ''; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-
-		$email   = $user->user_email;
-		$display = $user->display_name;
-
-		$phone          = (string) get_user_meta( $user->ID, self::META_PHONE, true );
-		$address        = (string) get_user_meta( $user->ID, self::META_ADDRESS, true );
-		$country        = (string) get_user_meta( $user->ID, self::META_COUNTRY, true );
-		$contact_pref   = (string) get_user_meta( $user->ID, self::META_CONTACT_PREF, true );
-		if ( ! in_array( $contact_pref, [ 'email', 'sms', 'both' ], true ) ) {
-			$contact_pref = 'email';
-		}
-		$opt_out_emails = get_user_meta( $user->ID, self::META_OPT_OUT_EMAILS, true ) === '1' || get_user_meta( $user->ID, self::META_OPT_OUT_EMAILS, true ) === 1;
-
-		$terms_html = apply_filters( 'creatorreactor_terms_of_service_html', self::get_embedded_terms_html() );
-		$terms_html = is_string( $terms_html ) ? wp_kses( $terms_html, self::tos_wp_kses_allowed() ) : '';
-
-		include CREATORREACTOR_PLUGIN_DIR . 'templates/onboarding-form.php';
+		echo '<p class="creatorreactor-onboarding-done">' . esc_html__( 'Fan onboarding is disabled.', 'creatorreactor' ) . '</p>';
 	}
 
 	/**
