@@ -95,8 +95,8 @@ return <<<HTML
 
 	<h3 class="cr-tos__heading">5. Communications and Consent</h3>
 	<ul class="cr-tos__list">
-		<li>Email communications are opt-out by default (you may opt out anytime)</li>
-		<li>SMS communications require explicit consent (opt-in)</li>
+		<li>Email communications can be opted out in onboarding/account preferences</li>
+		<li>SMS communications require explicit consent (opt-in) where enabled</li>
 		<li>You can unsubscribe at any time via links or account settings</li>
 	</ul>
 
@@ -172,10 +172,10 @@ return <<<HTML
 	<p>We may use cookies or similar technologies for:</p>
 	<ul class="cr-tos__list">
 		<li>Authentication</li>
-		<li>Session management</li>
-		<li>Analytics</li>
+		<li>Short-lived onboarding/session continuity</li>
+		<li>Analytics (if separately enabled by site operators)</li>
 	</ul>
-	<p>Where required by law, consent will be obtained before non-essential cookies are used.</p>
+	<p>CreatorReactor sets an essential short-lived onboarding cookie for OAuth flow continuity. Where required by law, consent must be obtained before non-essential cookies are used.</p>
 
 	<hr class="cr-tos__sep" />
 

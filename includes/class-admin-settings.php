@@ -669,6 +669,16 @@ class Admin_Settings {
 		} else {
 			$opts['entitlement_cache_ttl_seconds'] = isset( $raw_opts['entitlement_cache_ttl_seconds'] ) ? max( 60, (int) $raw_opts['entitlement_cache_ttl_seconds'] ) : 900;
 		}
+		if ( isset( $input['privacy_log_retention_days'] ) ) {
+			$opts['privacy_log_retention_days'] = max( 1, (int) $input['privacy_log_retention_days'] );
+		} else {
+			$opts['privacy_log_retention_days'] = isset( $raw_opts['privacy_log_retention_days'] ) ? max( 1, (int) $raw_opts['privacy_log_retention_days'] ) : 30;
+		}
+		if ( isset( $input['privacy_profile_snapshot_retention_days'] ) ) {
+			$opts['privacy_profile_snapshot_retention_days'] = max( 1, (int) $input['privacy_profile_snapshot_retention_days'] );
+		} else {
+			$opts['privacy_profile_snapshot_retention_days'] = isset( $raw_opts['privacy_profile_snapshot_retention_days'] ) ? max( 1, (int) $raw_opts['privacy_profile_snapshot_retention_days'] ) : 90;
+		}
 
 		if ( isset( $input['creatorreactor_creator_id'] ) ) {
 			$opts['creatorreactor_creator_id'] = sanitize_text_field( wp_unslash( $input['creatorreactor_creator_id'] ) );
@@ -894,6 +904,12 @@ class Admin_Settings {
 		if ( ! isset( $opts['entitlement_cache_ttl_seconds'] ) ) {
 			$opts['entitlement_cache_ttl_seconds'] = 900;
 		}
+		if ( ! isset( $opts['privacy_log_retention_days'] ) ) {
+			$opts['privacy_log_retention_days'] = 30;
+		}
+		if ( ! isset( $opts['privacy_profile_snapshot_retention_days'] ) ) {
+			$opts['privacy_profile_snapshot_retention_days'] = 90;
+		}
 
 		update_option( self::OPTION_NAME, $opts );
 	}
@@ -1082,9 +1098,6 @@ class Admin_Settings {
 		$tier_raw = isset( $row['tier'] ) && $row['tier'] !== null && (string) $row['tier'] !== ''
 			? (string) $row['tier']
 			: '';
-		$fanvue_tier_raw = isset( $row['fanvue_tier'] ) && $row['fanvue_tier'] !== null && (string) $row['fanvue_tier'] !== ''
-			? (string) $row['fanvue_tier']
-			: '';
 		$product_key = isset( $row['product'] ) && $row['product'] !== null && (string) $row['product'] !== ''
 			? Entitlements::normalize_product( (string) $row['product'] )
 			: '-';
@@ -1099,8 +1112,20 @@ class Admin_Settings {
 				'value'   => '',
 			],
 			[
+				'label' => __( 'CreatorReactor UUID', 'creatorreactor' ),
+				'value' => (string) ( $row['creatorreactor_uuid'] ?? '' ) !== '' ? (string) $row['creatorreactor_uuid'] : '-',
+			],
+			[
+				'label' => __( 'CreatorReactor user UUID', 'creatorreactor' ),
+				'value' => (string) ( $row['creatorreactor_user_uuid'] ?? '' ) !== '' ? (string) $row['creatorreactor_user_uuid'] : '-',
+			],
+			[
 				'label' => __( 'CreatorReactor Record ID', 'creatorreactor' ),
 				'value' => isset( $row['id'] ) ? (string) (int) $row['id'] : '-',
+			],
+			[
+				'label' => __( 'WordPress user ID', 'creatorreactor' ),
+				'value' => $wp_uid,
 			],
 			[
 				'label' => __( 'Product (stored)', 'creatorreactor' ),
@@ -1111,12 +1136,12 @@ class Admin_Settings {
 				'value' => Entitlements::product_label( $row['product'] ?? Entitlements::PRODUCT_FANVUE ),
 			],
 			[
-				'label' => __( 'Display name (normalized)', 'creatorreactor' ),
-				'value' => (string) ( $row['display_name'] ?? '' ) !== '' ? (string) $row['display_name'] : '-',
-			],
-			[
 				'label' => __( 'Email (normalized)', 'creatorreactor' ),
 				'value' => (string) ( $row['email'] ?? '' ) !== '' ? (string) $row['email'] : '-',
+			],
+			[
+				'label' => __( 'Display name (normalized)', 'creatorreactor' ),
+				'value' => (string) ( $row['display_name'] ?? '' ) !== '' ? (string) $row['display_name'] : '-',
 			],
 			[
 				'label' => __( 'Status', 'creatorreactor' ),
@@ -1139,37 +1164,9 @@ class Admin_Settings {
 				'value' => self::format_datetime_for_selected_timezone( (string) ( $row['updated_at'] ?? '' ) ),
 			],
 			[
-				'label' => __( 'WordPress user ID', 'creatorreactor' ),
-				'value' => $wp_uid,
-			],
-			[
-				'label' => __( 'CreatorReactor user UUID', 'creatorreactor' ),
-				'value' => (string) ( $row['creatorreactor_user_uuid'] ?? '' ) !== '' ? (string) $row['creatorreactor_user_uuid'] : '-',
-			],
-			[
 				'section' => true,
 				'label'   => __( 'Fanvue Records', 'creatorreactor' ),
 				'value'   => '',
-			],
-			[
-				'label' => __( 'Fanvue email', 'creatorreactor' ),
-				'value' => (string) ( $row['fanvue_email'] ?? '' ) !== '' ? (string) $row['fanvue_email'] : ( (string) ( $row['email'] ?? '' ) !== '' ? (string) $row['email'] : '-' ),
-			],
-			[
-				'label' => __( 'Fanvue display name', 'creatorreactor' ),
-				'value' => (string) ( $row['fanvue_display_name'] ?? '' ) !== '' ? (string) $row['fanvue_display_name'] : ( (string) ( $row['display_name'] ?? '' ) !== '' ? (string) $row['display_name'] : '-' ),
-			],
-			[
-				'label' => __( 'Fanvue user UUID', 'creatorreactor' ),
-				'value' => (string) ( $row['fanvue_user_uuid'] ?? '' ) !== '' ? (string) $row['fanvue_user_uuid'] : '-',
-			],
-			[
-				'label' => __( 'Fanvue tier', 'creatorreactor' ),
-				'value' => $fanvue_tier_raw !== '' ? $fanvue_tier_raw : ( $tier_raw !== '' ? $tier_raw : '-' ),
-			],
-			[
-				'label' => __( 'CreatorReactor UUID', 'creatorreactor' ),
-				'value' => (string) ( $row['creatorreactor_uuid'] ?? '' ) !== '' ? (string) $row['creatorreactor_uuid'] : '-',
 			],
 			[
 				'section' => true,
@@ -2072,6 +2069,15 @@ class Admin_Settings {
 			}
 			#creatorreactor-user-details-modal .creatorreactor-modal-body dt { margin: 0; color: #646970; font-weight: 600; }
 			#creatorreactor-user-details-modal .creatorreactor-modal-body dd { margin: 0; word-break: break-word; }
+			#creatorreactor-user-details-modal .creatorreactor-modal-body dt.creatorreactor-details-section {
+				grid-column: 1 / span 2;
+				margin-top: 10px;
+				padding-top: 10px;
+				border-top: 1px solid #dcdcde;
+				color: #1d2327;
+				font-weight: 700;
+			}
+			#creatorreactor-user-details-modal .creatorreactor-modal-body dd.creatorreactor-details-section-spacer { display: none; }
 			.creatorreactor-modal { position: fixed; inset: 0; display: none; z-index: 100000; }
 			.creatorreactor-modal[aria-hidden="false"] { display: block; }
 			.creatorreactor-modal-backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.45); }

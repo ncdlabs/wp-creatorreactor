@@ -23,6 +23,10 @@ class Onboarding {
 	const META_COUNTRY          = 'creatorreactor_country';
 	const META_CONTACT_PREF     = 'creatorreactor_contact_preference';
 	const META_OPT_OUT_EMAILS   = 'creatorreactor_opt_out_emails';
+	const META_SMS_OPT_IN       = 'creatorreactor_sms_opt_in';
+	const META_SMS_OPT_IN_AT    = 'creatorreactor_sms_opt_in_at';
+	const META_CONSENT_UPDATED_AT = 'creatorreactor_consent_updated_at';
+	const META_CONSENT_VERSION  = 'creatorreactor_consent_version';
 	/** String `1` when the user has acknowledged ToS (idempotent; do not clear without legal review). */
 	const META_TOS_ACCEPTED     = 'creatorreactor_tos_accepted';
 	const META_TOS_ACCEPTED_AT  = 'creatorreactor_tos_accepted_at';
@@ -471,6 +475,7 @@ class Onboarding {
 		}
 
 		$opt_out = isset( $_POST['creatorreactor_opt_out_emails'] ) && (string) wp_unslash( $_POST['creatorreactor_opt_out_emails'] ) === '1';
+		$sms_opt_in = isset( $_POST['creatorreactor_sms_opt_in'] ) && (string) wp_unslash( $_POST['creatorreactor_sms_opt_in'] ) === '1';
 
 		$update = [ 'ID' => $uid ];
 		if ( $display !== '' ) {
@@ -490,6 +495,8 @@ class Onboarding {
 		} else {
 			delete_user_meta( $uid, self::META_OPT_OUT_EMAILS );
 		}
+		self::persist_sms_consent_state( $uid, $sms_opt_in );
+		self::persist_consent_metadata( $uid );
 		self::persist_tos_acceptance_idempotent( $uid );
 		update_user_meta( $uid, self::META_COMPLETE, '1' );
 
@@ -577,6 +584,7 @@ class Onboarding {
 		}
 
 		$opt_out = isset( $_POST['creatorreactor_opt_out_emails'] ) && (string) wp_unslash( $_POST['creatorreactor_opt_out_emails'] ) === '1';
+		$sms_opt_in = isset( $_POST['creatorreactor_sms_opt_in'] ) && (string) wp_unslash( $_POST['creatorreactor_sms_opt_in'] ) === '1';
 
 		$identity = [
 			'email'   => $email,
@@ -642,6 +650,8 @@ class Onboarding {
 		} else {
 			delete_user_meta( $uid, self::META_OPT_OUT_EMAILS );
 		}
+		self::persist_sms_consent_state( $uid, $sms_opt_in );
+		self::persist_consent_metadata( $uid );
 		self::persist_tos_acceptance_idempotent( $uid );
 		update_user_meta( $uid, self::META_COMPLETE, '1' );
 
@@ -703,6 +713,44 @@ class Onboarding {
 		}
 		update_user_meta( $user_id, self::META_TOS_ACCEPTED, '1' );
 		update_user_meta( $user_id, self::META_TOS_ACCEPTED_AT, gmdate( 'c' ) );
+	}
+
+	/**
+	 * Store explicit SMS opt-in state and timestamp.
+	 *
+	 * @param int  $user_id User ID.
+	 * @param bool $sms_opt_in Whether user explicitly opted into SMS.
+	 * @return void
+	 */
+	private static function persist_sms_consent_state( $user_id, $sms_opt_in ) {
+		$user_id = (int) $user_id;
+		if ( $user_id <= 0 ) {
+			return;
+		}
+		if ( $sms_opt_in ) {
+			update_user_meta( $user_id, self::META_SMS_OPT_IN, '1' );
+			if ( get_user_meta( $user_id, self::META_SMS_OPT_IN_AT, true ) === '' ) {
+				update_user_meta( $user_id, self::META_SMS_OPT_IN_AT, gmdate( 'c' ) );
+			}
+			return;
+		}
+		delete_user_meta( $user_id, self::META_SMS_OPT_IN );
+		delete_user_meta( $user_id, self::META_SMS_OPT_IN_AT );
+	}
+
+	/**
+	 * Persist consent metadata version + last-updated marker.
+	 *
+	 * @param int $user_id User ID.
+	 * @return void
+	 */
+	private static function persist_consent_metadata( $user_id ) {
+		$user_id = (int) $user_id;
+		if ( $user_id <= 0 ) {
+			return;
+		}
+		update_user_meta( $user_id, self::META_CONSENT_VERSION, '1' );
+		update_user_meta( $user_id, self::META_CONSENT_UPDATED_AT, gmdate( 'c' ) );
 	}
 
 	private static function redirect_with_error( $code ) {

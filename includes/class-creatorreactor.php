@@ -36,6 +36,7 @@ class Plugin {
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-editor-context.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-editor-blocks-prompt.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-creatorreactor-banner.php';
+			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-privacy.php';
 
 			Entitlements::maybe_migrate_fanvue_product_key();
 			Entitlements::maybe_migrate_legacy_follower_tier_stored();
@@ -52,6 +53,7 @@ class Plugin {
 			Editor_Blocks_Prompt::init();
 			Elementor_Integration::init();
 			Banner::init();
+			Privacy::init();
 
 			add_filter( 'admin_url', [ __CLASS__, 'filter_admin_url_normalize_path_slashes' ], 5, 3 );
 

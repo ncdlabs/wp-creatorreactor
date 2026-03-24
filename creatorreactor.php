@@ -87,6 +87,9 @@ register_activation_hook( __FILE__, 'creatorreactor_activate' );
 
 function creatorreactor_deactivate() {
 	CreatorReactor\Cron::unschedule();
+	if ( class_exists( '\CreatorReactor\Privacy' ) ) {
+		CreatorReactor\Privacy::unschedule_retention_purge();
+	}
 }
 register_deactivation_hook( __FILE__, 'creatorreactor_deactivate' );
 
