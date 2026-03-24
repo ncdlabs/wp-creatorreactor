@@ -619,7 +619,7 @@ class CreatorReactor_OAuth {
 				'OAuth callback: user list sync ' . ( $sync_ok ? 'completed' : 'failed or returned no data' ) . '.'
 			);
 
-			Admin_Settings::set_last_error( '' );
+			Admin_Settings::clear_connection_errors();
 			wp_safe_redirect(
 				self::settings_redirect_url(
 					[

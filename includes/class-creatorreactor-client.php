@@ -295,6 +295,7 @@ class CreatorReactor_Client {
 		if ( ! is_array( $result ) ) {
 			return null;
 		}
+		Admin_Settings::clear_connection_errors();
 
 		return [
 			'data'       => isset( $result['data'] ) && is_array( $result['data'] ) ? $result['data'] : [],
@@ -355,6 +356,7 @@ class CreatorReactor_Client {
 				}
 				return null;
 			}
+			Admin_Settings::clear_connection_errors();
 
 			return [
 				'data'       => isset( $data['data'] ) && is_array( $data['data'] ) ? $data['data'] : [],
@@ -416,6 +418,7 @@ class CreatorReactor_Client {
 				}
 				return null;
 			}
+			Admin_Settings::clear_connection_errors();
 
 			return [
 				'data'       => isset( $data['data'] ) && is_array( $data['data'] ) ? $data['data'] : [],
@@ -622,6 +625,17 @@ class CreatorReactor_Client {
 		}
 		$email_norm    = strtolower( $fan_email );
 		$fan_uuid_norm = is_string( $fan_uuid ) ? strtolower( trim( $fan_uuid ) ) : '';
+
+		// Fast path: if this linked user already has an active matching entitlement, avoid
+		// full list pagination on every login.
+		$existing_rows = Entitlements::get_active_entitlement_rows_for_wp_user( $wp_user_id );
+		foreach ( $existing_rows as $row ) {
+			$row_uuid  = isset( $row['creatorreactor_user_uuid'] ) ? strtolower( trim( (string) $row['creatorreactor_user_uuid'] ) ) : '';
+			$row_email = isset( $row['email'] ) ? strtolower( trim( (string) $row['email'] ) ) : '';
+			if ( ( $fan_uuid_norm !== '' && $row_uuid === $fan_uuid_norm ) || ( $email_norm !== '' && $row_email === $email_norm ) ) {
+				return true;
+			}
+		}
 
 		$token = self::get_access_token();
 		if ( ! $token ) {

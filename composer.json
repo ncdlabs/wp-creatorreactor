@@ -1,5 +1,18 @@
 {
+    "scripts": {
+        "test": "vendor/bin/phpunit --testsuite all",
+        "test:unit": "vendor/bin/phpunit --testsuite unit",
+        "test:regression": "vendor/bin/phpunit --testsuite regression"
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "CreatorReactor\\Tests\\": "tests/"
+        }
+    },
     "require-dev": {
-        "php-stubs/wordpress-stubs": "^6.9"
+        "php-stubs/wordpress-stubs": "^6.9",
+        "phpunit/phpunit": "^13.0",
+        "brain/monkey": "^2.7",
+        "mockery/mockery": "^1.6"
     }
 }

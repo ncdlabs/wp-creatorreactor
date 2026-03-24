@@ -147,6 +147,9 @@ class Cron {
 	public static function run_sync() {
 		try {
 			$ok = self::sync_entitlements_now();
+			if ( $ok ) {
+				Admin_Settings::clear_connection_errors();
+			}
 			update_option( Admin_Settings::OPTION_LAST_SYNC, [ 'time' => time(), 'success' => $ok ] );
 		} catch ( \Throwable $e ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {

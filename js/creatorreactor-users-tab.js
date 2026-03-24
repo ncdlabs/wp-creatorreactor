@@ -33,19 +33,9 @@
 			return $('<div/>').text(String(text)).html();
 		}
 
-		function utcErrorLogLine(message) {
-			var iso = new Date().toISOString().replace('T', ' ').replace(/\.\d{3}Z$/, ' UTC');
-			return iso + ' [error] ' + String(message);
-		}
-
 		function errorPanelMarkup(message) {
 			var refresh =
 				creatorreactorUsersTable.refreshLabel || 'Sync & refresh list';
-			var sum =
-				creatorreactorUsersTable.syncLogSummary || 'Sync log';
-			var hint =
-				creatorreactorUsersTable.syncLogOffline || '';
-			var line = utcErrorLogLine(message);
 			return (
 				'<div id="creatorreactor-users-inner" class="creatorreactor-users-inner">' +
 				'<div class="notice notice-error inline"><p>' +
@@ -53,19 +43,7 @@
 				'</p></div>' +
 				'<p><button type="button" class="button" id="creatorreactor-users-refresh">' +
 				refresh +
-				'</button></p></div>' +
-				'<details id="creatorreactor-users-sync-log" class="creatorreactor-connection-log creatorreactor-sync-log" open>' +
-				'<summary>' +
-				escapeHtml(sum) +
-				'</summary>' +
-				'<div class="creatorreactor-connection-log-body">' +
-				(hint
-					? '<p class="description">' + escapeHtml(hint) + '</p>'
-					: '') +
-				'<ul class="creatorreactor-connection-log-list"><li>' +
-				escapeHtml(line) +
-				'</li></ul>' +
-				'</div></details>'
+				'</button></p></div>'
 			);
 		}
 
@@ -148,10 +126,14 @@
 				return;
 			}
 			if (typeof htmlString === 'string' && htmlString !== '') {
-				$panel.html(htmlString);
-				var $logs = $panel.find('.creatorreactor-sync-log');
-				if ($logs.length > 1) {
-					$logs.slice(1).remove();
+				var $next = $('<div>').html(htmlString);
+				var $nextInner = $next.find('#creatorreactor-users-inner').first();
+				var $currentInner = $panel.find('#creatorreactor-users-inner').first();
+
+				if ($nextInner.length && $currentInner.length) {
+					$currentInner.replaceWith($nextInner);
+				} else {
+					$panel.html(htmlString);
 				}
 			}
 		}

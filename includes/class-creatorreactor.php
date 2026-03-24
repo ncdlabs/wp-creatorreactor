@@ -19,10 +19,6 @@ class Plugin {
 	const MODE_BROKER = 'broker';
 	const MODE_DIRECT = 'direct';
 
-	public static function init() {
-		add_action( 'plugins_loaded', [ __CLASS__, 'bootstrap' ] );
-	}
-
 	public static function bootstrap() {
 		try {
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-entitlements.php';

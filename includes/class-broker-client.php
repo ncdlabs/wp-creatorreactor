@@ -67,9 +67,9 @@ class Broker_Client {
 		$opts = Admin_Settings::get_raw_options();
 		if ( isset( $opts['jwt_token'] ) ) {
 			if ( Admin_Settings::is_encrypted( $opts['jwt_token'] ) ) {
-				return Admin_Settings::encrypt_sensitive_value( $opts['jwt_token'] );
+				return Admin_Settings::decrypt_sensitive_value( $opts['jwt_token'] );
 			}
-			return $opts['jwt_token'];
+			return sanitize_text_field( (string) $opts['jwt_token'] );
 		}
 		return null;
 	}
@@ -134,11 +134,18 @@ class Broker_Client {
 	public static function handle_callback( $request ) {
 		try {
 			Admin_Settings::log_connection( 'info', 'Broker REST callback: request received.' );
+			$method = strtoupper( (string) $request->get_method() );
+			if ( $method === 'HEAD' ) {
+				wp_safe_redirect(
+					admin_url( 'admin.php?page=' . Admin_Settings::PAGE_SLUG . '&status=pending' )
+				);
+				exit;
+			}
 
-			$connection = $request->get_param( 'creatorreactor_connection' );
-			$creator_id = $request->get_param( 'creator_id' );
-			$site_id    = $request->get_param( 'site_id' );
-			$error      = $request->get_param( 'error' );
+			$connection = sanitize_key( (string) $request->get_param( 'creatorreactor_connection' ) );
+			$creator_id = sanitize_text_field( (string) $request->get_param( 'creator_id' ) );
+			$site_id    = sanitize_text_field( (string) $request->get_param( 'site_id' ) );
+			$error      = sanitize_text_field( (string) $request->get_param( 'error' ) );
 
 			if ( $error ) {
 				Admin_Settings::log_connection( 'error', 'Broker callback: error parameter — ' . (string) $error );
@@ -149,7 +156,16 @@ class Broker_Client {
 				exit;
 			}
 
-			if ( $connection === 'success' && $creator_id && $site_id ) {
+			$expected_site_id = (string) self::get_site_id();
+			if ( $connection === 'success' && $creator_id !== '' && $site_id !== '' ) {
+				if ( $expected_site_id !== '' && $site_id !== $expected_site_id ) {
+					Admin_Settings::log_connection( 'error', 'Broker callback: site_id mismatch from callback payload.' );
+					Admin_Settings::set_last_error( 'Broker callback rejected: site mismatch.' );
+					wp_safe_redirect(
+						admin_url( 'admin.php?page=' . Admin_Settings::PAGE_SLUG . '&status=error' )
+					);
+					exit;
+				}
 				$jwt = self::exchange_code_for_jwt( $site_id, $creator_id );
 				if ( $jwt ) {
 					self::store_jwt_token( $jwt );

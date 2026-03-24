@@ -142,7 +142,6 @@ Repository root is the plugin directory (install as `wp-content/plugins/creatorr
 │   ├── partials/                         # Admin HTML fragments (OAuth/Sync by auth mode)
 │   ├── class-admin-settings.php          # Settings UI, options, migrations, tabs
 │   ├── class-broker-client.php           # Broker OAuth + API proxy
-│   ├── class-broker-settings.php         # Broker settings placeholder
 │   ├── class-creatorreactor.php          # Plugin bootstrap, mode helpers, feature init
 │   ├── class-creatorreactor-blocks.php   # Gutenberg block registration
 │   ├── class-creatorreactor-client.php   # Direct API client

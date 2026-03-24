@@ -500,8 +500,7 @@ class Onboarding {
 			self::handle_submit_pending_fanvue( $pt );
 			return;
 		}
-		wp_safe_redirect( wp_login_url( self::get_onboarding_url() ) );
-		exit;
+		self::redirect_and_maybe_exit( wp_login_url( self::get_onboarding_url() ) );
 	}
 
 	public static function handle_submit() {
@@ -519,8 +518,8 @@ class Onboarding {
 		$uid = get_current_user_id();
 		if ( ! self::user_needs_onboarding( $uid ) ) {
 			$dest = home_url( '/' );
-			wp_safe_redirect( wp_validate_redirect( $dest, home_url( '/' ) ) );
-			exit;
+			self::redirect_and_maybe_exit( $dest );
+			return;
 		}
 
 		$email = isset( $_POST['creatorreactor_email'] ) ? sanitize_email( wp_unslash( $_POST['creatorreactor_email'] ) ) : '';
@@ -583,9 +582,8 @@ class Onboarding {
 
 		Entitlements::refresh_social_entitlements_user_meta( $uid, 'onboarding' );
 
-		$dest = home_url( '/' );
-		wp_safe_redirect( wp_validate_redirect( $dest, home_url( '/' ) ) );
-		exit;
+		$dest = self::strip_onboarding_args_from_redirect_url( self::get_redirect_to_from_request() );
+		self::redirect_and_maybe_exit( $dest );
 	}
 
 	/**
@@ -751,9 +749,25 @@ class Onboarding {
 
 		Entitlements::refresh_social_entitlements_user_meta( $uid, 'onboarding' );
 
-		$dest = home_url( '/' );
-		wp_safe_redirect( wp_validate_redirect( $dest, home_url( '/' ) ) );
-		exit;
+		$dest = self::strip_onboarding_args_from_redirect_url( self::get_redirect_to_from_request() );
+		self::redirect_and_maybe_exit( $dest );
+	}
+
+	/**
+	 * Perform validated redirect and optionally exit.
+	 *
+	 * Tests can disable process termination via:
+	 * - add_filter( 'creatorreactor_onboarding_redirect_should_exit', '__return_false' );
+	 *
+	 * @param string $dest Destination URL.
+	 */
+	private static function redirect_and_maybe_exit( $dest ) {
+		$target = wp_validate_redirect( (string) $dest, home_url( '/' ) );
+		wp_safe_redirect( $target );
+		$should_exit = (bool) apply_filters( 'creatorreactor_onboarding_redirect_should_exit', true, $target );
+		if ( $should_exit ) {
+			exit;
+		}
 	}
 
 	/**

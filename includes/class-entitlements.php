@@ -666,13 +666,6 @@ class Entitlements {
 		}
 	}
 
-	/**
-	 * @deprecated Use {@see mark_missing_subscribers_as_inactive()} plus {@see mark_missing_followers_as_inactive()}.
-	 */
-	public static function mark_missing_as_inactive( array $active_creatorreactor_uuids, $expires_at, $product = self::PRODUCT_FANVUE ) {
-		return self::mark_missing_subscribers_as_inactive( $active_creatorreactor_uuids, $expires_at, $product );
-	}
-
 	public static function get_active_subscribers( $tier = null, $product = null ) {
 		self::maybe_ensure_schema();
 		global $wpdb;
@@ -749,10 +742,24 @@ class Entitlements {
 		$table = self::get_table_name();
 		$now   = current_time( 'mysql' );
 
+		$select_cols = implode(
+			', ',
+			[
+				'id',
+				'creatorreactor_user_uuid',
+				'email',
+				'display_name',
+				'tier',
+				'product',
+				'status',
+				'expires_at',
+				'wp_user_id',
+			]
+		);
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from trusted prefix.
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT * FROM {$table} WHERE status = %s AND expires_at > %s AND (wp_user_id = %d OR email = %s)",
+				"SELECT {$select_cols} FROM {$table} WHERE status = %s AND expires_at > %s AND (wp_user_id = %d OR email = %s)",
 				self::STATUS_ACTIVE,
 				$now,
 				(int) $user_id,
@@ -777,11 +784,25 @@ class Entitlements {
 		global $wpdb;
 		$table = self::get_table_name();
 		$now   = current_time( 'mysql' );
+		$select_cols = implode(
+			', ',
+			[
+				'id',
+				'creatorreactor_user_uuid',
+				'email',
+				'display_name',
+				'tier',
+				'product',
+				'status',
+				'expires_at',
+				'wp_user_id',
+			]
+		);
 		list( $ft_sql, $ft_legacy, $ft_like ) = self::follower_tier_sql_match();
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from trusted prefix.
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT * FROM {$table} WHERE status = %s AND expires_at > %s AND (wp_user_id = %d OR email = %s) AND ($ft_sql)",
+				"SELECT {$select_cols} FROM {$table} WHERE status = %s AND expires_at > %s AND (wp_user_id = %d OR email = %s) AND ($ft_sql)",
 				array_merge(
 					[ self::STATUS_INACTIVE, $now, (int) $user_id, $user->user_email ],
 					[ $ft_legacy, $ft_like ]
