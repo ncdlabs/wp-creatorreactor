@@ -80,7 +80,7 @@ $countries = [
 		<div class="cr-ob__fields">
 			<div class="cr-ob__field">
 				<label class="cr-ob__label" for="creatorreactor_email"><?php esc_html_e( 'Email address', 'creatorreactor' ); ?> <span class="cr-ob__req" aria-hidden="true">*</span></label>
-				<input class="cr-ob__input" type="email" name="creatorreactor_email" id="creatorreactor_email" required autocomplete="email" value="<?php echo esc_attr( $email ); ?>" <?php echo ( $pending_token !== '' && $email !== '' && is_email( $email ) ) ? 'readonly aria-readonly="true"' : ''; ?> />
+				<input class="cr-ob__input" type="email" name="creatorreactor_email" id="creatorreactor_email" required autocomplete="email" autofocus value="<?php echo esc_attr( $email ); ?>" <?php echo ( $pending_token !== '' && $email !== '' && is_email( $email ) ) ? 'readonly aria-readonly="true"' : ''; ?> />
 			</div>
 
 			<div class="cr-ob__field">

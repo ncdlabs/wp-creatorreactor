@@ -25,7 +25,14 @@ class Shortcodes {
 	public static function register() {
 		add_shortcode( 'follower', [ __CLASS__, 'follower' ] );
 		add_shortcode( 'subscriber', [ __CLASS__, 'subscriber' ] );
-		add_shortcode( 'not_logged_in', [ __CLASS__, 'not_logged_in' ] );
+		add_shortcode( 'logged_out', [ __CLASS__, 'logged_out' ] );
+		add_shortcode( 'logged_in', [ __CLASS__, 'logged_in' ] );
+		add_shortcode( 'logged_in_no_role', [ __CLASS__, 'logged_in_no_role' ] );
+		add_shortcode( 'has_tier', [ __CLASS__, 'has_tier' ] );
+		add_shortcode( 'onboarding_incomplete', [ __CLASS__, 'onboarding_incomplete' ] );
+		add_shortcode( 'onboarding_complete', [ __CLASS__, 'onboarding_complete' ] );
+		add_shortcode( 'fanvue_connected', [ __CLASS__, 'fanvue_connected' ] );
+		add_shortcode( 'fanvue_not_connected', [ __CLASS__, 'fanvue_not_connected' ] );
 		add_shortcode( 'fanvue_login_button', [ __CLASS__, 'fanvue_oauth' ] );
 	}
 
@@ -87,10 +94,122 @@ class Shortcodes {
 
 	/**
 	 * @param array<string, string> $atts Attributes.
-	 * @param string|null          $content Enclosed content.
+	 * @param string|null           $content Enclosed content.
 	 */
-	public static function not_logged_in( $atts, $content = null ) {
+	public static function logged_out( $atts, $content = null ) {
 		if ( is_user_logged_in() ) {
+			return '';
+		}
+		return self::render_enclosed( $content );
+	}
+
+	/**
+	 * @param array<string, string> $atts Attributes.
+	 * @param string|null           $content Enclosed content.
+	 */
+	public static function logged_in( $atts, $content = null ) {
+		if ( ! is_user_logged_in() ) {
+			return '';
+		}
+		return self::render_enclosed( $content );
+	}
+
+	/**
+	 * @param array<string, string> $atts Attributes.
+	 * @param string|null           $content Enclosed content.
+	 */
+	public static function logged_in_no_role( $atts, $content = null ) {
+		if ( ! is_user_logged_in() ) {
+			return '';
+		}
+		if ( self::user_has_any_active_entitlement( get_current_user_id() ) ) {
+			return '';
+		}
+		return self::render_enclosed( $content );
+	}
+
+	/**
+	 * @param array<string, string> $atts Attributes.
+	 * @param string|null           $content Enclosed content.
+	 */
+	public static function has_tier( $atts, $content = null ) {
+		if ( ! is_user_logged_in() ) {
+			return '';
+		}
+		$uid = get_current_user_id();
+		if ( Onboarding::user_needs_onboarding( $uid ) ) {
+			return Onboarding::incomplete_gate_notice();
+		}
+
+		$atts    = is_array( $atts ) ? $atts : [];
+		$parsed  = shortcode_atts( [ 'tier' => '', 'product' => '' ], $atts, 'has_tier' );
+		$tier    = isset( $parsed['tier'] ) ? trim( sanitize_text_field( (string) $parsed['tier'] ) ) : '';
+		$product = isset( $parsed['product'] ) ? trim( sanitize_text_field( (string) $parsed['product'] ) ) : '';
+
+		$has_entitlement = Entitlements::check_user_entitlement(
+			$uid,
+			$tier !== '' ? $tier : null,
+			$product !== '' ? $product : null
+		);
+		if ( ! $has_entitlement ) {
+			return '';
+		}
+		return self::render_enclosed( $content );
+	}
+
+	/**
+	 * @param array<string, string> $atts Attributes.
+	 * @param string|null           $content Enclosed content.
+	 */
+	public static function onboarding_incomplete( $atts, $content = null ) {
+		if ( ! is_user_logged_in() ) {
+			return '';
+		}
+		if ( ! Onboarding::user_needs_onboarding( get_current_user_id() ) ) {
+			return '';
+		}
+		return self::render_enclosed( $content );
+	}
+
+	/**
+	 * @param array<string, string> $atts Attributes.
+	 * @param string|null           $content Enclosed content.
+	 */
+	public static function onboarding_complete( $atts, $content = null ) {
+		if ( ! is_user_logged_in() ) {
+			return '';
+		}
+		if ( Onboarding::user_needs_onboarding( get_current_user_id() ) ) {
+			return '';
+		}
+		return self::render_enclosed( $content );
+	}
+
+	/**
+	 * @param array<string, string> $atts Attributes.
+	 * @param string|null           $content Enclosed content.
+	 */
+	public static function fanvue_connected( $atts, $content = null ) {
+		if ( ! is_user_logged_in() ) {
+			return '';
+		}
+		$linked = get_user_meta( get_current_user_id(), Onboarding::META_FANVUE_OAUTH_LINKED, true );
+		if ( $linked !== '1' && $linked !== 1 && $linked !== true ) {
+			return '';
+		}
+		return self::render_enclosed( $content );
+	}
+
+	/**
+	 * @param array<string, string> $atts Attributes.
+	 * @param string|null           $content Enclosed content.
+	 */
+	public static function fanvue_not_connected( $atts, $content = null ) {
+		if ( ! is_user_logged_in() ) {
+			return '';
+		}
+		$linked = get_user_meta( get_current_user_id(), Onboarding::META_FANVUE_OAUTH_LINKED, true );
+		if ( $linked === '1' || $linked === 1 || $linked === true ) {
 			return '';
 		}
 		return self::render_enclosed( $content );
@@ -196,5 +315,13 @@ class Shortcodes {
 			return '';
 		}
 		return do_shortcode( $content );
+	}
+
+	/**
+	 * @param int $user_id WordPress user ID.
+	 */
+	private static function user_has_any_active_entitlement( $user_id ) {
+		$rows = Entitlements::get_active_entitlement_rows_for_wp_user( (int) $user_id );
+		return ! empty( $rows );
 	}
 }

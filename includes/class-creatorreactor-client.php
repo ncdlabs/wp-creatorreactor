@@ -74,7 +74,7 @@ class CreatorReactor_Client {
 	}
 
 	private static function fetch_profile_response( $base, $token, $api_version = '2025-06-26' ) {
-		return self::fetch_first_non_404_response( $base, $token, $api_version, [ '/me', '/creator/me', '/creators/me' ] );
+		return self::fetch_first_non_404_response( $base, $token, $api_version, [ '/users/me', '/me', '/creator/me', '/creators/me' ] );
 	}
 
 	private static function fetch_oauth_probe_response( $base, $token, $api_version = '2025-06-26', $creator_id = '' ) {

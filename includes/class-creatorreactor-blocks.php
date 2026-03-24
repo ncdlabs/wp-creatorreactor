@@ -48,6 +48,13 @@ class Blocks {
         . '.wp-block-creatorreactor-follower,'
         . '.wp-block-creatorreactor-subscriber,'
         . '.wp-block-creatorreactor-not-logged-in,'
+        . '.wp-block-creatorreactor-logged-out,'
+        . '.wp-block-creatorreactor-logged-in,'
+        . '.wp-block-creatorreactor-has-tier,'
+        . '.wp-block-creatorreactor-onboarding-incomplete,'
+        . '.wp-block-creatorreactor-onboarding-complete,'
+        . '.wp-block-creatorreactor-fanvue-connected,'
+        . '.wp-block-creatorreactor-fanvue-not-connected,'
         . '.wp-block-creatorreactor-fanvue-oauth,'
         . '.wp-block-creatorreactor-onboarding {'
         . 'border: 2px dashed #ccc;'
@@ -70,6 +77,7 @@ class Blocks {
 				'wp-blocks',
 				'wp-element',
 				'wp-block-editor',
+				'wp-components',
 				'wp-i18n',
 				'wp-server-side-render',
 			],
@@ -123,10 +131,111 @@ class Blocks {
 			array_merge(
 				$inner_shared,
 				[
-					'title'           => __( 'CreatorReactor: Not logged in', 'creatorreactor' ),
+					'title'           => __( 'CreatorReactor: Logged in no role', 'creatorreactor' ),
+					'description'     => __( 'Inner blocks visible only to logged-in visitors with no specific role/entitlement.', 'creatorreactor' ),
+					'icon'            => 'visibility',
+					'render_callback' => [ __CLASS__, 'render_logged_in_no_role' ],
+				]
+			)
+		);
+
+		register_block_type(
+			'creatorreactor/logged-out',
+			array_merge(
+				$inner_shared,
+				[
+					'title'           => __( 'CreatorReactor: Logged out', 'creatorreactor' ),
 					'description'     => __( 'Inner blocks visible only to visitors who are not logged in.', 'creatorreactor' ),
 					'icon'            => 'visibility',
-					'render_callback' => [ __CLASS__, 'render_not_logged_in' ],
+					'render_callback' => [ __CLASS__, 'render_logged_out' ],
+				]
+			)
+		);
+
+		register_block_type(
+			'creatorreactor/logged-in',
+			array_merge(
+				$inner_shared,
+				[
+					'title'           => __( 'CreatorReactor: Logged in', 'creatorreactor' ),
+					'description'     => __( 'Inner blocks visible only to logged-in users.', 'creatorreactor' ),
+					'icon'            => 'admin-users',
+					'render_callback' => [ __CLASS__, 'render_logged_in' ],
+				]
+			)
+		);
+
+		register_block_type(
+			'creatorreactor/has-tier',
+			array_merge(
+				$inner_shared,
+				[
+					'title'           => __( 'CreatorReactor: Has tier', 'creatorreactor' ),
+					'description'     => __( 'Inner blocks visible only when a logged-in user has an active tier (optional product).', 'creatorreactor' ),
+					'icon'            => 'awards',
+					'attributes'      => [
+						'tier'    => [
+							'type'    => 'string',
+							'default' => '',
+						],
+						'product' => [
+							'type'    => 'string',
+							'default' => '',
+						],
+					],
+					'render_callback' => [ __CLASS__, 'render_has_tier' ],
+				]
+			)
+		);
+
+		register_block_type(
+			'creatorreactor/onboarding-incomplete',
+			array_merge(
+				$inner_shared,
+				[
+					'title'           => __( 'CreatorReactor: Onboarding incomplete', 'creatorreactor' ),
+					'description'     => __( 'Inner blocks visible only to logged-in users who still need onboarding.', 'creatorreactor' ),
+					'icon'            => 'welcome-learn-more',
+					'render_callback' => [ __CLASS__, 'render_onboarding_incomplete' ],
+				]
+			)
+		);
+
+		register_block_type(
+			'creatorreactor/onboarding-complete',
+			array_merge(
+				$inner_shared,
+				[
+					'title'           => __( 'CreatorReactor: Onboarding complete', 'creatorreactor' ),
+					'description'     => __( 'Inner blocks visible only to logged-in users who completed onboarding.', 'creatorreactor' ),
+					'icon'            => 'yes-alt',
+					'render_callback' => [ __CLASS__, 'render_onboarding_complete' ],
+				]
+			)
+		);
+
+		register_block_type(
+			'creatorreactor/fanvue-connected',
+			array_merge(
+				$inner_shared,
+				[
+					'title'           => __( 'CreatorReactor: Fanvue connected', 'creatorreactor' ),
+					'description'     => __( 'Inner blocks visible only to logged-in users with Fanvue OAuth linked.', 'creatorreactor' ),
+					'icon'            => 'admin-links',
+					'render_callback' => [ __CLASS__, 'render_fanvue_connected' ],
+				]
+			)
+		);
+
+		register_block_type(
+			'creatorreactor/fanvue-not-connected',
+			array_merge(
+				$inner_shared,
+				[
+					'title'           => __( 'CreatorReactor: Fanvue not connected', 'creatorreactor' ),
+					'description'     => __( 'Inner blocks visible only to logged-in users without Fanvue OAuth linked.', 'creatorreactor' ),
+					'icon'            => 'editor-unlink',
+					'render_callback' => [ __CLASS__, 'render_fanvue_not_connected' ],
 				]
 			)
 		);
@@ -211,8 +320,126 @@ class Blocks {
 	 * @param string               $content    Inner blocks markup.
 	 * @param \WP_Block            $block      Block instance.
 	 */
-	public static function render_not_logged_in( $attributes, $content, $_block ) {
+	public static function render_logged_in_no_role( $attributes, $content, $_block ) {
+		if ( ! is_user_logged_in() ) {
+			return '';
+		}
+		if ( self::user_has_any_active_entitlement( get_current_user_id() ) ) {
+			return '';
+		}
+		return self::render_inner_content( $content );
+	}
+
+	/**
+	 * @param array<string, mixed> $attributes Block attributes.
+	 * @param string               $content    Inner blocks markup.
+	 * @param \WP_Block            $block      Block instance.
+	 */
+	public static function render_logged_out( $attributes, $content, $_block ) {
 		if ( is_user_logged_in() ) {
+			return '';
+		}
+		return self::render_inner_content( $content );
+	}
+
+	/**
+	 * @param array<string, mixed> $attributes Block attributes.
+	 * @param string               $content    Inner blocks markup.
+	 * @param \WP_Block            $block      Block instance.
+	 */
+	public static function render_logged_in( $attributes, $content, $_block ) {
+		if ( ! is_user_logged_in() ) {
+			return '';
+		}
+		return self::render_inner_content( $content );
+	}
+
+	/**
+	 * @param array<string, mixed> $attributes Block attributes.
+	 * @param string               $content    Inner blocks markup.
+	 * @param \WP_Block            $block      Block instance.
+	 */
+	public static function render_has_tier( $attributes, $content, $_block ) {
+		if ( ! is_user_logged_in() ) {
+			return '';
+		}
+		$uid = get_current_user_id();
+		if ( Onboarding::user_needs_onboarding( $uid ) ) {
+			return Onboarding::incomplete_gate_notice();
+		}
+
+		$attributes = is_array( $attributes ) ? $attributes : [];
+		$tier       = isset( $attributes['tier'] ) ? trim( sanitize_text_field( (string) $attributes['tier'] ) ) : '';
+		$product    = isset( $attributes['product'] ) ? trim( sanitize_text_field( (string) $attributes['product'] ) ) : '';
+
+		$has_entitlement = Entitlements::check_user_entitlement(
+			$uid,
+			$tier !== '' ? $tier : null,
+			$product !== '' ? $product : null
+		);
+		if ( ! $has_entitlement ) {
+			return '';
+		}
+		return self::render_inner_content( $content );
+	}
+
+	/**
+	 * @param array<string, mixed> $attributes Block attributes.
+	 * @param string               $content    Inner blocks markup.
+	 * @param \WP_Block            $block      Block instance.
+	 */
+	public static function render_onboarding_incomplete( $attributes, $content, $_block ) {
+		if ( ! is_user_logged_in() ) {
+			return '';
+		}
+		if ( ! Onboarding::user_needs_onboarding( get_current_user_id() ) ) {
+			return '';
+		}
+		return self::render_inner_content( $content );
+	}
+
+	/**
+	 * @param array<string, mixed> $attributes Block attributes.
+	 * @param string               $content    Inner blocks markup.
+	 * @param \WP_Block            $block      Block instance.
+	 */
+	public static function render_onboarding_complete( $attributes, $content, $_block ) {
+		if ( ! is_user_logged_in() ) {
+			return '';
+		}
+		if ( Onboarding::user_needs_onboarding( get_current_user_id() ) ) {
+			return '';
+		}
+		return self::render_inner_content( $content );
+	}
+
+	/**
+	 * @param array<string, mixed> $attributes Block attributes.
+	 * @param string               $content    Inner blocks markup.
+	 * @param \WP_Block            $block      Block instance.
+	 */
+	public static function render_fanvue_connected( $attributes, $content, $_block ) {
+		if ( ! is_user_logged_in() ) {
+			return '';
+		}
+		$linked = get_user_meta( get_current_user_id(), Onboarding::META_FANVUE_OAUTH_LINKED, true );
+		if ( $linked !== '1' && $linked !== 1 && $linked !== true ) {
+			return '';
+		}
+		return self::render_inner_content( $content );
+	}
+
+	/**
+	 * @param array<string, mixed> $attributes Block attributes.
+	 * @param string               $content    Inner blocks markup.
+	 * @param \WP_Block            $block      Block instance.
+	 */
+	public static function render_fanvue_not_connected( $attributes, $content, $_block ) {
+		if ( ! is_user_logged_in() ) {
+			return '';
+		}
+		$linked = get_user_meta( get_current_user_id(), Onboarding::META_FANVUE_OAUTH_LINKED, true );
+		if ( $linked === '1' || $linked === 1 || $linked === true ) {
 			return '';
 		}
 		return self::render_inner_content( $content );
@@ -248,5 +475,13 @@ class Blocks {
 		}
 		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- composed of trusted inner block output.
 		return do_blocks( $content );
+	}
+
+	/**
+	 * @param int $user_id WordPress user ID.
+	 */
+	private static function user_has_any_active_entitlement( $user_id ) {
+		$rows = Entitlements::get_active_entitlement_rows_for_wp_user( (int) $user_id );
+		return ! empty( $rows );
 	}
 }

@@ -1100,8 +1100,14 @@ class Admin_Settings {
 
 			<hr />
 
-			<p><strong><?php esc_html_e( 'Not logged in only', 'creatorreactor' ); ?></strong></p>
-			<pre class="creatorreactor-guide-code" style="white-space: pre-wrap; word-break: break-word; background: #f6f7f7; padding: 12px; border: 1px solid #c3c4c7;"><code><?php echo esc_html( "[not_logged_in]\nPlease log in to view this content.\n[/not_logged_in]" ); ?></code></pre>
+			<p><strong><?php esc_html_e( 'Logged-in users with no entitlement', 'creatorreactor' ); ?></strong></p>
+			<pre class="creatorreactor-guide-code" style="white-space: pre-wrap; word-break: break-word; background: #f6f7f7; padding: 12px; border: 1px solid #c3c4c7;"><code><?php echo esc_html( "[logged_in_no_role]\nYou are logged in, but do not have an active entitlement yet.\n[/logged_in_no_role]" ); ?></code></pre>
+
+			<p><strong><?php esc_html_e( 'Logged-out only', 'creatorreactor' ); ?></strong></p>
+			<pre class="creatorreactor-guide-code" style="white-space: pre-wrap; word-break: break-word; background: #f6f7f7; padding: 12px; border: 1px solid #c3c4c7;"><code><?php echo esc_html( "[logged_out]\nPlease log in to view this content.\n[/logged_out]" ); ?></code></pre>
+
+			<p><strong><?php esc_html_e( 'Tier gate (optional product)', 'creatorreactor' ); ?></strong></p>
+			<pre class="creatorreactor-guide-code" style="white-space: pre-wrap; word-break: break-word; background: #f6f7f7; padding: 12px; border: 1px solid #c3c4c7;"><code><?php echo esc_html( "[has_tier tier=\"premium\" product=\"fanvue\"]\nThis content is only visible to premium tier users.\n[/has_tier]" ); ?></code></pre>
 
 			<hr />
 
@@ -1169,7 +1175,7 @@ class Admin_Settings {
 
 			<div class="creatorreactor-section creatorreactor-shortcodes-reference" style="margin-top: 20px;">
 				<h2><?php esc_html_e( 'Shortcodes (quick reference)', 'creatorreactor' ); ?></h2>
-				<p class="description"><?php esc_html_e( 'Same behavior is available as Gutenberg blocks (CreatorReactor category) and Elementor widgets when those editors are active.', 'creatorreactor' ); ?></p>
+				<p class="description"><?php esc_html_e( 'Core gating behavior is also available as Gutenberg blocks (CreatorReactor category) and Elementor widgets when those editors are active.', 'creatorreactor' ); ?></p>
 				<table class="widefat striped" style="margin-top: 12px;">
 					<thead>
 						<tr>
@@ -1187,8 +1193,36 @@ class Admin_Settings {
 							<td><?php esc_html_e( 'Shows inner content only when logged in with an active paid subscriber tier (fanvue_subscriber or fanvue_subscriber_<tier>).', 'creatorreactor' ); ?></td>
 						</tr>
 						<tr>
-							<td><code style="word-break: break-word;">[not_logged_in] … [/not_logged_in]</code></td>
-							<td><?php esc_html_e( 'Shows inner content only to visitors who are not logged in (e.g. prompts to sign in).', 'creatorreactor' ); ?></td>
+							<td><code style="word-break: break-word;">[logged_in_no_role] … [/logged_in_no_role]</code></td>
+							<td><?php esc_html_e( 'Shows inner content only to logged-in visitors with no specific role/entitlement (e.g. logged in but not subscribed/follower).', 'creatorreactor' ); ?></td>
+						</tr>
+						<tr>
+							<td><code style="word-break: break-word;">[logged_out] … [/logged_out]</code></td>
+							<td><?php esc_html_e( 'Shows inner content only when the visitor is not logged in.', 'creatorreactor' ); ?></td>
+						</tr>
+						<tr>
+							<td><code style="word-break: break-word;">[logged_in] … [/logged_in]</code></td>
+							<td><?php esc_html_e( 'Shows inner content only when the visitor is logged in.', 'creatorreactor' ); ?></td>
+						</tr>
+						<tr>
+							<td><code style="word-break: break-word;">[has_tier tier="premium" product="fanvue"] … [/has_tier]</code></td>
+							<td><?php esc_html_e( 'Shows inner content when the logged-in user has an active entitlement for a specific tier; product is optional.', 'creatorreactor' ); ?></td>
+						</tr>
+						<tr>
+							<td><code style="word-break: break-word;">[onboarding_incomplete] … [/onboarding_incomplete]</code></td>
+							<td><?php esc_html_e( 'Shows inner content only while a logged-in user still needs to complete onboarding.', 'creatorreactor' ); ?></td>
+						</tr>
+						<tr>
+							<td><code style="word-break: break-word;">[onboarding_complete] … [/onboarding_complete]</code></td>
+							<td><?php esc_html_e( 'Shows inner content only after a logged-in user has completed onboarding.', 'creatorreactor' ); ?></td>
+						</tr>
+						<tr>
+							<td><code style="word-break: break-word;">[fanvue_connected] … [/fanvue_connected]</code></td>
+							<td><?php esc_html_e( 'Shows inner content only when a logged-in user has linked Fanvue OAuth.', 'creatorreactor' ); ?></td>
+						</tr>
+						<tr>
+							<td><code style="word-break: break-word;">[fanvue_not_connected] … [/fanvue_not_connected]</code></td>
+							<td><?php esc_html_e( 'Shows inner content only when a logged-in user has not linked Fanvue OAuth.', 'creatorreactor' ); ?></td>
 						</tr>
 						<tr>
 							<td><code>[fanvue_login_button]</code></td>
@@ -1844,15 +1878,24 @@ class Admin_Settings {
 		.creatorreactor-status-badge { display: inline-flex; align-items: center; padding: 4px 10px; border-radius: 999px; font-size: 12px; font-weight: 600; text-transform: uppercase; }
 		.creatorreactor-status-green { background: #edfaef; color: #1a7f37; }
 		.creatorreactor-status-badge.creatorreactor-status-healthy {
-			background: transparent;
-			padding: 0;
-			border-radius: 0;
-			font-size: 1.375rem;
+			background: #ecfdf3;
+			padding: 6px 12px;
+			border-radius: 999px;
+			font-size: 12px;
 			font-weight: 700;
-			color: #1a7f37;
+			color: #15803d;
+			border: 1px solid #bbf7d0;
 		}
-		.creatorreactor-status-yellow { background: #fff7e5; color: #8a6d1d; }
-		.creatorreactor-status-red { background: #fbeaea; color: #b52727; }
+		.creatorreactor-status-yellow {
+			background: #fffbeb;
+			color: #a16207;
+			border: 1px solid #fde68a;
+		}
+		.creatorreactor-status-red {
+			background: #fef2f2;
+			color: #b91c1c;
+			border: 1px solid #fecaca;
+		}
 		.creatorreactor-tab-nav { margin: 0 0 16px; }
 		.creatorreactor-tab-panel { display: none; }
 		.creatorreactor-tab-panel.is-active { display: block; }
@@ -1865,11 +1908,116 @@ class Admin_Settings {
 		.creatorreactor-muted { color: #646970; }
 		.creatorreactor-meta-list { margin: 0; }
 		.creatorreactor-meta-list p { margin: 0 0 10px; }
-		.creatorreactor-connection-overview { display: flex; justify-content: space-between; gap: 16px; padding: 14px; border: 1px solid #dcdcde; border-radius: 6px; background: #f6f7f7; margin-bottom: 16px; }
-		.creatorreactor-connection-actions { display: flex; gap: 8px; align-items: center; flex-wrap: wrap; }
+		.creatorreactor-dashboard-shell {
+			--cr-bg: #f4f6f8;
+			--cr-surface: #ffffff;
+			--cr-surface-muted: #f3f6fb;
+			--cr-border: #dfe5ee;
+			--cr-text: #111827;
+			--cr-text-muted: #6b7280;
+			--cr-accent: #4f46e5;
+			--cr-accent-strong: #4338ca;
+			--cr-danger: #dc2626;
+			background: linear-gradient(180deg, #f8faff 0%, #f3f5fb 100%);
+			border: 1px solid var(--cr-border);
+			border-radius: 16px;
+			padding: 28px;
+			box-shadow: 0 18px 44px rgba(30, 41, 59, 0.12);
+		}
+		.creatorreactor-dashboard-head {
+			display: flex;
+			align-items: flex-start;
+			justify-content: space-between;
+			gap: 20px;
+			margin: 0 0 22px;
+			padding-bottom: 18px;
+			border-bottom: 1px solid #e5e7eb;
+		}
+		.creatorreactor-dashboard-title { margin: 0 0 6px; font-size: 30px; line-height: 1.1; border: 0; padding: 0; letter-spacing: -0.025em; color: var(--cr-text); font-weight: 750; }
+		.creatorreactor-dashboard-subtitle { margin: 0; color: var(--cr-text-muted); max-width: 58ch; font-size: 14px; line-height: 1.65; }
+		.creatorreactor-dashboard-grid {
+			display: grid;
+			grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
+			gap: 18px;
+			align-items: stretch;
+			margin-bottom: 18px;
+		}
+		.creatorreactor-dashboard-row {
+			display: grid;
+			grid-template-columns: minmax(280px, 1fr) minmax(0, 2fr);
+			gap: 20px;
+			align-items: start;
+		}
+		.creatorreactor-dashboard-col {
+			display: flex;
+			flex-direction: column;
+			gap: 16px;
+			min-width: 0;
+		}
+		.creatorreactor-modules-shell {
+			padding: 22px;
+			border: 1px solid #dfe5ee;
+			border-radius: 14px;
+			background: #fff;
+			box-shadow: 0 10px 28px rgba(30, 41, 59, 0.08);
+			min-height: 220px;
+		}
+		.creatorreactor-modules-shell h2 {
+			margin: 0;
+			font-size: 20px;
+			line-height: 1.3;
+		}
+		.creatorreactor-connection-overview {
+			display: flex;
+			flex-direction: column;
+			gap: 12px;
+			padding: 22px 24px;
+			border: 1px solid var(--cr-border);
+			border-radius: 14px;
+			background: var(--cr-surface);
+			box-shadow: 0 10px 28px rgba(30, 41, 59, 0.08);
+			margin: 0;
+		}
+		.creatorreactor-status-line { margin: 0; }
+		.creatorreactor-status-text { margin: 0; color: #374151; font-size: 14px; line-height: 1.65; font-weight: 500; }
+		.creatorreactor-connection-actions {
+			display: flex;
+			flex-direction: column;
+			gap: 14px;
+			align-items: stretch;
+			flex-wrap: nowrap;
+			padding: 20px;
+			border: 1px solid var(--cr-border);
+			border-radius: 14px;
+			background: var(--cr-surface-muted);
+			box-shadow: 0 10px 28px rgba(30, 41, 59, 0.08);
+		}
 		.creatorreactor-connection-actions .creatorreactor-connect-fanvue-hint { flex-basis: 100%; margin: 8px 0 0; max-width: 28rem; }
 		.creatorreactor-connection-actions form { margin: 0; }
 		.creatorreactor-connection-actions .submit { margin: 0; padding: 0; }
+		.creatorreactor-connection-actions .button {
+			width: 100%;
+			text-align: center;
+			justify-content: center;
+			min-height: 42px;
+			font-size: 14px;
+			font-weight: 700;
+			border-radius: 10px;
+			transition: transform 0.12s ease, box-shadow 0.16s ease, filter 0.12s ease;
+		}
+		.creatorreactor-connection-actions .button:hover,
+		.creatorreactor-connection-actions .button:focus {
+			transform: translateY(-1px);
+			filter: brightness(1.02);
+		}
+		.creatorreactor-connection-actions strong {
+			font-size: 11px;
+			letter-spacing: 0.08em;
+			text-transform: uppercase;
+			color: #6b7280;
+			font-weight: 700;
+		}
+		.creatorreactor-dashboard-details { margin-top: 6px; }
 		.creatorreactor-test-details-open { margin: 12px 0 0; }
 		.creatorreactor-test-modal-trigger { margin-left: 8px; }
 		.creatorreactor-test-errors { margin-top: 14px; padding: 12px; border: 1px solid #f3c7c7; border-radius: 6px; background: #fff7f7; }
@@ -1886,33 +2034,52 @@ class Admin_Settings {
 		.creatorreactor-modal-close { border: 0; background: transparent; color: #50575e; cursor: pointer; font-size: 22px; line-height: 1; }
 		.creatorreactor-inline-status { margin-left: 8px; }
 		.creatorreactor-connection-card { border-width: 1px; }
-		.creatorreactor-connection-card.is-red { background: #fff1f1; border-color: #f3c7c7; }
-		.creatorreactor-connection-card.is-yellow { background: #fff9e8; border-color: #f1deaa; }
-		.creatorreactor-connection-card.is-green { background: #eefbf1; border-color: #b8e2c1; }
-		.creatorreactor-connection-alert { margin: 0 0 12px; color: #7a1f1f; font-weight: 600; }
+		.creatorreactor-connection-card.is-red { border-color: #fecaca; }
+		.creatorreactor-connection-card.is-yellow { border-color: #fde68a; }
+		.creatorreactor-connection-card.is-green { border-color: #bbf7d0; }
+		.creatorreactor-connection-alert {
+			margin: 0 0 14px;
+			padding: 10px 12px;
+			border-radius: 10px;
+			border: 1px solid #fecaca;
+			background: #fef2f2;
+			color: #991b1b;
+			font-weight: 600;
+		}
+		@media (max-width: 900px) {
+			.creatorreactor-dashboard-row { grid-template-columns: 1fr; }
+			.creatorreactor-dashboard-grid { grid-template-columns: 1fr; }
+		}
 		@media (max-width: 782px) {
-			.creatorreactor-connection-overview { flex-direction: column; }
+			.creatorreactor-dashboard-shell { padding: 18px; border-radius: 12px; }
+			.creatorreactor-dashboard-head { flex-direction: column; gap: 12px; margin-bottom: 16px; padding-bottom: 14px; }
+			.creatorreactor-dashboard-title { font-size: 23px; }
+			.creatorreactor-dashboard-subtitle { font-size: 14px; }
+			.creatorreactor-connection-overview { padding: 16px; border-radius: 12px; }
+			.creatorreactor-connection-actions { padding: 16px; }
 		}
 		.creatorreactor-btn-connect.button {
-			background: #1a7f37;
-			border-color: #156a2e;
+			background: var(--cr-accent);
+			border-color: var(--cr-accent-strong);
 			color: #fff;
+			box-shadow: 0 8px 20px rgba(79, 70, 229, 0.35);
 		}
 		.creatorreactor-btn-connect.button:hover,
 		.creatorreactor-btn-connect.button:focus {
-			background: #156a2e;
-			border-color: #125a28;
+			background: var(--cr-accent-strong);
+			border-color: #3730a3;
 			color: #fff;
 		}
 		.creatorreactor-btn-disconnect.button {
-			background: #c92a2a;
-			border-color: #a61e1e;
+			background: var(--cr-danger);
+			border-color: #b91c1c;
 			color: #fff;
+			box-shadow: 0 8px 20px rgba(220, 38, 38, 0.28);
 		}
 		.creatorreactor-btn-disconnect.button:hover,
 		.creatorreactor-btn-disconnect.button:focus {
-			background: #b52727;
-			border-color: #8f1f1f;
+			background: #b91c1c;
+			border-color: #991b1b;
 			color: #fff;
 		}
 		.creatorreactor-connection-log {
@@ -1927,8 +2094,9 @@ class Admin_Settings {
 			cursor: pointer;
 			padding: 0;
 			margin: 0;
-			font-size: 14px;
-			font-weight: 600;
+			font-size: 13px;
+			font-weight: 700;
+			letter-spacing: 0.01em;
 			color: #1d2327;
 			display: inline-flex;
 			align-items: center;
@@ -1958,10 +2126,11 @@ class Admin_Settings {
 			max-height: 22rem;
 			overflow: auto;
 			font-family: Consolas, Monaco, monospace;
-			font-size: 12px;
+			font-size: 11px;
+			line-height: 1.55;
 			background: #f6f7f7;
 			border: 1px solid #dcdcde;
-			border-radius: 4px;
+			border-radius: 8px;
 			padding: 10px 12px;
 			margin: 0 0 12px;
 			list-style: none;
@@ -2863,6 +3032,8 @@ class Admin_Settings {
 
 		$uuid = get_user_meta( (int) $user->ID, Entitlements::USERMETA_CREATORREACTOR_UUID, true );
 		$uuid = is_string( $uuid ) ? sanitize_text_field( $uuid ) : '';
+		$last_payload_sync = get_user_meta( (int) $user->ID, Fan_OAuth::USERMETA_LAST_OAUTH_PAYLOAD_SYNC_AT, true );
+		$last_payload_sync = is_string( $last_payload_sync ) ? sanitize_text_field( $last_payload_sync ) : '';
 
 		$row         = self::get_latest_entitlement_row_for_wp_user( (int) $user->ID, (string) $user->user_email );
 		$has_details = is_array( $row );
@@ -2890,6 +3061,19 @@ class Admin_Settings {
 							data-has-details="<?php echo $has_details ? '1' : '0'; ?>"
 						><?php esc_html_e( 'View entitlement details', 'creatorreactor' ); ?></button>
 					</p>
+				</td>
+			</tr>
+			<tr>
+				<th><label for="creatorreactor_last_payload_sync_field"><?php esc_html_e( 'Last Fan OAuth payload sync', 'creatorreactor' ); ?></label></th>
+				<td>
+					<input
+						type="text"
+						id="creatorreactor_last_payload_sync_field"
+						class="regular-text code"
+						value="<?php echo esc_attr( $last_payload_sync !== '' ? $last_payload_sync : '—' ); ?>"
+						readonly
+					/>
+					<p class="description"><?php esc_html_e( 'Timestamp (UTC ISO-8601) of the most recent per-login Fan OAuth profile sync.', 'creatorreactor' ); ?></p>
 				</td>
 			</tr>
 		</table>
@@ -3189,8 +3373,14 @@ class Admin_Settings {
 
 				$connection_card_class = 'creatorreactor-connection-card is-' . $connection_state;
 				?>
-				<div class="creatorreactor-section <?php echo esc_attr( $connection_card_class ); ?>">
-					<h2><?php printf( esc_html__( '%s Status', 'creatorreactor' ), esc_html( $current_product_label ) ); ?></h2>
+				<div class="creatorreactor-dashboard-row">
+					<div class="creatorreactor-dashboard-col">
+						<div class="creatorreactor-modules-shell">
+							<h2><?php esc_html_e( 'CreatorReactor Modules', 'creatorreactor' ); ?></h2>
+						</div>
+					</div>
+					<div class="creatorreactor-dashboard-col">
+				<div class="creatorreactor-section creatorreactor-dashboard-shell <?php echo esc_attr( $connection_card_class ); ?>">
 					<?php
 					$connect_url = '';
 					if ( $broker_mode ) {
@@ -3213,14 +3403,23 @@ class Admin_Settings {
 						</p>
 					<?php endif; ?>
 
-					<div class="creatorreactor-connection-overview">
+					<div class="creatorreactor-dashboard-head">
 						<div>
-							<p>
+							<h2 class="creatorreactor-dashboard-title"><?php printf( esc_html__( '%s Dashboard', 'creatorreactor' ), esc_html( $current_product_label ) ); ?></h2>
+							<p class="creatorreactor-dashboard-subtitle">
+								<?php esc_html_e( 'Run a connection test, connect OAuth, and review operational status from one place.', 'creatorreactor' ); ?>
+							</p>
+						</div>
+					</div>
+
+					<div class="creatorreactor-dashboard-grid">
+						<div class="creatorreactor-connection-overview">
+							<p class="creatorreactor-status-line">
 								<span class="creatorreactor-status-badge <?php echo 'green' === $connection_state ? 'creatorreactor-status-healthy' : ( 'red' === $connection_state ? 'creatorreactor-status-red' : 'creatorreactor-status-yellow' ); ?>">
 									<?php echo 'green' === $connection_state ? esc_html__( 'Healthy', 'creatorreactor' ) : ( 'red' === $connection_state ? esc_html__( 'Attention', 'creatorreactor' ) : esc_html__( 'Pending', 'creatorreactor' ) ); ?>
 								</span>
 							</p>
-							<p class="creatorreactor-muted">
+							<p class="creatorreactor-status-text">
 								<?php
 								if ( 'green' === $connection_state ) {
 									if ( $connection_test_passed ) {
@@ -3237,6 +3436,7 @@ class Admin_Settings {
 							</p>
 						</div>
 						<div class="creatorreactor-connection-actions">
+							<strong><?php esc_html_e( 'Actions', 'creatorreactor' ); ?></strong>
 							<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
 								<?php wp_nonce_field( 'creatorreactor_test_connection' ); ?>
 								<input type="hidden" name="action" value="creatorreactor_test_connection" />
@@ -3259,7 +3459,7 @@ class Admin_Settings {
 									<a href="<?php echo esc_url( $connect_url, [ 'https', 'http' ] ); ?>" class="button creatorreactor-btn-connect"><?php esc_html_e( 'Connect', 'creatorreactor' ); ?></a>
 								<?php endif; ?>
 							<?php endif; ?>
-					</div>
+						</div>
 					</div>
 
 					<?php
@@ -3342,7 +3542,7 @@ class Admin_Settings {
 						</div>
 					<?php endif; ?>
 
-					<details class="creatorreactor-connection-log">
+					<details class="creatorreactor-connection-log creatorreactor-dashboard-details">
 						<summary><?php esc_html_e( 'Connection log', 'creatorreactor' ); ?></summary>
 						<div class="creatorreactor-connection-log-body">
 							<p class="description"><?php esc_html_e( 'OAuth, broker, and connection-test events (newest first). Mirrors to the PHP error log when available.', 'creatorreactor' ); ?></p>
@@ -3372,6 +3572,8 @@ class Admin_Settings {
 							</form>
 						</div>
 					</details>
+				</div>
+					</div>
 				</div>
 			</div>
 

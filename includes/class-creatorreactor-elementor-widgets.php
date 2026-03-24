@@ -109,19 +109,236 @@ final class Elementor_Widget_Subscriber extends Elementor_Widget_Shortcode_Wrap 
 final class Elementor_Widget_Not_Logged_In extends Elementor_Widget_Shortcode_Wrap {
 
 	public function get_name() {
-		return 'creatorreactor_not_logged_in';
+		return 'creatorreactor_logged_in_no_role';
 	}
 
 	public function get_title() {
-		return __( 'CreatorReactor: Not logged in', 'creatorreactor' );
+		return __( 'CreatorReactor: Logged in no role', 'creatorreactor' );
 	}
 
 	public function get_keywords() {
-		return [ 'creatorreactor', 'guest', 'logout', 'visitor' ];
+		return [ 'creatorreactor', 'logged in', 'no role', 'entitlement' ];
 	}
 
 	protected function shortcode_tag(): string {
-		return 'not_logged_in';
+		return 'logged_in_no_role';
+	}
+}
+
+/**
+ * @package CreatorReactor
+ */
+final class Elementor_Widget_Logged_Out extends Elementor_Widget_Shortcode_Wrap {
+
+	public function get_name() {
+		return 'creatorreactor_logged_out';
+	}
+
+	public function get_title() {
+		return __( 'CreatorReactor: Logged out', 'creatorreactor' );
+	}
+
+	public function get_keywords() {
+		return [ 'creatorreactor', 'guest', 'visitor', 'logged out' ];
+	}
+
+	protected function shortcode_tag(): string {
+		return 'logged_out';
+	}
+}
+
+/**
+ * @package CreatorReactor
+ */
+final class Elementor_Widget_Logged_In extends Elementor_Widget_Shortcode_Wrap {
+
+	public function get_name() {
+		return 'creatorreactor_logged_in';
+	}
+
+	public function get_title() {
+		return __( 'CreatorReactor: Logged in', 'creatorreactor' );
+	}
+
+	public function get_keywords() {
+		return [ 'creatorreactor', 'member', 'logged in', 'user' ];
+	}
+
+	protected function shortcode_tag(): string {
+		return 'logged_in';
+	}
+}
+
+/**
+ * @package CreatorReactor
+ */
+final class Elementor_Widget_Has_Tier extends \Elementor\Widget_Base {
+
+	public function get_name() {
+		return 'creatorreactor_has_tier';
+	}
+
+	public function get_title() {
+		return __( 'CreatorReactor: Has tier', 'creatorreactor' );
+	}
+
+	public function get_categories() {
+		return [ 'creatorreactor' ];
+	}
+
+	public function get_icon() {
+		return 'eicon-lock-user';
+	}
+
+	public function get_keywords() {
+		return [ 'creatorreactor', 'tier', 'subscriber', 'entitlement' ];
+	}
+
+	protected function register_controls() {
+		$this->start_controls_section(
+			'section_content',
+			[
+				'label' => __( 'Tier conditions', 'creatorreactor' ),
+				'tab'   => \Elementor\Controls_Manager::TAB_CONTENT,
+			]
+		);
+
+		$this->add_control(
+			'tier',
+			[
+				'label'       => __( 'Tier', 'creatorreactor' ),
+				'type'        => \Elementor\Controls_Manager::TEXT,
+				'default'     => '',
+				'placeholder' => __( 'premium', 'creatorreactor' ),
+				'description' => __( 'Leave empty to match any active tier.', 'creatorreactor' ),
+			]
+		);
+
+		$this->add_control(
+			'product',
+			[
+				'label'       => __( 'Product', 'creatorreactor' ),
+				'type'        => \Elementor\Controls_Manager::TEXT,
+				'default'     => '',
+				'placeholder' => __( 'fanvue', 'creatorreactor' ),
+				'description' => __( 'Leave empty to match across products.', 'creatorreactor' ),
+			]
+		);
+
+		$this->add_control(
+			'inner_content',
+			[
+				'label'       => __( 'Visible content', 'creatorreactor' ),
+				'type'        => \Elementor\Controls_Manager::WYSIWYG,
+				'default'     => '',
+				'description' => __( 'Shown only when the visitor matches these tier conditions.', 'creatorreactor' ),
+			]
+		);
+
+		$this->end_controls_section();
+	}
+
+	protected function render() {
+		$s        = $this->get_settings_for_display();
+		$inner    = isset( $s['inner_content'] ) ? (string) $s['inner_content'] : '';
+		$tier     = isset( $s['tier'] ) ? trim( sanitize_text_field( (string) $s['tier'] ) ) : '';
+		$product  = isset( $s['product'] ) ? trim( sanitize_text_field( (string) $s['product'] ) ) : '';
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- HTML from shortcode renderer.
+		echo Shortcodes::has_tier(
+			[
+				'tier'    => $tier,
+				'product' => $product,
+			],
+			$inner
+		);
+	}
+}
+
+/**
+ * @package CreatorReactor
+ */
+final class Elementor_Widget_Onboarding_Incomplete extends Elementor_Widget_Shortcode_Wrap {
+
+	public function get_name() {
+		return 'creatorreactor_onboarding_incomplete';
+	}
+
+	public function get_title() {
+		return __( 'CreatorReactor: Onboarding incomplete', 'creatorreactor' );
+	}
+
+	public function get_keywords() {
+		return [ 'creatorreactor', 'onboarding', 'incomplete', 'setup' ];
+	}
+
+	protected function shortcode_tag(): string {
+		return 'onboarding_incomplete';
+	}
+}
+
+/**
+ * @package CreatorReactor
+ */
+final class Elementor_Widget_Onboarding_Complete extends Elementor_Widget_Shortcode_Wrap {
+
+	public function get_name() {
+		return 'creatorreactor_onboarding_complete';
+	}
+
+	public function get_title() {
+		return __( 'CreatorReactor: Onboarding complete', 'creatorreactor' );
+	}
+
+	public function get_keywords() {
+		return [ 'creatorreactor', 'onboarding', 'complete', 'setup' ];
+	}
+
+	protected function shortcode_tag(): string {
+		return 'onboarding_complete';
+	}
+}
+
+/**
+ * @package CreatorReactor
+ */
+final class Elementor_Widget_Fanvue_Connected extends Elementor_Widget_Shortcode_Wrap {
+
+	public function get_name() {
+		return 'creatorreactor_fanvue_connected';
+	}
+
+	public function get_title() {
+		return __( 'CreatorReactor: Fanvue connected', 'creatorreactor' );
+	}
+
+	public function get_keywords() {
+		return [ 'creatorreactor', 'fanvue', 'connected', 'oauth' ];
+	}
+
+	protected function shortcode_tag(): string {
+		return 'fanvue_connected';
+	}
+}
+
+/**
+ * @package CreatorReactor
+ */
+final class Elementor_Widget_Fanvue_Not_Connected extends Elementor_Widget_Shortcode_Wrap {
+
+	public function get_name() {
+		return 'creatorreactor_fanvue_not_connected';
+	}
+
+	public function get_title() {
+		return __( 'CreatorReactor: Fanvue not connected', 'creatorreactor' );
+	}
+
+	public function get_keywords() {
+		return [ 'creatorreactor', 'fanvue', 'not connected', 'oauth' ];
+	}
+
+	protected function shortcode_tag(): string {
+		return 'fanvue_not_connected';
 	}
 }
 

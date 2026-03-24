@@ -518,7 +518,7 @@ class Onboarding {
 		}
 		$uid = get_current_user_id();
 		if ( ! self::user_needs_onboarding( $uid ) ) {
-			$dest = self::strip_onboarding_args_from_redirect_url( self::get_redirect_to_from_request() );
+			$dest = home_url( '/' );
 			wp_safe_redirect( wp_validate_redirect( $dest, home_url( '/' ) ) );
 			exit;
 		}
@@ -583,7 +583,7 @@ class Onboarding {
 
 		Entitlements::refresh_social_entitlements_user_meta( $uid, 'onboarding' );
 
-		$dest = self::strip_onboarding_args_from_redirect_url( self::get_redirect_to_from_request() );
+		$dest = home_url( '/' );
 		wp_safe_redirect( wp_validate_redirect( $dest, home_url( '/' ) ) );
 		exit;
 	}
@@ -751,11 +751,7 @@ class Onboarding {
 
 		Entitlements::refresh_social_entitlements_user_meta( $uid, 'onboarding' );
 
-		$dest = self::get_redirect_to_from_request();
-		if ( $dest === home_url( '/' ) && ! empty( $session['redirect_to'] ) ) {
-			$dest = wp_validate_redirect( (string) $session['redirect_to'], home_url( '/' ) );
-		}
-		$dest = self::strip_onboarding_args_from_redirect_url( $dest );
+		$dest = home_url( '/' );
 		wp_safe_redirect( wp_validate_redirect( $dest, home_url( '/' ) ) );
 		exit;
 	}

@@ -51,6 +51,13 @@ final class Elementor_Integration {
 			new Elementor_Widget_Follower(),
 			new Elementor_Widget_Subscriber(),
 			new Elementor_Widget_Not_Logged_In(),
+			new Elementor_Widget_Logged_Out(),
+			new Elementor_Widget_Logged_In(),
+			new Elementor_Widget_Has_Tier(),
+			new Elementor_Widget_Onboarding_Incomplete(),
+			new Elementor_Widget_Onboarding_Complete(),
+			new Elementor_Widget_Fanvue_Connected(),
+			new Elementor_Widget_Fanvue_Not_Connected(),
 			new Elementor_Widget_Fanvue_Oauth(),
 			new Elementor_Widget_Onboarding(),
 		];

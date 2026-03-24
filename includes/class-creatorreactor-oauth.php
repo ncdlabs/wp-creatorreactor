@@ -855,6 +855,125 @@ class CreatorReactor_OAuth {
 		return true;
 	}
 
+	/**
+	 * Read Fan OAuth token row stored on a WordPress user.
+	 *
+	 * @param int $user_id WordPress user ID.
+	 * @return array<string, mixed>
+	 */
+	public static function get_fan_oauth_tokens_for_user( $user_id ) {
+		$user_id = (int) $user_id;
+		if ( $user_id <= 0 ) {
+			return [];
+		}
+
+		$sealed = get_user_meta( $user_id, self::USERMETA_FAN_OAUTH_TOKENS, true );
+		if ( ! is_string( $sealed ) || $sealed === '' ) {
+			return [];
+		}
+
+		$row = self::unseal_fan_oauth_token_row( $sealed );
+		return is_array( $row ) ? $row : [];
+	}
+
+	/**
+	 * Get a valid Fan OAuth access token for a user (refreshing the user token row if needed).
+	 *
+	 * @param int $user_id WordPress user ID.
+	 * @return string|null Access token or null when unavailable.
+	 */
+	public static function get_fan_oauth_access_token_for_user( $user_id ) {
+		$user_id = (int) $user_id;
+		if ( $user_id <= 0 ) {
+			return null;
+		}
+
+		$tokens = self::get_fan_oauth_tokens_for_user( $user_id );
+		if ( empty( $tokens ) ) {
+			return null;
+		}
+
+		$access = isset( $tokens['access_token'] ) && is_string( $tokens['access_token'] ) ? $tokens['access_token'] : '';
+		if ( $access === '' ) {
+			return null;
+		}
+
+		$expires_at = isset( $tokens['expires_at'] ) ? (int) $tokens['expires_at'] : 0;
+		if ( $expires_at > 0 && time() < $expires_at - 60 ) {
+			return $access;
+		}
+
+		$refreshed = self::refresh_fan_oauth_tokens_row( $tokens );
+		if ( ! is_array( $refreshed ) ) {
+			return null;
+		}
+
+		self::save_fan_oauth_tokens_to_user( $user_id, $refreshed );
+		return isset( $refreshed['access_token'] ) && is_string( $refreshed['access_token'] ) ? $refreshed['access_token'] : null;
+	}
+
+	/**
+	 * Refresh a Fan OAuth token row (for user-meta stored fan tokens).
+	 *
+	 * @param array<string, mixed> $tokens Existing token row.
+	 * @return array<string, mixed>|null
+	 */
+	private static function refresh_fan_oauth_tokens_row( array $tokens ) {
+		$refresh_token = isset( $tokens['refresh_token'] ) && is_string( $tokens['refresh_token'] ) ? $tokens['refresh_token'] : '';
+		if ( $refresh_token === '' ) {
+			return null;
+		}
+
+		$opts          = Admin_Settings::get_options();
+		$client_id     = isset( $opts['creatorreactor_oauth_client_id'] ) ? trim( (string) $opts['creatorreactor_oauth_client_id'] ) : '';
+		$client_secret = isset( $opts['creatorreactor_oauth_client_secret'] ) ? (string) $opts['creatorreactor_oauth_client_secret'] : '';
+		if ( $client_id === '' || $client_secret === '' ) {
+			return null;
+		}
+
+		$body        = [
+			'grant_type'    => 'refresh_token',
+			'refresh_token' => $refresh_token,
+		];
+		$auth_header = 'Basic ' . base64_encode( $client_id . ':' . $client_secret );
+		$token_url   = self::get_token_endpoint( $opts );
+		$response    = wp_remote_post(
+			$token_url,
+			[
+				'timeout' => 15,
+				'headers' => [
+					'Content-Type'  => 'application/x-www-form-urlencoded',
+					'Authorization' => $auth_header,
+				],
+				'body'    => $body,
+			]
+		);
+
+		if ( is_wp_error( $response ) ) {
+			Admin_Settings::log_connection( 'debug', 'Fan OAuth user token refresh: transport error.' );
+			return null;
+		}
+
+		$code_http = wp_remote_retrieve_response_code( $response );
+		$body_res  = wp_remote_retrieve_body( $response );
+		$data      = json_decode( $body_res, true );
+		if ( $code_http !== 200 ) {
+			Admin_Settings::log_connection( 'debug', 'Fan OAuth user token refresh: HTTP ' . (int) $code_http . '.' );
+			return null;
+		}
+		if ( ! isset( $data['access_token'] ) || ! is_string( $data['access_token'] ) ) {
+			Admin_Settings::log_connection( 'debug', 'Fan OAuth user token refresh: success response missing access_token.' );
+			return null;
+		}
+
+		$expires_in = isset( $data['expires_in'] ) ? (int) $data['expires_in'] : 3600;
+		return [
+			'access_token'  => $data['access_token'],
+			'refresh_token' => isset( $data['refresh_token'] ) && is_string( $data['refresh_token'] ) ? $data['refresh_token'] : $refresh_token,
+			'expires_at'    => time() + $expires_in,
+		];
+	}
+
 	private static function encrypt_tokens( $data ) {
 		try {
 			$key = self::get_encryption_key();

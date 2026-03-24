@@ -17,6 +17,7 @@ class Fan_OAuth {
 
 	const REST_ROUTE_START    = '/fan-oauth-start';
 	const REST_ROUTE_CALLBACK = '/fan-oauth-callback';
+	const USERMETA_LAST_OAUTH_PAYLOAD_SYNC_AT = 'creatorreactor_fan_oauth_payload_synced_at';
 
 	/**
 	 * Prevent CDNs / full-page cache from caching 302 responses (breaks Fanvue redirect chain).
@@ -32,8 +33,68 @@ class Fan_OAuth {
 
 	public static function init() {
 		add_action( 'rest_api_init', [ __CLASS__, 'register_routes' ] );
+		add_action( 'wp_login', [ __CLASS__, 'on_wp_login_sync_from_oauth_payload' ], 14, 2 );
 		// Run late so other plugins do not reintroduce a cookie-nonce error after we clear it.
 		add_filter( 'rest_authentication_errors', [ __CLASS__, 'allow_without_cookie_nonce' ], 999 );
+	}
+
+	/**
+	 * Per-login Fan OAuth profile sync (one-time per request): refresh identity/role from OAuth payload.
+	 *
+	 * @param string         $user_login Login name (hook signature).
+	 * @param \WP_User|false $user      User object.
+	 */
+	public static function on_wp_login_sync_from_oauth_payload( $user_login, $user ) {
+		if ( ! ( $user instanceof \WP_User ) ) {
+			return;
+		}
+		if ( ! apply_filters( 'creatorreactor_sync_fan_oauth_profile_on_login', true, $user ) ) {
+			return;
+		}
+
+		static $done = [];
+		$uid = (int) $user->ID;
+		if ( $uid <= 0 || isset( $done[ $uid ] ) ) {
+			return;
+		}
+		$done[ $uid ] = true;
+
+		$is_fan_linked = get_user_meta( $uid, Onboarding::META_FANVUE_OAUTH_LINKED, true ) === '1';
+		$fan_tokens    = CreatorReactor_OAuth::get_fan_oauth_tokens_for_user( $uid );
+		if ( ! $is_fan_linked && empty( $fan_tokens ) ) {
+			return;
+		}
+
+		$access_token = CreatorReactor_OAuth::get_fan_oauth_access_token_for_user( $uid );
+		if ( ! is_string( $access_token ) || $access_token === '' ) {
+			Admin_Settings::log_connection( 'debug', sprintf( 'Fan OAuth login sync skipped for WP user %d: no valid fan access token.', $uid ) );
+			return;
+		}
+
+		$profile = CreatorReactor_Client::fetch_profile_with_access_token( $access_token );
+		if ( ! is_array( $profile ) ) {
+			Admin_Settings::log_connection( 'debug', sprintf( 'Fan OAuth login sync skipped for WP user %d: profile fetch returned empty.', $uid ) );
+			return;
+		}
+
+		$identity = self::identity_from_profile( $profile );
+		if ( isset( $identity['uuid'] ) && is_string( $identity['uuid'] ) && $identity['uuid'] !== '' ) {
+			update_user_meta( $uid, Entitlements::USERMETA_CREATORREACTOR_UUID, sanitize_text_field( $identity['uuid'] ) );
+		}
+
+		$oauth_role = self::role_from_oauth_profile( $profile );
+		$did_sync   = self::sync_entitlement_from_oauth_profile( $uid, $identity, $profile );
+		update_user_meta( $uid, self::USERMETA_LAST_OAUTH_PAYLOAD_SYNC_AT, gmdate( 'c' ) );
+		Admin_Settings::log_connection(
+			'debug',
+			sprintf(
+				'Fan OAuth login sync complete for WP user %d: role=%s uuid=%s entitlement_sync=%s',
+				$uid,
+				$oauth_role !== '' ? $oauth_role : 'unknown',
+				self::format_uuid_for_log( isset( $identity['uuid'] ) ? (string) $identity['uuid'] : '' ),
+				$did_sync ? 'yes' : 'no'
+			)
+		);
 	}
 
 	public static function allow_without_cookie_nonce( $result ) {
@@ -279,6 +340,16 @@ class Fan_OAuth {
 
 		$has_email = $identity['email'] !== '' && is_email( $identity['email'] );
 		$has_uuid  = $identity['uuid'] !== '';
+		$oauth_role = is_array( $profile ) ? self::role_from_oauth_profile( $profile ) : '';
+		Admin_Settings::log_connection(
+			'debug',
+			sprintf(
+				'Fan OAuth callback identity parsed: role=%s uuid=%s email_present=%s',
+				$oauth_role !== '' ? $oauth_role : 'unknown',
+				self::format_uuid_for_log( $identity['uuid'] ),
+				$has_email ? 'yes' : 'no'
+			)
+		);
 
 		$user = false;
 		if ( $has_email ) {
@@ -359,6 +430,11 @@ class Fan_OAuth {
 			return false;
 		}
 
+		$oauth_role = self::role_from_oauth_profile( $profile );
+		if ( $oauth_role !== '' ) {
+			self::apply_wp_role_from_oauth_profile( $wp_user_id, $oauth_role );
+		}
+
 		$data = $profile;
 		if ( isset( $profile['data'] ) && is_array( $profile['data'] ) ) {
 			$data = $profile['data'];
@@ -367,6 +443,8 @@ class Fan_OAuth {
 		$role_raw = '';
 		if ( isset( $data['role'] ) && is_scalar( $data['role'] ) && ! is_bool( $data['role'] ) ) {
 			$role_raw = sanitize_key( (string) $data['role'] );
+		} elseif ( isset( $data['user'] ) && is_array( $data['user'] ) && isset( $data['user']['role'] ) && is_scalar( $data['user']['role'] ) && ! is_bool( $data['user']['role'] ) ) {
+			$role_raw = sanitize_key( (string) $data['user']['role'] );
 		}
 
 		$tier_raw  = isset( $data['tier'] ) ? $data['tier'] : null;
@@ -451,6 +529,108 @@ class Fan_OAuth {
 	}
 
 	/**
+	 * Decide which WordPress role should be applied from Fanvue OAuth profile data.
+	 *
+	 * @param array<string, mixed> $profile Raw OAuth profile payload.
+	 * @return string Role slug or empty string when no mapping is available.
+	 */
+	private static function role_from_oauth_profile( array $profile ) {
+		$data = $profile;
+		if ( isset( $profile['data'] ) && is_array( $profile['data'] ) ) {
+			$data = $profile['data'];
+		}
+
+		$role_raw = '';
+		if ( isset( $data['role'] ) && is_scalar( $data['role'] ) && ! is_bool( $data['role'] ) ) {
+			$role_raw = sanitize_key( (string) $data['role'] );
+		} elseif ( isset( $data['user'] ) && is_array( $data['user'] ) && isset( $data['user']['role'] ) && is_scalar( $data['user']['role'] ) && ! is_bool( $data['user']['role'] ) ) {
+			$role_raw = sanitize_key( (string) $data['user']['role'] );
+		}
+
+		if ( in_array( $role_raw, [ 'follower', 'fan' ], true ) ) {
+			return 'creatorreactor_follower';
+		}
+
+		$tier_raw  = isset( $data['tier'] ) ? $data['tier'] : null;
+		$tier_norm = CreatorReactor_Client::normalize_tier( $tier_raw );
+		if ( $tier_norm === null && isset( $data['subscription'] ) && is_array( $data['subscription'] ) && array_key_exists( 'tier', $data['subscription'] ) ) {
+			$tier_norm = CreatorReactor_Client::normalize_tier( $data['subscription']['tier'] );
+		}
+
+		if ( in_array( $role_raw, [ 'subscriber', 'subscribed' ], true ) || ( is_string( $tier_norm ) && $tier_norm !== '' ) ) {
+			return 'creatorreactor_subscriber';
+		}
+
+		return '';
+	}
+
+	/**
+	 * Safe UUID formatting for connection logs.
+	 *
+	 * @param string $uuid Raw UUID.
+	 * @return string Redacted UUID string.
+	 */
+	private static function format_uuid_for_log( $uuid ) {
+		$uuid = is_string( $uuid ) ? sanitize_text_field( $uuid ) : '';
+		if ( $uuid === '' ) {
+			return 'none';
+		}
+		if ( strlen( $uuid ) <= 10 ) {
+			return $uuid;
+		}
+		return substr( $uuid, 0, 6 ) . '...' . substr( $uuid, -4 );
+	}
+
+	/**
+	 * Apply Fanvue-derived WordPress role while preserving privileged admins.
+	 *
+	 * @param int    $wp_user_id WordPress user ID.
+	 * @param string $role_slug  Target role slug.
+	 * @return bool True when the role is already set or successfully applied.
+	 */
+	private static function apply_wp_role_from_oauth_profile( $wp_user_id, $role_slug ) {
+		$wp_user_id = (int) $wp_user_id;
+		$role_slug  = sanitize_key( (string) $role_slug );
+		if ( $wp_user_id <= 0 || $role_slug === '' ) {
+			return false;
+		}
+
+		$user = get_user_by( 'id', $wp_user_id );
+		if ( ! ( $user instanceof \WP_User ) ) {
+			return false;
+		}
+		if ( user_can( $user, 'manage_options' ) ) {
+			Admin_Settings::log_connection(
+				'debug',
+				sprintf( 'Fan OAuth role apply skipped for WP user %d: privileged account.', $wp_user_id )
+			);
+			return false;
+		}
+
+		if ( ! get_role( $role_slug ) ) {
+			$label = $role_slug === 'creatorreactor_follower'
+				? __( 'CreatorReactor Follower', 'creatorreactor' )
+				: __( 'CreatorReactor Subscriber', 'creatorreactor' );
+			add_role( $role_slug, $label, [ 'read' => true ] );
+		}
+
+		if ( in_array( $role_slug, (array) $user->roles, true ) ) {
+			Admin_Settings::log_connection(
+				'debug',
+				sprintf( 'Fan OAuth role apply no-op for WP user %d: already %s.', $wp_user_id, $role_slug )
+			);
+			return true;
+		}
+
+		$user->set_role( $role_slug );
+		Admin_Settings::log_connection(
+			'debug',
+			sprintf( 'Fan OAuth role applied for WP user %d: %s.', $wp_user_id, $role_slug )
+		);
+		return true;
+	}
+
+	/**
 	 * @param array<string, mixed>|null $profile API JSON.
 	 * @return array{email: string, uuid: string, display: string}
 	 */
@@ -467,18 +647,28 @@ class Fan_OAuth {
 		if ( isset( $profile['data'] ) && is_array( $profile['data'] ) ) {
 			$d = $profile['data'];
 		}
+		$user_data = ( isset( $d['user'] ) && is_array( $d['user'] ) ) ? $d['user'] : [];
 		foreach ( [ 'email', 'Email' ] as $k ) {
 			if ( ! empty( $d[ $k ] ) && is_string( $d[ $k ] ) ) {
 				$out['email'] = sanitize_email( $d[ $k ] );
 				break;
 			}
-		}
-		foreach ( [ 'id', 'uuid', 'userId' ] as $k ) {
-			if ( ! isset( $d[ $k ] ) || is_bool( $d[ $k ] ) ) {
-				continue;
+			if ( ! empty( $user_data[ $k ] ) && is_string( $user_data[ $k ] ) ) {
+				$out['email'] = sanitize_email( $user_data[ $k ] );
+				break;
 			}
-			if ( is_scalar( $d[ $k ] ) ) {
-				$s = trim( (string) $d[ $k ] );
+		}
+		foreach ( [ 'id', 'uuid', 'userId', 'user_id' ] as $k ) {
+			if ( ! isset( $d[ $k ] ) || is_bool( $d[ $k ] ) ) {
+				if ( ! isset( $user_data[ $k ] ) || is_bool( $user_data[ $k ] ) ) {
+					continue;
+				}
+				$raw_uuid = $user_data[ $k ];
+			} else {
+				$raw_uuid = $d[ $k ];
+			}
+			if ( is_scalar( $raw_uuid ) ) {
+				$s = trim( (string) $raw_uuid );
 				if ( $s !== '' ) {
 					$out['uuid'] = sanitize_text_field( $s );
 					break;
@@ -486,6 +676,9 @@ class Fan_OAuth {
 			}
 		}
 		$display = CreatorReactor_Client::item_display_name( $d );
+		if ( ! is_string( $display ) || $display === '' ) {
+			$display = CreatorReactor_Client::item_display_name( $user_data );
+		}
 		if ( is_string( $display ) && $display !== '' ) {
 			$out['display'] = sanitize_text_field( $display );
 		}
@@ -493,6 +686,10 @@ class Fan_OAuth {
 			foreach ( [ 'username', 'userName', 'name', 'fullName' ] as $k ) {
 				if ( ! empty( $d[ $k ] ) && is_string( $d[ $k ] ) ) {
 					$out['display'] = sanitize_text_field( trim( $d[ $k ] ) );
+					break;
+				}
+				if ( ! empty( $user_data[ $k ] ) && is_string( $user_data[ $k ] ) ) {
+					$out['display'] = sanitize_text_field( trim( $user_data[ $k ] ) );
 					break;
 				}
 			}
