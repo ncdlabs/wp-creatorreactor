@@ -13,6 +13,9 @@ if (! defined('ARRAY_A')) {
 }
 
 require_once __DIR__ . '/../vendor/autoload.php';
+
+require_once __DIR__ . '/wp-core-test-stubs.php';
+
 require_once __DIR__ . '/../includes/class-entitlements.php';
 require_once __DIR__ . '/../includes/class-editor-context.php';
 require_once __DIR__ . '/../includes/class-creatorreactor-oauth.php';
@@ -22,4 +25,5 @@ require_once __DIR__ . '/../includes/class-creatorreactor-banner.php';
 require_once __DIR__ . '/../includes/class-creatorreactor.php';
 require_once __DIR__ . '/../includes/class-creatorreactor-onboarding.php';
 require_once __DIR__ . '/../includes/class-creatorreactor-shortcodes.php';
+require_once __DIR__ . '/../includes/class-creatorreactor-client.php';
 require_once __DIR__ . '/../includes/class-creatorreactor-fan-oauth.php';

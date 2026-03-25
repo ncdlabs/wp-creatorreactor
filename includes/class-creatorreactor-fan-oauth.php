@@ -77,6 +77,7 @@ class Fan_OAuth {
 		}
 		if ( ! is_array( $profile ) ) {
 			Admin_Settings::log_connection( 'debug', sprintf( 'Fan OAuth login sync skipped for WP user %d: no usable OAuth profile payload.', $uid ) );
+			self::sync_wp_role_from_active_fanvue_entitlements( $uid );
 			return;
 		}
 
@@ -99,6 +100,7 @@ class Fan_OAuth {
 				$profile_src
 			)
 		);
+		self::sync_wp_role_from_active_fanvue_entitlements( $uid );
 	}
 
 	/**
@@ -433,6 +435,7 @@ class Fan_OAuth {
 			is_string( $display_for_sync ) ? $display_for_sync : ''
 		);
 		self::sync_entitlement_from_oauth_profile( $user->ID, $identity, $profile );
+		self::sync_wp_role_from_active_fanvue_entitlements( $user->ID );
 
 		wp_set_auth_cookie( $user->ID, true );
 		wp_set_current_user( $user->ID );
@@ -474,16 +477,16 @@ class Fan_OAuth {
 			$role_raw = sanitize_key( (string) $data['user']['role'] );
 		}
 
-		$tier_raw  = isset( $data['tier'] ) ? $data['tier'] : null;
-		$tier_norm = CreatorReactor_Client::normalize_tier( $tier_raw );
+		$tier_raw  = CreatorReactor_Client::tier_raw_from_oauth_data( $data );
+		$tier_norm = $tier_raw !== null ? CreatorReactor_Client::normalize_tier( $tier_raw ) : null;
 
 		$is_follower_role = in_array( $role_raw, [ 'follower', 'fan' ], true );
 		$is_subscriber_role = in_array( $role_raw, [ 'subscriber', 'subscribed' ], true );
 
-		if ( $is_follower_role ) {
-			$stored_tier = Entitlements::tier_stored_for_follower( Entitlements::PRODUCT_FANVUE );
-		} elseif ( $tier_norm !== null && $tier_norm !== '' ) {
+		if ( $tier_norm !== null && $tier_norm !== '' ) {
 			$stored_tier = Entitlements::tier_stored_for_subscriber( Entitlements::PRODUCT_FANVUE, $tier_norm );
+		} elseif ( $is_follower_role ) {
+			$stored_tier = Entitlements::tier_stored_for_follower( Entitlements::PRODUCT_FANVUE );
 		} elseif ( $is_subscriber_role ) {
 			$stored_tier = Entitlements::tier_stored_for_subscriber( Entitlements::PRODUCT_FANVUE, null );
 		} else {
@@ -676,17 +679,17 @@ class Fan_OAuth {
 			$role_raw = sanitize_key( (string) $data['user']['role'] );
 		}
 
+		$tier_raw  = CreatorReactor_Client::tier_raw_from_oauth_data( $data );
+		$tier_norm = $tier_raw !== null ? CreatorReactor_Client::normalize_tier( $tier_raw ) : null;
+		if ( is_string( $tier_norm ) && $tier_norm !== '' ) {
+			return 'creatorreactor_subscriber';
+		}
+
 		if ( in_array( $role_raw, [ 'follower', 'fan' ], true ) ) {
 			return 'creatorreactor_follower';
 		}
 
-		$tier_raw  = isset( $data['tier'] ) ? $data['tier'] : null;
-		$tier_norm = CreatorReactor_Client::normalize_tier( $tier_raw );
-		if ( $tier_norm === null && isset( $data['subscription'] ) && is_array( $data['subscription'] ) && array_key_exists( 'tier', $data['subscription'] ) ) {
-			$tier_norm = CreatorReactor_Client::normalize_tier( $data['subscription']['tier'] );
-		}
-
-		if ( in_array( $role_raw, [ 'subscriber', 'subscribed' ], true ) || ( is_string( $tier_norm ) && $tier_norm !== '' ) ) {
+		if ( in_array( $role_raw, [ 'subscriber', 'subscribed' ], true ) ) {
 			return 'creatorreactor_subscriber';
 		}
 
@@ -806,6 +809,63 @@ class Fan_OAuth {
 			sprintf( 'Fan OAuth role applied for WP user %d: %s.', $wp_user_id, $role_slug )
 		);
 		return true;
+	}
+
+	/**
+	 * Apply follower/subscriber role from Fanvue-derived data (list sync, entitlements), respecting admin skip rules.
+	 *
+	 * @param int    $wp_user_id WordPress user ID.
+	 * @param string $role_slug  creatorreactor_follower or creatorreactor_subscriber.
+	 * @return bool True if already set, applied, or skipped for privileged users.
+	 */
+	public static function apply_fanvue_derived_wp_role( $wp_user_id, $role_slug ) {
+		$role_slug = sanitize_key( (string) $role_slug );
+		if ( ! in_array( $role_slug, [ 'creatorreactor_follower', 'creatorreactor_subscriber' ], true ) ) {
+			return false;
+		}
+		return self::apply_wp_role_from_oauth_profile( (int) $wp_user_id, $role_slug );
+	}
+
+	/**
+	 * Align WP role with active Fanvue entitlement rows (GET /users/me has no role/tier; list sync fills the table).
+	 *
+	 * @param int $wp_user_id WordPress user ID.
+	 * @return bool True if a role was applied or already matched.
+	 */
+	public static function sync_wp_role_from_active_fanvue_entitlements( $wp_user_id ) {
+		$wp_user_id = (int) $wp_user_id;
+		if ( $wp_user_id <= 0 ) {
+			return false;
+		}
+		$rows = Entitlements::get_active_entitlement_rows_for_wp_user( $wp_user_id );
+		if ( $rows === [] ) {
+			return false;
+		}
+		$want_subscriber = false;
+		$want_follower   = false;
+		foreach ( $rows as $row ) {
+			if ( ! is_array( $row ) ) {
+				continue;
+			}
+			$prod = isset( $row['product'] ) ? Entitlements::normalize_product( (string) $row['product'] ) : '';
+			if ( $prod !== Entitlements::PRODUCT_FANVUE ) {
+				continue;
+			}
+			$tier = isset( $row['tier'] ) ? (string) $row['tier'] : '';
+			$slug = Entitlements::mapped_fanvue_wp_role_from_stored_tier( $tier );
+			if ( $slug === 'creatorreactor_subscriber' ) {
+				$want_subscriber = true;
+			} elseif ( $slug === 'creatorreactor_follower' ) {
+				$want_follower = true;
+			}
+		}
+		if ( $want_subscriber ) {
+			return self::apply_fanvue_derived_wp_role( $wp_user_id, 'creatorreactor_subscriber' );
+		}
+		if ( $want_follower ) {
+			return self::apply_fanvue_derived_wp_role( $wp_user_id, 'creatorreactor_follower' );
+		}
+		return false;
 	}
 
 	/**

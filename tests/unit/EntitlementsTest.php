@@ -71,4 +71,13 @@ final class EntitlementsTest extends BaseTestCase
         self::assertTrue(Entitlements::tier_stored_is_subscriber('fanvue_subscriber_vip'));
         self::assertFalse(Entitlements::tier_stored_is_subscriber(Entitlements::TIER_FOLLOWER));
     }
+
+    public function testMappedFanvueWpRoleFromStoredTier(): void
+    {
+        self::assertSame('', Entitlements::mapped_fanvue_wp_role_from_stored_tier(''));
+        self::assertSame('creatorreactor_follower', Entitlements::mapped_fanvue_wp_role_from_stored_tier('fanvue_follower'));
+        self::assertSame('creatorreactor_follower', Entitlements::mapped_fanvue_wp_role_from_stored_tier(Entitlements::TIER_FOLLOWER));
+        self::assertSame('creatorreactor_subscriber', Entitlements::mapped_fanvue_wp_role_from_stored_tier('fanvue_subscriber'));
+        self::assertSame('creatorreactor_subscriber', Entitlements::mapped_fanvue_wp_role_from_stored_tier('fanvue_subscriber_gold'));
+    }
 }

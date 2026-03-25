@@ -1138,6 +1138,15 @@ class Admin_Settings {
 			? (string) (int) $row['wp_user_id']
 			: '-';
 
+		$snapshot_raw = isset( $row['fanvue_sync_snapshot'] ) ? trim( (string) $row['fanvue_sync_snapshot'] ) : '';
+		$snapshot_out = '-';
+		if ( $snapshot_raw !== '' ) {
+			$max            = 600;
+			$snapshot_out = strlen( $snapshot_raw ) > $max
+				? substr( $snapshot_raw, 0, $max ) . '...'
+				: $snapshot_raw;
+		}
+
 		$lines = [
 			[
 				'section' => true,
@@ -1200,6 +1209,26 @@ class Admin_Settings {
 				'section' => true,
 				'label'   => __( 'Fanvue Records', 'creatorreactor' ),
 				'value'   => '',
+			],
+			[
+				'label' => __( 'Fanvue user UUID', 'creatorreactor' ),
+				'value' => (string) ( $row['fanvue_user_uuid'] ?? '' ) !== '' ? (string) $row['fanvue_user_uuid'] : '-',
+			],
+			[
+				'label' => __( 'Fanvue email', 'creatorreactor' ),
+				'value' => (string) ( $row['fanvue_email'] ?? '' ) !== '' ? (string) $row['fanvue_email'] : '-',
+			],
+			[
+				'label' => __( 'Fanvue display name', 'creatorreactor' ),
+				'value' => (string) ( $row['fanvue_display_name'] ?? '' ) !== '' ? (string) $row['fanvue_display_name'] : '-',
+			],
+			[
+				'label' => __( 'Fanvue tier (stored)', 'creatorreactor' ),
+				'value' => (string) ( $row['fanvue_tier'] ?? '' ) !== '' ? (string) $row['fanvue_tier'] : '-',
+			],
+			[
+				'label' => __( 'Fanvue sync snapshot', 'creatorreactor' ),
+				'value' => $snapshot_out,
 			],
 			[
 				'section' => true,

@@ -13,6 +13,7 @@
 	var ServerSideRender = serverSideRender;
 	var PanelBody = components.PanelBody;
 	var TextControl = components.TextControl;
+	var SelectControl = components.SelectControl;
 
 	function registerInner(name, title, description, icon) {
 		blocks.registerBlockType(name, {
@@ -21,13 +22,47 @@
 			description: description,
 			category: 'creatorreactor',
 			icon: icon,
-			edit: function () {
+			attributes: {
+				container_logic: {
+					type: 'string',
+					default: 'and'
+				}
+			},
+			edit: function (props) {
 				var blockProps = useBlockProps({
 					className: 'creatorreactor-block-editor'
 				});
+				var attrs = props.attributes || {};
+				var containerLogic = attrs.container_logic ? attrs.container_logic : 'and';
+
 				return el(
 					Fragment,
 					null,
+					el(
+						InspectorControls,
+						null,
+						el(
+							PanelBody,
+							{ title: __('Container visibility', 'creatorreactor'), initialOpen: false },
+							el(SelectControl, {
+								label: __('Container visibility logic', 'creatorreactor'),
+								value: containerLogic,
+								options: [
+									{
+										label: __('AND (current): hide container if any gate fails', 'creatorreactor'),
+										value: 'and'
+									},
+									{
+										label: __('OR: show container if any gate passes', 'creatorreactor'),
+										value: 'or'
+									}
+								],
+								onChange: function (value) {
+									props.setAttributes({ container_logic: value });
+								}
+							})
+						)
+					),
 					el(
 						'div',
 						blockProps,
@@ -131,6 +166,10 @@
 			product: {
 				type: 'string',
 				default: ''
+			},
+			container_logic: {
+				type: 'string',
+				default: 'and'
 			}
 		},
 		edit: function (props) {
@@ -140,6 +179,7 @@
 			var attrs = props.attributes || {};
 			var tierLabel = attrs.tier ? attrs.tier : __('any tier', 'creatorreactor');
 			var productLabel = attrs.product ? attrs.product : __('any product', 'creatorreactor');
+			var containerLogic = attrs.container_logic ? attrs.container_logic : 'and';
 			return el(
 				Fragment,
 				null,
@@ -164,6 +204,28 @@
 								props.setAttributes({ product: value });
 							},
 							help: __('Example: fanvue. Leave empty to match across products.', 'creatorreactor')
+						})
+					)
+					,
+					el(
+						PanelBody,
+						{ title: __('Container visibility', 'creatorreactor'), initialOpen: false },
+						el(SelectControl, {
+							label: __('Container visibility logic', 'creatorreactor'),
+							value: containerLogic,
+							options: [
+								{
+									label: __('AND (current): hide container if any gate fails', 'creatorreactor'),
+									value: 'and'
+								},
+								{
+									label: __('OR: show container if any gate passes', 'creatorreactor'),
+									value: 'or'
+								}
+							],
+							onChange: function (value) {
+								props.setAttributes({ container_logic: value });
+							}
 						})
 					)
 				),

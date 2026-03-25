@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace CreatorReactor\Tests\Unit;
 
 use Brain\Monkey\Functions;
+use CreatorReactor\CreatorReactor_Client;
 use CreatorReactor\Fan_OAuth;
 use CreatorReactor\Tests\BaseTestCase;
 
@@ -126,6 +127,39 @@ final class FanOauthProfileMappingTest extends BaseTestCase
         $method->setAccessible(true);
 
         self::assertNull($method->invoke(null, 42));
+    }
+
+    public function testTierRawFromOauthDataUsesSubscriptionWhenRootTierMissing(): void
+    {
+        $raw = CreatorReactor_Client::tier_raw_from_oauth_data([
+            'role' => 'follower',
+            'subscription' => ['tier' => 'gold'],
+        ]);
+        self::assertSame('gold', $raw);
+    }
+
+    public function testRoleFromOauthProfileSubscriberWhenTierPresentDespiteFollowerRole(): void
+    {
+        Functions\when('sanitize_key')->alias(
+            static fn ($value): string => strtolower(preg_replace('/[^a-z0-9_\-]/', '', (string) $value))
+        );
+
+        $method = new \ReflectionMethod(Fan_OAuth::class, 'role_from_oauth_profile');
+        $method->setAccessible(true);
+
+        $slug = $method->invoke(null, [
+            'data' => [
+                'role' => 'follower',
+                'subscription' => ['tier' => 'vip'],
+            ],
+        ]);
+        self::assertSame('creatorreactor_subscriber', $slug);
+    }
+
+    public function testNormalizeTierAcceptsNumericId(): void
+    {
+        self::assertSame('42', CreatorReactor_Client::normalize_tier(42));
+        self::assertSame('7', CreatorReactor_Client::normalize_tier(['id' => 7]));
     }
 
     private function hasMetaWrite(int $userId, string $key, $value): bool

@@ -10,6 +10,19 @@ use CreatorReactor\Tests\BaseTestCase;
 
 final class EditorContextRegressionTest extends BaseTestCase
 {
+    protected function tearDown(): void
+    {
+        unset(
+            $GLOBALS['__cr_wp_stub_is_plugin_active'],
+            $GLOBALS['__cr_wp_stub_is_multisite'],
+            $GLOBALS['__cr_wp_stub_is_plugin_active_for_network'],
+            $GLOBALS['__cr_wp_stub_use_block_editor_for_post_type'],
+            $GLOBALS['__cr_wp_stub_get_current_screen'],
+            $GLOBALS['__cr_wp_stub_post_type_exists']
+        );
+        parent::tearDown();
+    }
+
     protected function setUp(): void
     {
         parent::setUp();
@@ -61,15 +74,214 @@ final class EditorContextRegressionTest extends BaseTestCase
         Functions\when('is_admin')->justReturn(true);
         Functions\when('wp_unslash')->alias(static fn ($value) => $value);
         Functions\when('sanitize_key')->alias(static fn ($value): string => strtolower((string) $value));
-        Functions\when('get_current_screen')->justReturn(new class {
+        $GLOBALS['__cr_wp_stub_get_current_screen'] = new class {
             public function is_block_editor(): bool
             {
                 return true;
             }
-        });
+        };
 
         $_GET['action'] = 'elementor';
         self::assertSame('elementor', Editor_Context::current_admin_editor_ui());
         unset($_GET['action']);
+    }
+
+    public function testSiteUsesBlockEditorReturnsTrueWhenPublishedBlockContentExists(): void
+    {
+        $GLOBALS['wpdb'] = new class {
+            public string $posts = 'wp_posts';
+            public function esc_like($text): string
+            {
+                return addcslashes((string) $text, '_%\\');
+            }
+            public function prepare($query, ...$args): string
+            {
+                return (string) $query;
+            }
+            public function get_var($query)
+            {
+                return '1';
+            }
+        };
+
+        self::assertTrue(Editor_Context::site_uses_block_editor());
+    }
+
+    public function testSiteUsesBlockEditorReturnsFalseWhenNoPublishedBlockContent(): void
+    {
+        $GLOBALS['wpdb'] = new class {
+            public string $posts = 'wp_posts';
+            public function esc_like($text): string
+            {
+                return addcslashes((string) $text, '_%\\');
+            }
+            public function prepare($query, ...$args): string
+            {
+                return (string) $query;
+            }
+            public function get_var($query)
+            {
+                return '';
+            }
+        };
+
+        self::assertFalse(Editor_Context::site_uses_block_editor());
+    }
+
+    public function testIsElementorEditRequestReturnsFalseOutsideAdmin(): void
+    {
+        Functions\when('is_admin')->justReturn(false);
+        $_GET['action'] = 'elementor';
+        self::assertFalse(Editor_Context::is_elementor_edit_request());
+        unset($_GET['action']);
+    }
+
+    public function testIsElementorEditRequestReturnsFalseWithoutAction(): void
+    {
+        Functions\when('is_admin')->justReturn(true);
+        unset($_GET['action']);
+        self::assertFalse(Editor_Context::is_elementor_edit_request());
+    }
+
+    public function testIsBlockEditorScreenReturnsTrueWhenScreenSupportsBlockEditor(): void
+    {
+        Functions\when('is_admin')->justReturn(true);
+        $GLOBALS['__cr_wp_stub_get_current_screen'] = new class {
+            public function is_block_editor(): bool
+            {
+                return true;
+            }
+        };
+
+        self::assertTrue(Editor_Context::is_block_editor_screen());
+    }
+
+    public function testFrontendViewIsElementorPageReturnsTrueForSingularElementorClass(): void
+    {
+        Functions\when('is_admin')->justReturn(false);
+        Functions\when('is_singular')->justReturn(true);
+        Functions\when('get_body_class')->justReturn(['single', 'elementor-page']);
+
+        self::assertTrue(Editor_Context::frontend_view_is_elementor_page());
+    }
+
+    public function testPostPrimaryStorageReturnsEmptyWhenNoPostResolved(): void
+    {
+        Functions\when('is_singular')->justReturn(false);
+        Functions\when('get_the_ID')->justReturn(0);
+
+        self::assertSame('empty', Editor_Context::post_primary_storage(null));
+    }
+
+    public function testCurrentAdminEditorUiReturnsBlockWhenBlockEditorActive(): void
+    {
+        Functions\when('is_admin')->justReturn(true);
+        $GLOBALS['__cr_wp_stub_get_current_screen'] = new class {
+            public function is_block_editor(): bool
+            {
+                return true;
+            }
+        };
+        unset($_GET['action']);
+
+        self::assertSame('block', Editor_Context::current_admin_editor_ui());
+    }
+
+    public function testCurrentAdminEditorUiReturnsOtherWhenNoKnownEditorDetected(): void
+    {
+        Functions\when('is_admin')->justReturn(true);
+        $GLOBALS['__cr_wp_stub_get_current_screen'] = new class {
+            public function is_block_editor(): bool
+            {
+                return false;
+            }
+        };
+        unset($_GET['action']);
+
+        self::assertSame('other', Editor_Context::current_admin_editor_ui());
+    }
+
+    public function testIsElementorPluginActiveTrueWhenPluginActive(): void
+    {
+        $GLOBALS['__cr_wp_stub_is_plugin_active'] = static fn ($plugin): bool => $plugin === 'elementor/elementor.php';
+        $GLOBALS['__cr_wp_stub_is_multisite'] = false;
+
+        self::assertTrue(Editor_Context::is_elementor_plugin_active());
+    }
+
+    public function testIsElementorPluginActiveFalseWhenNotActive(): void
+    {
+        $GLOBALS['__cr_wp_stub_is_plugin_active'] = static fn (): bool => false;
+        $GLOBALS['__cr_wp_stub_is_multisite'] = false;
+
+        self::assertFalse(Editor_Context::is_elementor_plugin_active());
+    }
+
+    public function testSiteUsesBlockEditorTrueWhenCoreFunctionReportsEnabled(): void
+    {
+        $GLOBALS['__cr_wp_stub_use_block_editor_for_post_type'] = static fn ($postType): bool => true;
+        $GLOBALS['__cr_wp_stub_post_type_exists'] = static fn ($postType): bool => true;
+
+        self::assertTrue(Editor_Context::site_uses_block_editor());
+    }
+
+    public function testIsElementorEditRequestTrueInAdminWithElementorAction(): void
+    {
+        Functions\when('is_admin')->justReturn(true);
+        Functions\when('wp_unslash')->alias(static fn ($value) => $value);
+        Functions\when('sanitize_key')->alias(static fn ($value): string => strtolower((string) $value));
+        $_GET['action'] = 'elementor';
+
+        self::assertTrue(Editor_Context::is_elementor_edit_request());
+
+        unset($_GET['action']);
+    }
+
+    public function testIsBlockEditorScreenFalseWhenCurrentScreenMissing(): void
+    {
+        Functions\when('is_admin')->justReturn(true);
+        $GLOBALS['__cr_wp_stub_get_current_screen'] = null;
+
+        self::assertFalse(Editor_Context::is_block_editor_screen());
+    }
+
+    public function testIsBlockEditorScreenFalseWhenScreenHasNoBlockEditorMethod(): void
+    {
+        Functions\when('is_admin')->justReturn(true);
+        $GLOBALS['__cr_wp_stub_get_current_screen'] = new \stdClass();
+
+        self::assertFalse(Editor_Context::is_block_editor_screen());
+    }
+
+    public function testPostUsesElementorStorageFalseWhenMetaNotBuilder(): void
+    {
+        Functions\when('get_post_meta')->justReturn('');
+
+        self::assertFalse(Editor_Context::post_uses_elementor_storage(300));
+    }
+
+    public function testContentHasBlocksLoadsPostByIdWhenContentNull(): void
+    {
+        Functions\when('get_post')->alias(
+            static fn ($postId): ?object => $postId === 301 ? (object) ['post_content' => '<!-- wp:heading -->'] : null
+        );
+
+        self::assertTrue(Editor_Context::content_has_blocks(null, 301));
+    }
+
+    public function testFrontendViewIsElementorPageFalseWhenNotSingular(): void
+    {
+        Functions\when('is_admin')->justReturn(false);
+        Functions\when('is_singular')->justReturn(false);
+
+        self::assertFalse(Editor_Context::frontend_view_is_elementor_page());
+    }
+
+    public function testFrontendViewIsElementorPageFalseInAdmin(): void
+    {
+        Functions\when('is_admin')->justReturn(true);
+        Functions\when('is_singular')->justReturn(true);
+
+        self::assertFalse(Editor_Context::frontend_view_is_elementor_page());
     }
 }

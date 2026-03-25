@@ -18,6 +18,25 @@ class Blocks {
 	public static function init() {
 		add_action( 'init', [ __CLASS__, 'register' ], 9 );
 		add_filter( 'block_categories_all', [ __CLASS__, 'register_category' ], 10, 2 );
+		add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_frontend_gates_inheritance_assets' ], 20 );
+	}
+
+	/**
+	 * Enqueue the front-end JS that hides Gutenberg containers based on gate markers.
+	 *
+	 * @return void
+	 */
+	public static function enqueue_frontend_gates_inheritance_assets() {
+		if ( is_admin() ) {
+			return;
+		}
+		wp_enqueue_script(
+			'creatorreactor-gutenberg-gates-inheritance',
+			CREATORREACTOR_PLUGIN_URL . 'assets/js/creatorreactor-gutenberg-gates-inheritance.js',
+			[],
+			defined( 'CREATORREACTOR_VERSION' ) ? CREATORREACTOR_VERSION : '1.0.0',
+			true
+		);
 	}
 
 	/**
@@ -108,6 +127,12 @@ class Blocks {
 					'title'           => __( 'CreatorReactor: Follower', 'creatorreactor' ),
 					'description'     => __( 'Inner blocks visible only to users with an active follower entitlement.', 'creatorreactor' ),
 					'icon'            => 'groups',
+					'attributes'     => [
+						'container_logic' => [
+							'type'    => 'string',
+							'default' => 'and',
+						],
+					],
 					'render_callback' => [ __CLASS__, 'render_follower' ],
 				]
 			)
@@ -121,6 +146,12 @@ class Blocks {
 					'title'           => __( 'CreatorReactor: Subscriber', 'creatorreactor' ),
 					'description'     => __( 'Inner blocks visible only to users with an active subscriber entitlement.', 'creatorreactor' ),
 					'icon'            => 'star-filled',
+					'attributes'     => [
+						'container_logic' => [
+							'type'    => 'string',
+							'default' => 'and',
+						],
+					],
 					'render_callback' => [ __CLASS__, 'render_subscriber' ],
 				]
 			)
@@ -134,6 +165,12 @@ class Blocks {
 					'title'           => __( 'CreatorReactor: Logged in no role', 'creatorreactor' ),
 					'description'     => __( 'Inner blocks visible only to logged-in visitors with no specific role/entitlement.', 'creatorreactor' ),
 					'icon'            => 'visibility',
+					'attributes'     => [
+						'container_logic' => [
+							'type'    => 'string',
+							'default' => 'and',
+						],
+					],
 					'render_callback' => [ __CLASS__, 'render_logged_in_no_role' ],
 				]
 			)
@@ -147,6 +184,12 @@ class Blocks {
 					'title'           => __( 'CreatorReactor: Logged out', 'creatorreactor' ),
 					'description'     => __( 'Inner blocks visible only to visitors who are not logged in.', 'creatorreactor' ),
 					'icon'            => 'visibility',
+					'attributes'     => [
+						'container_logic' => [
+							'type'    => 'string',
+							'default' => 'and',
+						],
+					],
 					'render_callback' => [ __CLASS__, 'render_logged_out' ],
 				]
 			)
@@ -160,6 +203,12 @@ class Blocks {
 					'title'           => __( 'CreatorReactor: Logged in', 'creatorreactor' ),
 					'description'     => __( 'Inner blocks visible only to logged-in users.', 'creatorreactor' ),
 					'icon'            => 'admin-users',
+					'attributes'     => [
+						'container_logic' => [
+							'type'    => 'string',
+							'default' => 'and',
+						],
+					],
 					'render_callback' => [ __CLASS__, 'render_logged_in' ],
 				]
 			)
@@ -182,6 +231,10 @@ class Blocks {
 							'type'    => 'string',
 							'default' => '',
 						],
+						'container_logic' => [
+							'type'    => 'string',
+							'default' => 'and',
+						],
 					],
 					'render_callback' => [ __CLASS__, 'render_has_tier' ],
 				]
@@ -196,6 +249,12 @@ class Blocks {
 					'title'           => __( 'CreatorReactor: Onboarding incomplete', 'creatorreactor' ),
 					'description'     => __( 'Inner blocks visible only to logged-in users who still need onboarding.', 'creatorreactor' ),
 					'icon'            => 'welcome-learn-more',
+					'attributes'     => [
+						'container_logic' => [
+							'type'    => 'string',
+							'default' => 'and',
+						],
+					],
 					'render_callback' => [ __CLASS__, 'render_onboarding_incomplete' ],
 				]
 			)
@@ -209,6 +268,12 @@ class Blocks {
 					'title'           => __( 'CreatorReactor: Onboarding complete', 'creatorreactor' ),
 					'description'     => __( 'Inner blocks visible only to logged-in users who completed onboarding.', 'creatorreactor' ),
 					'icon'            => 'yes-alt',
+					'attributes'     => [
+						'container_logic' => [
+							'type'    => 'string',
+							'default' => 'and',
+						],
+					],
 					'render_callback' => [ __CLASS__, 'render_onboarding_complete' ],
 				]
 			)
@@ -222,6 +287,12 @@ class Blocks {
 					'title'           => __( 'CreatorReactor: Fanvue connected', 'creatorreactor' ),
 					'description'     => __( 'Inner blocks visible only to logged-in users with Fanvue OAuth linked.', 'creatorreactor' ),
 					'icon'            => 'admin-links',
+					'attributes'     => [
+						'container_logic' => [
+							'type'    => 'string',
+							'default' => 'and',
+						],
+					],
 					'render_callback' => [ __CLASS__, 'render_fanvue_connected' ],
 				]
 			)
@@ -235,6 +306,12 @@ class Blocks {
 					'title'           => __( 'CreatorReactor: Fanvue not connected', 'creatorreactor' ),
 					'description'     => __( 'Inner blocks visible only to logged-in users without Fanvue OAuth linked.', 'creatorreactor' ),
 					'icon'            => 'editor-unlink',
+					'attributes'     => [
+						'container_logic' => [
+							'type'    => 'string',
+							'default' => 'and',
+						],
+					],
 					'render_callback' => [ __CLASS__, 'render_fanvue_not_connected' ],
 				]
 			)
@@ -283,17 +360,18 @@ class Blocks {
 	 * @param \WP_Block            $block      Block instance.
 	 */
 	public static function render_follower( $attributes, $content, $_block ) {
-		if ( ! is_user_logged_in() ) {
-			return '';
+		$out = '';
+		if ( is_user_logged_in() ) {
+			$uid = get_current_user_id();
+			if ( Onboarding::user_needs_onboarding( $uid ) ) {
+				$out = Onboarding::incomplete_gate_notice();
+			} elseif ( Entitlements::wp_user_has_active_follower_entitlement( $uid ) ) {
+				$out = self::render_inner_content( $content );
+			}
 		}
-		$uid = get_current_user_id();
-		if ( Onboarding::user_needs_onboarding( $uid ) ) {
-			return Onboarding::incomplete_gate_notice();
-		}
-		if ( ! Entitlements::wp_user_has_active_follower_entitlement( $uid ) ) {
-			return '';
-		}
-		return self::render_inner_content( $content );
+		$matched = trim( (string) $out ) !== '';
+		$logic   = self::resolve_container_logic( $attributes );
+		return self::render_gate_marker( 'follower', $matched, $logic ) . ( $out !== '' ? (string) $out : '' );
 	}
 
 	/**
@@ -302,17 +380,18 @@ class Blocks {
 	 * @param \WP_Block            $block      Block instance.
 	 */
 	public static function render_subscriber( $attributes, $content, $_block ) {
-		if ( ! is_user_logged_in() ) {
-			return '';
+		$out = '';
+		if ( is_user_logged_in() ) {
+			$uid = get_current_user_id();
+			if ( Onboarding::user_needs_onboarding( $uid ) ) {
+				$out = Onboarding::incomplete_gate_notice();
+			} elseif ( Entitlements::wp_user_has_active_subscriber_entitlement( $uid ) ) {
+				$out = self::render_inner_content( $content );
+			}
 		}
-		$uid = get_current_user_id();
-		if ( Onboarding::user_needs_onboarding( $uid ) ) {
-			return Onboarding::incomplete_gate_notice();
-		}
-		if ( ! Entitlements::wp_user_has_active_subscriber_entitlement( $uid ) ) {
-			return '';
-		}
-		return self::render_inner_content( $content );
+		$matched = trim( (string) $out ) !== '';
+		$logic   = self::resolve_container_logic( $attributes );
+		return self::render_gate_marker( 'subscriber', $matched, $logic ) . ( $out !== '' ? (string) $out : '' );
 	}
 
 	/**
@@ -321,13 +400,15 @@ class Blocks {
 	 * @param \WP_Block            $block      Block instance.
 	 */
 	public static function render_logged_in_no_role( $attributes, $content, $_block ) {
-		if ( ! is_user_logged_in() ) {
-			return '';
+		$out = '';
+		if ( is_user_logged_in() ) {
+			if ( ! self::user_has_any_active_entitlement( get_current_user_id() ) ) {
+				$out = self::render_inner_content( $content );
+			}
 		}
-		if ( self::user_has_any_active_entitlement( get_current_user_id() ) ) {
-			return '';
-		}
-		return self::render_inner_content( $content );
+		$matched = trim( (string) $out ) !== '';
+		$logic   = self::resolve_container_logic( $attributes );
+		return self::render_gate_marker( 'logged_in_no_role', $matched, $logic ) . ( $out !== '' ? (string) $out : '' );
 	}
 
 	/**
@@ -336,10 +417,13 @@ class Blocks {
 	 * @param \WP_Block            $block      Block instance.
 	 */
 	public static function render_logged_out( $attributes, $content, $_block ) {
-		if ( is_user_logged_in() ) {
-			return '';
+		$out = '';
+		if ( ! is_user_logged_in() ) {
+			$out = self::render_inner_content( $content );
 		}
-		return self::render_inner_content( $content );
+		$matched = trim( (string) $out ) !== '';
+		$logic   = self::resolve_container_logic( $attributes );
+		return self::render_gate_marker( 'logged_out', $matched, $logic ) . ( $out !== '' ? (string) $out : '' );
 	}
 
 	/**
@@ -348,10 +432,13 @@ class Blocks {
 	 * @param \WP_Block            $block      Block instance.
 	 */
 	public static function render_logged_in( $attributes, $content, $_block ) {
-		if ( ! is_user_logged_in() ) {
-			return '';
+		$out = '';
+		if ( is_user_logged_in() ) {
+			$out = self::render_inner_content( $content );
 		}
-		return self::render_inner_content( $content );
+		$matched = trim( (string) $out ) !== '';
+		$logic   = self::resolve_container_logic( $attributes );
+		return self::render_gate_marker( 'logged_in', $matched, $logic ) . ( $out !== '' ? (string) $out : '' );
 	}
 
 	/**
@@ -360,27 +447,30 @@ class Blocks {
 	 * @param \WP_Block            $block      Block instance.
 	 */
 	public static function render_has_tier( $attributes, $content, $_block ) {
-		if ( ! is_user_logged_in() ) {
-			return '';
-		}
-		$uid = get_current_user_id();
-		if ( Onboarding::user_needs_onboarding( $uid ) ) {
-			return Onboarding::incomplete_gate_notice();
+		$out = '';
+		if ( is_user_logged_in() ) {
+			$uid = get_current_user_id();
+			if ( Onboarding::user_needs_onboarding( $uid ) ) {
+				$out = Onboarding::incomplete_gate_notice();
+			} else {
+				$attributes = is_array( $attributes ) ? $attributes : [];
+				$tier       = isset( $attributes['tier'] ) ? trim( sanitize_text_field( (string) $attributes['tier'] ) ) : '';
+				$product    = isset( $attributes['product'] ) ? trim( sanitize_text_field( (string) $attributes['product'] ) ) : '';
+
+				$has_entitlement = Entitlements::check_user_entitlement(
+					$uid,
+					$tier !== '' ? $tier : null,
+					$product !== '' ? $product : null
+				);
+				if ( $has_entitlement ) {
+					$out = self::render_inner_content( $content );
+				}
+			}
 		}
 
-		$attributes = is_array( $attributes ) ? $attributes : [];
-		$tier       = isset( $attributes['tier'] ) ? trim( sanitize_text_field( (string) $attributes['tier'] ) ) : '';
-		$product    = isset( $attributes['product'] ) ? trim( sanitize_text_field( (string) $attributes['product'] ) ) : '';
-
-		$has_entitlement = Entitlements::check_user_entitlement(
-			$uid,
-			$tier !== '' ? $tier : null,
-			$product !== '' ? $product : null
-		);
-		if ( ! $has_entitlement ) {
-			return '';
-		}
-		return self::render_inner_content( $content );
+		$matched = trim( (string) $out ) !== '';
+		$logic   = self::resolve_container_logic( $attributes );
+		return self::render_gate_marker( 'has_tier', $matched, $logic ) . ( $out !== '' ? (string) $out : '' );
 	}
 
 	/**
@@ -389,13 +479,15 @@ class Blocks {
 	 * @param \WP_Block            $block      Block instance.
 	 */
 	public static function render_onboarding_incomplete( $attributes, $content, $_block ) {
-		if ( ! is_user_logged_in() ) {
-			return '';
+		$out = '';
+		if ( is_user_logged_in() ) {
+			if ( Onboarding::user_needs_onboarding( get_current_user_id() ) ) {
+				$out = self::render_inner_content( $content );
+			}
 		}
-		if ( ! Onboarding::user_needs_onboarding( get_current_user_id() ) ) {
-			return '';
-		}
-		return self::render_inner_content( $content );
+		$matched = trim( (string) $out ) !== '';
+		$logic   = self::resolve_container_logic( $attributes );
+		return self::render_gate_marker( 'onboarding_incomplete', $matched, $logic ) . ( $out !== '' ? (string) $out : '' );
 	}
 
 	/**
@@ -404,13 +496,15 @@ class Blocks {
 	 * @param \WP_Block            $block      Block instance.
 	 */
 	public static function render_onboarding_complete( $attributes, $content, $_block ) {
-		if ( ! is_user_logged_in() ) {
-			return '';
+		$out = '';
+		if ( is_user_logged_in() ) {
+			if ( ! Onboarding::user_needs_onboarding( get_current_user_id() ) ) {
+				$out = self::render_inner_content( $content );
+			}
 		}
-		if ( Onboarding::user_needs_onboarding( get_current_user_id() ) ) {
-			return '';
-		}
-		return self::render_inner_content( $content );
+		$matched = trim( (string) $out ) !== '';
+		$logic   = self::resolve_container_logic( $attributes );
+		return self::render_gate_marker( 'onboarding_complete', $matched, $logic ) . ( $out !== '' ? (string) $out : '' );
 	}
 
 	/**
@@ -419,14 +513,16 @@ class Blocks {
 	 * @param \WP_Block            $block      Block instance.
 	 */
 	public static function render_fanvue_connected( $attributes, $content, $_block ) {
-		if ( ! is_user_logged_in() ) {
-			return '';
+		$out = '';
+		if ( is_user_logged_in() ) {
+			$linked = get_user_meta( get_current_user_id(), Onboarding::META_FANVUE_OAUTH_LINKED, true );
+			if ( $linked === '1' || $linked === 1 || $linked === true ) {
+				$out = self::render_inner_content( $content );
+			}
 		}
-		$linked = get_user_meta( get_current_user_id(), Onboarding::META_FANVUE_OAUTH_LINKED, true );
-		if ( $linked !== '1' && $linked !== 1 && $linked !== true ) {
-			return '';
-		}
-		return self::render_inner_content( $content );
+		$matched = trim( (string) $out ) !== '';
+		$logic   = self::resolve_container_logic( $attributes );
+		return self::render_gate_marker( 'fanvue_connected', $matched, $logic ) . ( $out !== '' ? (string) $out : '' );
 	}
 
 	/**
@@ -435,14 +531,16 @@ class Blocks {
 	 * @param \WP_Block            $block      Block instance.
 	 */
 	public static function render_fanvue_not_connected( $attributes, $content, $_block ) {
-		if ( ! is_user_logged_in() ) {
-			return '';
+		$out = '';
+		if ( is_user_logged_in() ) {
+			$linked = get_user_meta( get_current_user_id(), Onboarding::META_FANVUE_OAUTH_LINKED, true );
+			if ( $linked !== '1' && $linked !== 1 && $linked !== true ) {
+				$out = self::render_inner_content( $content );
+			}
 		}
-		$linked = get_user_meta( get_current_user_id(), Onboarding::META_FANVUE_OAUTH_LINKED, true );
-		if ( $linked === '1' || $linked === 1 || $linked === true ) {
-			return '';
-		}
-		return self::render_inner_content( $content );
+		$matched = trim( (string) $out ) !== '';
+		$logic   = self::resolve_container_logic( $attributes );
+		return self::render_gate_marker( 'fanvue_not_connected', $matched, $logic ) . ( $out !== '' ? (string) $out : '' );
 	}
 
 	/**
@@ -475,6 +573,35 @@ class Blocks {
 		}
 		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- composed of trusted inner block output.
 		return do_blocks( $content );
+	}
+
+	/**
+	 * @param mixed $attributes Block attributes.
+	 * @return 'and'|'or'
+	 */
+	private static function resolve_container_logic( $attributes ): string {
+		if ( ! is_array( $attributes ) ) {
+			return 'and';
+		}
+		$logic = isset( $attributes['container_logic'] ) ? sanitize_key( (string) $attributes['container_logic'] ) : 'and';
+		return ( $logic === 'or' ) ? 'or' : 'and';
+	}
+
+	/**
+	 * @param string $gate
+	 * @param bool   $matched
+	 * @param string $logic
+	 * @return string
+	 */
+	private static function render_gate_marker( string $gate, bool $matched, string $logic ): string {
+		$match_str = $matched ? '1' : '0';
+		$logic     = $logic === 'or' ? 'or' : 'and';
+
+		return '<span class="creatorreactor-gutenberg-gate-marker"'
+			. ' data-creatorreactor-gate="' . esc_attr( $gate ) . '"'
+			. ' data-creatorreactor-gate-match="' . esc_attr( $match_str ) . '"'
+			. ' data-creatorreactor-gate-logic="' . esc_attr( $logic ) . '"'
+			. ' style="display:none" aria-hidden="true"></span>';
 	}
 
 	/**

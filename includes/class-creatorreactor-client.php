@@ -506,12 +506,45 @@ class CreatorReactor_Client {
 		if ( is_string( $tier ) ) {
 			return sanitize_text_field( $tier );
 		}
+		if ( is_int( $tier ) || is_float( $tier ) ) {
+			$s = sanitize_text_field( (string) $tier );
+			return $s !== '' ? $s : null;
+		}
 		if ( is_array( $tier ) ) {
-			if ( ! empty( $tier['id'] ) && is_string( $tier['id'] ) ) {
-				return sanitize_text_field( $tier['id'] );
+			if ( array_key_exists( 'id', $tier ) && ( is_string( $tier['id'] ) || is_int( $tier['id'] ) || is_float( $tier['id'] ) ) ) {
+				$s = sanitize_text_field( (string) $tier['id'] );
+				if ( $s !== '' ) {
+					return $s;
+				}
 			}
 			if ( ! empty( $tier['name'] ) && is_string( $tier['name'] ) ) {
 				return sanitize_text_field( $tier['name'] );
+			}
+		}
+		return null;
+	}
+
+	/**
+	 * Resolve Fanvue OAuth /me tier payload: root `tier`, then `subscription.tier`, then `user.tier`.
+	 *
+	 * @param array<string, mixed> $data Unwrapped profile `data` (or top-level) map.
+	 * @return mixed|null First raw tier value that normalizes to a non-empty string, or null.
+	 */
+	public static function tier_raw_from_oauth_data( array $data ) {
+		$candidates = [];
+		if ( array_key_exists( 'tier', $data ) ) {
+			$candidates[] = $data['tier'];
+		}
+		if ( isset( $data['subscription'] ) && is_array( $data['subscription'] ) && array_key_exists( 'tier', $data['subscription'] ) ) {
+			$candidates[] = $data['subscription']['tier'];
+		}
+		if ( isset( $data['user'] ) && is_array( $data['user'] ) && array_key_exists( 'tier', $data['user'] ) ) {
+			$candidates[] = $data['user']['tier'];
+		}
+		foreach ( $candidates as $raw ) {
+			$n = self::normalize_tier( $raw );
+			if ( is_string( $n ) && $n !== '' ) {
+				return $raw;
 			}
 		}
 		return null;
@@ -526,7 +559,14 @@ class CreatorReactor_Client {
 			return $s !== '' ? [ 'id' => $s, 'name' => $s ] : null;
 		}
 		if ( is_array( $tier_raw ) ) {
-			$id   = isset( $tier_raw['id'] ) && is_string( $tier_raw['id'] ) ? sanitize_text_field( $tier_raw['id'] ) : '';
+			$id = '';
+			if ( isset( $tier_raw['id'] ) ) {
+				if ( is_string( $tier_raw['id'] ) ) {
+					$id = sanitize_text_field( $tier_raw['id'] );
+				} elseif ( is_int( $tier_raw['id'] ) || is_float( $tier_raw['id'] ) ) {
+					$id = sanitize_text_field( (string) $tier_raw['id'] );
+				}
+			}
 			$name = isset( $tier_raw['name'] ) && is_string( $tier_raw['name'] ) ? sanitize_text_field( $tier_raw['name'] ) : ( $id !== '' ? $id : '' );
 			if ( $id === '' && $name === '' ) {
 				return null;
@@ -633,6 +673,11 @@ class CreatorReactor_Client {
 			$row_uuid  = isset( $row['creatorreactor_user_uuid'] ) ? strtolower( trim( (string) $row['creatorreactor_user_uuid'] ) ) : '';
 			$row_email = isset( $row['email'] ) ? strtolower( trim( (string) $row['email'] ) ) : '';
 			if ( ( $fan_uuid_norm !== '' && $row_uuid === $fan_uuid_norm ) || ( $email_norm !== '' && $row_email === $email_norm ) ) {
+				$tier = isset( $row['tier'] ) ? (string) $row['tier'] : '';
+				$slug = Entitlements::mapped_fanvue_wp_role_from_stored_tier( $tier );
+				if ( $slug !== '' ) {
+					Fan_OAuth::apply_fanvue_derived_wp_role( $wp_user_id, $slug );
+				}
 				return true;
 			}
 		}
@@ -699,6 +744,7 @@ class CreatorReactor_Client {
 					$by_id[ $def['id'] ] = $def;
 					update_option( Admin_Settings::OPTION_SUBSCRIPTION_TIERS, array_values( $by_id ) );
 				}
+				Fan_OAuth::apply_fanvue_derived_wp_role( $wp_user_id, 'creatorreactor_subscriber' );
 				return true;
 			}
 			$pagination = $result['pagination'];
@@ -740,6 +786,7 @@ class CreatorReactor_Client {
 					$snapshot
 				);
 				update_user_meta( $wp_user_id, Entitlements::USERMETA_CREATORREACTOR_UUID, $row_uuid );
+				Fan_OAuth::apply_fanvue_derived_wp_role( $wp_user_id, 'creatorreactor_follower' );
 				return true;
 			}
 			$pagination = $result['pagination'];

@@ -251,6 +251,25 @@ class Entitlements {
 	}
 
 	/**
+	 * Map a stored entitlement tier string to the Fanvue-linked WordPress role slug.
+	 *
+	 * @param string|null $tier Tier from entitlements row (e.g. fanvue_follower, fanvue_subscriber_gold).
+	 * @return string creatorreactor_follower|creatorreactor_subscriber or empty when unknown.
+	 */
+	public static function mapped_fanvue_wp_role_from_stored_tier( $tier ) {
+		if ( ! is_string( $tier ) || $tier === '' ) {
+			return '';
+		}
+		if ( $tier === self::TIER_FOLLOWER || str_ends_with( $tier, '_follower' ) ) {
+			return 'creatorreactor_follower';
+		}
+		if ( strpos( $tier, '_subscriber' ) !== false ) {
+			return 'creatorreactor_subscriber';
+		}
+		return '';
+	}
+
+	/**
 	 * Values to match in SQL when filtering by tier (supports legacy + new stored formats).
 	 *
 	 * @param string      $tier    Requested tier filter.
