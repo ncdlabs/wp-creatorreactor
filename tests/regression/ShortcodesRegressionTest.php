@@ -238,6 +238,8 @@ final class ShortcodesRegressionTest extends BaseTestCase
         $this->mockWpdb([]);
         Functions\when('is_user_logged_in')->justReturn(true);
         Functions\when('get_current_user_id')->justReturn(55);
+        Functions\when('get_userdata')->alias(static fn ($userId) => (object) ['user_email' => 'fan@example.com']);
+        Functions\when('current_time')->justReturn('2026-03-24 00:00:00');
         Functions\when('get_user_meta')->alias(
             static function ($userId, $key, $single) {
                 if ($userId !== 55) {
@@ -261,12 +263,10 @@ final class ShortcodesRegressionTest extends BaseTestCase
         );
         Functions\when('wp_validate_redirect')->alias(static fn ($url, $fallback = '') => (string) $url);
         Functions\when('esc_url')->alias(static fn ($url): string => (string) $url);
-        Functions\expect('esc_html__')->atLeast()->once()->andReturnUsing(static fn ($text, $domain = null) => (string) $text);
         Functions\expect('do_shortcode')->never();
 
         $out = Shortcodes::follower([], 'premium content');
-        self::assertStringContainsString('creatorreactor-onboarding-gate-notice', $out);
-        self::assertStringContainsString('Complete setup', $out);
+        self::assertSame('', $out);
     }
 
     public function testSubscriberReturnsOnboardingGateNoticeWhenUserNeedsOnboarding(): void
@@ -274,6 +274,8 @@ final class ShortcodesRegressionTest extends BaseTestCase
         $this->mockWpdb([]);
         Functions\when('is_user_logged_in')->justReturn(true);
         Functions\when('get_current_user_id')->justReturn(77);
+        Functions\when('get_userdata')->alias(static fn ($userId) => (object) ['user_email' => 'sub@example.com']);
+        Functions\when('current_time')->justReturn('2026-03-24 00:00:00');
         Functions\when('get_user_meta')->alias(
             static function ($userId, $key, $single) {
                 if ($userId !== 77) {
@@ -297,17 +299,18 @@ final class ShortcodesRegressionTest extends BaseTestCase
         );
         Functions\when('wp_validate_redirect')->alias(static fn ($url, $fallback = '') => (string) $url);
         Functions\when('esc_url')->alias(static fn ($url): string => (string) $url);
-        Functions\expect('esc_html__')->atLeast()->once()->andReturnUsing(static fn ($text, $domain = null) => (string) $text);
         Functions\expect('do_shortcode')->never();
 
         $out = Shortcodes::subscriber([], 'subscriber content');
-        self::assertStringContainsString('creatorreactor-onboarding-gate-notice', $out);
+        self::assertSame('', $out);
     }
 
     public function testHasTierReturnsOnboardingGateNoticeWhenUserNeedsOnboarding(): void
     {
         Functions\when('is_user_logged_in')->justReturn(true);
         Functions\when('get_current_user_id')->justReturn(88);
+        Functions\when('current_time')->justReturn('2026-03-24 00:00:00');
+        Functions\when('get_userdata')->alias(static fn ($userId) => (object) ['user_email' => 'tier@example.com']);
         Functions\when('get_user_meta')->alias(
             static function ($userId, $key, $single) {
                 if ($userId !== 88) {
@@ -334,11 +337,10 @@ final class ShortcodesRegressionTest extends BaseTestCase
         Functions\when('shortcode_atts')->alias(
             static fn ($pairs, $atts, $shortcode = '') => array_merge((array) $pairs, (array) $atts)
         );
-        Functions\expect('esc_html__')->atLeast()->once()->andReturnUsing(static fn ($text, $domain = null) => (string) $text);
         Functions\expect('do_shortcode')->never();
 
         $out = Shortcodes::has_tier(['tier' => 'premium', 'product' => 'fanvue'], 'tier content');
-        self::assertStringContainsString('creatorreactor-onboarding-gate-notice', $out);
+        self::assertSame('', $out);
     }
 
     public function testFollowerRendersContentWhenOnboardingCompleteAndFollowerEntitled(): void

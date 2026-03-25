@@ -102,6 +102,12 @@ final class BannerAndPluginRegressionTest extends BaseTestCase
                 echo (string) $text;
             }
         );
+        Functions\when('esc_url')->alias(static fn ($url) => (string) $url);
+        Functions\when('esc_attr')->alias(static fn ($text) => (string) $text);
+        Functions\when('__')->alias(static fn ($text) => (string) $text);
+        if (! defined('CREATORREACTOR_PLUGIN_URL')) {
+            define('CREATORREACTOR_PLUGIN_URL', 'https://example.com/wp-content/plugins/creatorreactor/');
+        }
 
         ob_start();
         Banner::maybe_show_banner();
@@ -109,6 +115,7 @@ final class BannerAndPluginRegressionTest extends BaseTestCase
 
         self::assertStringContainsString('creatorreactor-oauth-banner', $out);
         self::assertStringContainsString('Dismiss', $out);
+        self::assertStringContainsString('cr-logo.png', $out);
     }
 
     public function testEnqueueAssetsRegistersScriptAndNoncePayload(): void
@@ -117,6 +124,9 @@ final class BannerAndPluginRegressionTest extends BaseTestCase
             define('CREATORREACTOR_VERSION', 'test-version');
         }
         Functions\when('plugin_dir_url')->justReturn('https://example.com/wp-content/plugins/creatorreactor/');
+        Functions\when('wp_register_style')->justReturn();
+        Functions\when('wp_enqueue_style')->justReturn();
+        Functions\when('wp_add_inline_style')->justReturn();
         Functions\expect('wp_enqueue_script')->once();
         Functions\when('wp_create_nonce')->justReturn('nonce-123');
         Functions\expect('wp_localize_script')

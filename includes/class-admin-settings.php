@@ -62,6 +62,30 @@ class Admin_Settings {
 		return Entitlements::product_label( self::get_current_product() );
 	}
 
+	/**
+	 * Public plugin URL for the horizontal CreatorReactor logo (wp-admin branding).
+	 *
+	 * @return string
+	 */
+	private static function brand_logo_url() {
+		return CREATORREACTOR_PLUGIN_URL . 'img/cr-logo.png';
+	}
+
+	/**
+	 * Print an <img> for the CreatorReactor logo.
+	 *
+	 * @param string $extra_class Optional extra CSS class(es).
+	 */
+	private static function render_brand_logo_img( $extra_class = '' ) {
+		$classes = 'creatorreactor-brand-logo' . ( is_string( $extra_class ) && $extra_class !== '' ? ' ' . trim( $extra_class ) : '' );
+		printf(
+			'<img src="%1$s" alt="%2$s" class="%3$s" loading="lazy" decoding="async" />',
+			esc_url( self::brand_logo_url() ),
+			esc_attr( __( 'CreatorReactor', 'creatorreactor' ) ),
+			esc_attr( $classes )
+		);
+	}
+
 	public static function init() {
 		self::migrate_prefixed_options_from_before_rename();
 		self::migrate_legacy_options();
@@ -1439,7 +1463,10 @@ class Admin_Settings {
 		?>
 		<div class="creatorreactor-section creatorreactor-docs-shell">
 			<div class="creatorreactor-docs-header">
-				<h2><?php esc_html_e( 'Documentation', 'creatorreactor' ); ?></h2>
+				<div class="creatorreactor-docs-header-brand">
+					<?php self::render_brand_logo_img( 'creatorreactor-brand-logo--docs' ); ?>
+					<h2><?php esc_html_e( 'Documentation', 'creatorreactor' ); ?></h2>
+				</div>
 				<div class="creatorreactor-docs-search-controls">
 					<input type="search" id="creatorreactor-docs-search" class="regular-text" placeholder="<?php esc_attr_e( 'Search documentation... (Press /)', 'creatorreactor' ); ?>" />
 					<button type="button" id="creatorreactor-docs-clear" class="button"><?php esc_html_e( 'Clear', 'creatorreactor' ); ?></button>
@@ -2435,6 +2462,12 @@ class Admin_Settings {
 				font-weight: 700;
 			}
 			#creatorreactor-user-details-modal .creatorreactor-modal-body dd.creatorreactor-details-section-spacer { display: none; }
+			.creatorreactor-modal-header-title { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+			.creatorreactor-modal-header-title h3 { margin: 0; font-size: 16px; }
+			.creatorreactor-brand-logo--modal { max-height: 22px; width: auto; height: auto; display: block; }
+			.creatorreactor-profile-section-heading { display: flex; align-items: center; gap: 10px; flex-wrap: wrap; }
+			.creatorreactor-profile-section-heading h2 { margin: 0; padding: 0; }
+			.creatorreactor-brand-logo--profile { max-height: 28px; width: auto; height: auto; display: block; }
 			.creatorreactor-modal { position: fixed; inset: 0; display: none; z-index: 100000; }
 			.creatorreactor-modal[aria-hidden="false"] { display: block; }
 			.creatorreactor-modal-backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.45); }
@@ -2472,7 +2505,16 @@ class Admin_Settings {
 
 		$css = '
 		.creatorreactor-wrap { margin-top: 20px; max-width: 1100px; }
-		.creatorreactor-settings-header { margin-bottom: 20px; }
+		.creatorreactor-settings-header {
+			display: flex;
+			align-items: flex-start;
+			gap: 16px;
+			margin-bottom: 20px;
+			flex-wrap: wrap;
+		}
+		.creatorreactor-settings-header-brand { flex-shrink: 0; }
+		.creatorreactor-brand-logo { max-height: 44px; width: auto; height: auto; display: block; }
+		.creatorreactor-settings-header-text { flex: 1; min-width: 200px; }
 		.creatorreactor-settings-header h1 { margin-bottom: 5px; }
 		.creatorreactor-settings-header p { color: #646970; margin-top: 0; }
 		.creatorreactor-section { background: #fff; border: 1px solid #dcdcde; border-radius: 4px; padding: 20px; margin-bottom: 20px; }
@@ -2824,7 +2866,9 @@ class Admin_Settings {
 		.creatorreactor-modal-backdrop { position: absolute; inset: 0; background: rgba(0, 0, 0, 0.45); }
 		.creatorreactor-modal-dialog { position: relative; width: min(620px, calc(100% - 32px)); max-height: calc(100vh - 64px); margin: 32px auto; background: #fff; border-radius: 8px; border: 1px solid #dcdcde; box-shadow: 0 12px 32px rgba(0, 0, 0, 0.25); overflow: auto; }
 		.creatorreactor-modal-header { display: flex; justify-content: space-between; align-items: center; gap: 12px; padding: 16px 18px 10px; border-bottom: 1px solid #dcdcde; }
-		.creatorreactor-modal-header h3 { margin: 0; font-size: 16px; }
+		.creatorreactor-modal-header-title { display: flex; align-items: center; gap: 10px; flex: 1; min-width: 0; }
+		.creatorreactor-modal-header-title h3 { margin: 0; font-size: 16px; }
+		.creatorreactor-brand-logo--modal { max-height: 22px; width: auto; height: auto; display: block; }
 		.creatorreactor-modal-body { padding: 14px 18px; }
 		.creatorreactor-modal-footer { padding: 12px 18px 16px; border-top: 1px solid #dcdcde; text-align: right; }
 		.creatorreactor-modal-close { border: 0; background: transparent; color: #50575e; cursor: pointer; font-size: 22px; line-height: 1; }
@@ -3059,7 +3103,17 @@ class Admin_Settings {
 			align-items: center;
 			justify-content: space-between;
 			gap: 12px;
+			flex-wrap: wrap;
 		}
+		.creatorreactor-docs-header-brand {
+			display: flex;
+			align-items: center;
+			gap: 12px;
+			flex-wrap: wrap;
+			min-width: 0;
+		}
+		.creatorreactor-docs-header-brand h2 { margin: 0; }
+		.creatorreactor-brand-logo--docs { max-height: 36px; width: auto; height: auto; display: block; }
 		.creatorreactor-docs-search-controls {
 			display: inline-flex;
 			align-items: center;
@@ -3945,7 +3999,10 @@ class Admin_Settings {
 		$row         = self::get_latest_entitlement_row_for_wp_user( (int) $user->ID, (string) $user->user_email );
 		$has_details = is_array( $row );
 		?>
-		<h2><?php esc_html_e( 'CreatorReactor', 'creatorreactor' ); ?></h2>
+		<div class="creatorreactor-profile-section-heading">
+			<?php self::render_brand_logo_img( 'creatorreactor-brand-logo--profile' ); ?>
+			<h2><?php esc_html_e( 'CreatorReactor', 'creatorreactor' ); ?></h2>
+		</div>
 		<table class="form-table" role="presentation">
 			<tr>
 				<th><label for="creatorreactor_user_uuid_field"><?php esc_html_e( 'CreatorReactor user UUID', 'creatorreactor' ); ?></label></th>
@@ -3992,7 +4049,10 @@ class Admin_Settings {
 				<div class="creatorreactor-modal-backdrop" aria-hidden="true"></div>
 				<div class="creatorreactor-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="creatorreactor-user-details-modal-title">
 					<div class="creatorreactor-modal-header">
-						<h3 id="creatorreactor-user-details-modal-title"><?php esc_html_e( 'CreatorReactor record', 'creatorreactor' ); ?></h3>
+						<div class="creatorreactor-modal-header-title">
+							<?php self::render_brand_logo_img( 'creatorreactor-brand-logo--modal' ); ?>
+							<h3 id="creatorreactor-user-details-modal-title"><?php esc_html_e( 'CreatorReactor record', 'creatorreactor' ); ?></h3>
+						</div>
 						<button type="button" class="creatorreactor-user-details-close" aria-label="<?php esc_attr_e( 'Close', 'creatorreactor' ); ?>">&times;</button>
 					</div>
 					<div class="creatorreactor-modal-body" id="creatorreactor-user-details-modal-body"></div>
@@ -4141,12 +4201,19 @@ class Admin_Settings {
 		?>
 		<div class="wrap creatorreactor-wrap">
 			<div class="creatorreactor-settings-header">
+				<div class="creatorreactor-settings-header-brand">
+					<?php self::render_brand_logo_img( 'creatorreactor-brand-logo--header' ); ?>
+				</div>
 				<?php if ( $is_users_page ) : ?>
+				<div class="creatorreactor-settings-header-text">
 					<h1><?php esc_html_e( 'CreatorReactor Users', 'creatorreactor' ); ?></h1>
 					<p><?php esc_html_e( 'Manage synchronized entitlements and linked WordPress users.', 'creatorreactor' ); ?></p>
-				<?php else : ?>
+				</div>
+				<?php elseif ( ! $is_settings_page ) : ?>
+				<div class="creatorreactor-settings-header-text">
 					<h1><?php esc_html_e( 'CreatorReactor Settings', 'creatorreactor' ); ?></h1>
 					<p><?php printf( esc_html__( 'Configure OAuth integration for %s.', 'creatorreactor' ), esc_html( $current_product_label ) ); ?></p>
+				</div>
 				<?php endif; ?>
 			</div>
 
@@ -4261,7 +4328,10 @@ class Admin_Settings {
 			<div class="creatorreactor-modal-backdrop" aria-hidden="true"></div>
 			<div class="creatorreactor-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="creatorreactor-user-details-modal-title">
 				<div class="creatorreactor-modal-header">
-					<h3 id="creatorreactor-user-details-modal-title"><?php esc_html_e( 'CreatorReactor record', 'creatorreactor' ); ?></h3>
+					<div class="creatorreactor-modal-header-title">
+						<?php self::render_brand_logo_img( 'creatorreactor-brand-logo--modal' ); ?>
+						<h3 id="creatorreactor-user-details-modal-title"><?php esc_html_e( 'CreatorReactor record', 'creatorreactor' ); ?></h3>
+					</div>
 					<button type="button" class="creatorreactor-user-details-close" aria-label="<?php esc_attr_e( 'Close', 'creatorreactor' ); ?>">&times;</button>
 				</div>
 				<div class="creatorreactor-modal-body" id="creatorreactor-user-details-modal-body"></div>
@@ -4550,7 +4620,10 @@ class Admin_Settings {
 							<div class="creatorreactor-modal-backdrop"></div>
 							<div class="creatorreactor-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="creatorreactor-test-modal-title">
 								<div class="creatorreactor-modal-header">
-									<h3 id="creatorreactor-test-modal-title"><?php esc_html_e( 'Test Details', 'creatorreactor' ); ?></h3>
+									<div class="creatorreactor-modal-header-title">
+										<?php self::render_brand_logo_img( 'creatorreactor-brand-logo--modal' ); ?>
+										<h3 id="creatorreactor-test-modal-title"><?php esc_html_e( 'Test Details', 'creatorreactor' ); ?></h3>
+									</div>
 									<button type="button" class="creatorreactor-modal-close" aria-label="<?php esc_attr_e( 'Close', 'creatorreactor' ); ?>">&times;</button>
 								</div>
 								<div class="creatorreactor-modal-body">

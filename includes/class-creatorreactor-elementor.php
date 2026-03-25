@@ -104,7 +104,6 @@ final class Elementor_Integration {
 			$use_nested_gates ? new Elementor_Widget_Fanvue_Connected_Nested() : new Elementor_Widget_Fanvue_Connected_Legacy(),
 			$use_nested_gates ? new Elementor_Widget_Fanvue_Not_Connected_Nested() : new Elementor_Widget_Fanvue_Not_Connected_Legacy(),
 			new Elementor_Widget_Fanvue_Oauth(),
-			new Elementor_Widget_Onboarding(),
 		];
 
 		foreach ( $widgets as $widget ) {

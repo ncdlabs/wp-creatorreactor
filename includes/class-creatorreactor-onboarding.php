@@ -43,13 +43,8 @@ class Onboarding {
 	const COOKIE_FAN_PENDING = 'creatorreactor_fp';
 
 	public static function init() {
-		add_action( 'init', [ __CLASS__, 'register_rewrite' ], 5 );
-		add_filter( 'query_vars', [ __CLASS__, 'register_query_var' ] );
-		add_action( 'init', [ __CLASS__, 'maybe_flush_onboarding_rewrites' ], 99 );
-		add_action( 'template_redirect', [ __CLASS__, 'template_redirect' ], 5 );
-		add_action( 'admin_post_' . self::ACTION_SUBMIT, [ __CLASS__, 'handle_submit' ] );
-		add_action( 'admin_post_nopriv_' . self::ACTION_SUBMIT, [ __CLASS__, 'handle_submit_nopriv' ] );
-		add_shortcode( 'creatorreactor_onboarding', [ __CLASS__, 'shortcode' ] );
+		// Onboarding has been removed from the UX.
+		// Intentionally no routes, shortcodes, or form submission handlers are registered.
 	}
 
 	public static function activate_flush_rewrite_rules() {
@@ -394,8 +389,7 @@ class Onboarding {
 	 * @param int|null $user_id Default current user.
 	 */
 	public static function user_needs_onboarding( $user_id = null ) {
-		$user_id = $user_id === null ? get_current_user_id() : (int) $user_id;
-		return (bool) apply_filters( 'creatorreactor_user_needs_onboarding', false, $user_id );
+		return false;
 	}
 
 	public static function enqueue_assets() {
@@ -775,10 +769,7 @@ class Onboarding {
 	 * Markup for gated content when the user must finish onboarding.
 	 */
 	public static function incomplete_gate_notice() {
-		$url = esc_url( self::get_onboarding_url( self::current_request_url() ) );
-		return '<div class="creatorreactor-onboarding-gate-notice" role="alert"><p>'
-			. esc_html__( 'Please complete a quick one-time setup to access this content.', 'creatorreactor' )
-			. '</p><p><a class="button" href="' . $url . '">' . esc_html__( 'Complete setup', 'creatorreactor' ) . '</a></p></div>';
+		return '';
 	}
 
 	private static function current_request_url() {
@@ -792,14 +783,11 @@ class Onboarding {
 	}
 
 	public static function shortcode() {
-		if ( Admin_Settings::is_broker_mode() ) {
-			return '<p class="creatorreactor-onboarding-unavailable">' . esc_html__( 'Fan onboarding is not available in Agency (broker) mode.', 'creatorreactor' ) . '</p>';
-		}
-		return '<p class="creatorreactor-onboarding-done">' . esc_html__( 'Fan onboarding is disabled.', 'creatorreactor' ) . '</p>';
+		return '';
 	}
 
 	public static function render_form() {
-		echo '<p class="creatorreactor-onboarding-done">' . esc_html__( 'Fan onboarding is disabled.', 'creatorreactor' ) . '</p>';
+		return;
 	}
 
 	/**

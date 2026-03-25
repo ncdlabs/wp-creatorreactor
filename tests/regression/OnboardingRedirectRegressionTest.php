@@ -299,7 +299,7 @@ final class OnboardingRedirectRegressionTest extends BaseTestCase
         Functions\when('esc_html__')->alias(static fn ($text, $domain = null): string => (string) $text);
 
         $out = Onboarding::shortcode();
-        self::assertStringContainsString('not available in Agency', $out);
+        self::assertSame('', $out);
     }
 
     public function testIncompleteGateNoticeBuildsCtaMarkup(): void
@@ -312,16 +312,14 @@ final class OnboardingRedirectRegressionTest extends BaseTestCase
         $_SERVER['REQUEST_URI'] = '/members-only';
 
         $out = Onboarding::incomplete_gate_notice();
-        self::assertStringContainsString('creatorreactor-onboarding-gate-notice', $out);
-        self::assertStringContainsString('Complete setup', $out);
+        self::assertSame('', $out);
     }
 
     public function testInitRegistersOnboardingHooksAndShortcode(): void
     {
-        Functions\expect('add_action')->times(5);
-        Functions\expect('add_filter')->once()->with('query_vars', [Onboarding::class, 'register_query_var']);
-        Functions\expect('add_shortcode')->once()->with('creatorreactor_onboarding', [Onboarding::class, 'shortcode']);
-
+        Functions\expect('add_action')->never();
+        Functions\expect('add_filter')->never();
+        Functions\expect('add_shortcode')->never();
         Onboarding::init();
         self::assertTrue(true);
     }
@@ -425,18 +423,16 @@ final class OnboardingRedirectRegressionTest extends BaseTestCase
         Functions\when('esc_html__')->alias(static fn ($text, $domain = null): string => (string) $text);
 
         $out = Onboarding::shortcode();
-        self::assertStringContainsString('Fan onboarding is disabled.', $out);
+        self::assertSame('', $out);
     }
 
     public function testRenderFormPrintsDisabledMessage(): void
     {
-        Functions\when('esc_html__')->alias(static fn ($text, $domain = null): string => (string) $text);
-
         ob_start();
         Onboarding::render_form();
         $out = (string) ob_get_clean();
 
-        self::assertStringContainsString('Fan onboarding is disabled.', $out);
+        self::assertSame('', $out);
     }
 
     public function testTosWpKsesAllowedIncludesAnchorAndHeadingTags(): void
@@ -538,12 +534,8 @@ final class OnboardingRedirectRegressionTest extends BaseTestCase
 
     public function testGetPostOauthRedirectReturnsOnboardingUrlWhenUserNeedsOnboarding(): void
     {
-        Functions\when('apply_filters')->alias(
-            static fn ($tag, $value, ...$rest) => $tag === 'creatorreactor_user_needs_onboarding' ? true : $value
-        );
-
         $url = Onboarding::get_post_oauth_redirect(501, 'https://example.com/any');
-        self::assertStringContainsString('creatorreactor_onboarding=1', $url);
+        self::assertSame('https://example.com/', $url);
     }
 
     public function testStripOnboardingArgsTreatsNonStringAsEmptyAndReturnsHome(): void
@@ -617,15 +609,12 @@ final class OnboardingRedirectRegressionTest extends BaseTestCase
         Functions\when('get_userdata')->alias(static fn ($userId) => (object) ['user_email' => 'fan@example.com']);
         Functions\when('current_time')->justReturn('2026-03-24 00:00:00');
         Functions\when('get_user_meta')->alias(static fn ($userId, $key, $single) => '');
-        Functions\expect('update_user_meta')->atLeast()->once();
-        Functions\expect('delete_user_meta')->atLeast()->once();
-        Functions\when('do_action')->alias(static fn (...$args) => null);
+        Functions\expect('update_user_meta')->never();
+        Functions\expect('delete_user_meta')->never();
+        Functions\expect('do_action')->never();
         Functions\expect('wp_safe_redirect')->once()->with('https://example.com/');
         Functions\when('apply_filters')->alias(
             static function ($tag, $value, ...$rest) {
-                if ($tag === 'creatorreactor_user_needs_onboarding') {
-                    return true;
-                }
                 if ($tag === 'creatorreactor_onboarding_redirect_should_exit') {
                     return false;
                 }
@@ -667,8 +656,8 @@ final class OnboardingRedirectRegressionTest extends BaseTestCase
         Functions\when('get_current_user_id')->justReturn(42);
         Functions\when('apply_filters')->alias(
             static function ($tag, $value, ...$rest) {
-                if ($tag === 'creatorreactor_user_needs_onboarding') {
-                    return true;
+                if ($tag === 'creatorreactor_onboarding_redirect_should_exit') {
+                    return false;
                 }
                 return $value;
             }
@@ -676,7 +665,7 @@ final class OnboardingRedirectRegressionTest extends BaseTestCase
         Functions\when('wp_get_referer')->justReturn('https://example.com/onboarding-form');
         Functions\expect('wp_safe_redirect')
             ->once()
-            ->with('https://example.com/onboarding-form?cr_ob_err=tos_required')
+            ->with('https://example.com/')
             ->andThrow(new \RuntimeException('stop-redirect'));
 
         $this->expectException(\RuntimeException::class);

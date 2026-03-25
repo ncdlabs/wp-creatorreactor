@@ -56,8 +56,19 @@ class Banner {
 		}
 		?>
 		<div class="notice notice-warning is-dismissible" id="creatorreactor-oauth-banner">
-			<p><?php esc_html_e( 'This system is set to not accept new users! CreatorReactor OAuth creates local Wordpress users based on their OAuth login. Please go to Settings -> General then click "Anyone can register".', 'creatorreactor' ); ?></p>
-			<button type="button" class="button" data-action="creatorreactor_oauth_dismiss_banner"><?php esc_html_e( 'Dismiss', 'creatorreactor' ); ?></button>
+			<div class="creatorreactor-oauth-banner-inner">
+				<img
+					src="<?php echo \esc_url( CREATORREACTOR_PLUGIN_URL . 'img/cr-logo.png' ); ?>"
+					alt="<?php echo \esc_attr( __( 'CreatorReactor', 'creatorreactor' ) ); ?>"
+					class="creatorreactor-brand-logo creatorreactor-brand-logo--banner"
+					loading="lazy"
+					decoding="async"
+				/>
+				<div class="creatorreactor-oauth-banner-content">
+					<p><?php esc_html_e( 'This system is set to not accept new users! CreatorReactor OAuth creates local Wordpress users based on their OAuth login. Please go to Settings -> General then click "Anyone can register".', 'creatorreactor' ); ?></p>
+					<button type="button" class="button" data-action="creatorreactor_oauth_dismiss_banner"><?php esc_html_e( 'Dismiss', 'creatorreactor' ); ?></button>
+				</div>
+			</div>
 		</div>
 		<?php
 	}
@@ -66,6 +77,16 @@ class Banner {
 	 * Enqueue admin scripts for banner dismissal.
 	 */
 	public static function enqueue_assets() {
+		\wp_register_style( 'creatorreactor-oauth-banner', false, [], CREATORREACTOR_VERSION );
+		\wp_enqueue_style( 'creatorreactor-oauth-banner' );
+		\wp_add_inline_style(
+			'creatorreactor-oauth-banner',
+			'#creatorreactor-oauth-banner .creatorreactor-oauth-banner-inner{display:flex;align-items:flex-start;gap:12px;flex-wrap:wrap;}'
+			. '#creatorreactor-oauth-banner .creatorreactor-brand-logo--banner{max-height:32px;width:auto;height:auto;display:block;flex-shrink:0;}'
+			. '#creatorreactor-oauth-banner .creatorreactor-oauth-banner-content{flex:1;min-width:200px;}'
+			. '#creatorreactor-oauth-banner .creatorreactor-oauth-banner-content p:first-child{margin-top:0;}'
+		);
+
 		wp_enqueue_script(
 			'creatorreactor-oauth-banner',
 			plugin_dir_url( __DIR__ . '/../creatorreactor.php' ) . 'assets/js/creatorreactor-banner.js',

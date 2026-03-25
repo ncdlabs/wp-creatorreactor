@@ -70,12 +70,9 @@ class Blocks {
         . '.wp-block-creatorreactor-logged-out,'
         . '.wp-block-creatorreactor-logged-in,'
         . '.wp-block-creatorreactor-has-tier,'
-        . '.wp-block-creatorreactor-onboarding-incomplete,'
-        . '.wp-block-creatorreactor-onboarding-complete,'
         . '.wp-block-creatorreactor-fanvue-connected,'
         . '.wp-block-creatorreactor-fanvue-not-connected,'
-        . '.wp-block-creatorreactor-fanvue-oauth,'
-        . '.wp-block-creatorreactor-onboarding {'
+        . '.wp-block-creatorreactor-fanvue-oauth {'
         . 'border: 2px dashed #ccc;'
         . 'padding: 10px;'
         . 'margin: 10px 0;'
@@ -242,44 +239,6 @@ class Blocks {
 		);
 
 		register_block_type(
-			'creatorreactor/onboarding-incomplete',
-			array_merge(
-				$inner_shared,
-				[
-					'title'           => __( 'CreatorReactor: Onboarding incomplete', 'creatorreactor' ),
-					'description'     => __( 'Inner blocks visible only to logged-in users who still need onboarding.', 'creatorreactor' ),
-					'icon'            => 'welcome-learn-more',
-					'attributes'     => [
-						'container_logic' => [
-							'type'    => 'string',
-							'default' => 'and',
-						],
-					],
-					'render_callback' => [ __CLASS__, 'render_onboarding_incomplete' ],
-				]
-			)
-		);
-
-		register_block_type(
-			'creatorreactor/onboarding-complete',
-			array_merge(
-				$inner_shared,
-				[
-					'title'           => __( 'CreatorReactor: Onboarding complete', 'creatorreactor' ),
-					'description'     => __( 'Inner blocks visible only to logged-in users who completed onboarding.', 'creatorreactor' ),
-					'icon'            => 'yes-alt',
-					'attributes'     => [
-						'container_logic' => [
-							'type'    => 'string',
-							'default' => 'and',
-						],
-					],
-					'render_callback' => [ __CLASS__, 'render_onboarding_complete' ],
-				]
-			)
-		);
-
-		register_block_type(
 			'creatorreactor/fanvue-connected',
 			array_merge(
 				$inner_shared,
@@ -332,24 +291,6 @@ class Blocks {
 					'anchor' => true,
 				],
 				'render_callback' => [ __CLASS__, 'render_fanvue_oauth' ],
-			]
-		);
-
-		register_block_type(
-			'creatorreactor/onboarding',
-			[
-				'api_version'     => 3,
-				'title'           => __( 'CreatorReactor: Fan onboarding', 'creatorreactor' ),
-				'description'     => __( 'First-time Fanvue login setup form (or use /creatorreactor-onboarding/).', 'creatorreactor' ),
-				'category'        => 'creatorreactor',
-				'icon'            => 'welcome-learn-more',
-				'editor_script'   => 'creatorreactor-blocks-editor',
-				'editor_style'    => 'creatorreactor-blocks-editor',
-				'supports'        => [
-					'html'   => false,
-					'anchor' => true,
-				],
-				'render_callback' => [ __CLASS__, 'render_onboarding' ],
 			]
 		);
 	}

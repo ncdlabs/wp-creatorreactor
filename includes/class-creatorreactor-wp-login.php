@@ -63,22 +63,8 @@ class Login_Page {
 	 * Show a link to continue Fanvue registration instead of auto-redirecting (avoids redirect loops / invisible flashes).
 	 */
 	public static function maybe_offer_pending_fanvue_resume() {
-		if ( is_user_logged_in() ) {
-			return;
-		}
-		$action = isset( $_GET['action'] ) ? sanitize_key( wp_unslash( $_GET['action'] ) ) : 'login'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-		if ( 'login' !== $action ) {
-			return;
-		}
-		if ( empty( $_COOKIE[ Onboarding::COOKIE_FAN_PENDING ] ) || ! is_string( $_COOKIE[ Onboarding::COOKIE_FAN_PENDING ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			return;
-		}
-		$token = preg_replace( '/[^a-zA-Z0-9]/', '', wp_unslash( $_COOKIE[ Onboarding::COOKIE_FAN_PENDING ] ) );
-		if ( $token === '' || ! Onboarding::get_pending_fanvue_registration( $token ) ) {
-			Onboarding::clear_fan_pending_cookie();
-			return;
-		}
-		add_filter( 'login_message', [ __CLASS__, 'filter_login_message_pending_fanvue_resume' ], 5, 1 );
+		// Onboarding has been removed from the UX, so we no longer offer a "continue setup" resume box.
+		return;
 	}
 
 	/**
@@ -86,24 +72,8 @@ class Login_Page {
 	 * @return string
 	 */
 	public static function filter_login_message_pending_fanvue_resume( $message ) {
-		if ( empty( $_COOKIE[ Onboarding::COOKIE_FAN_PENDING ] ) || ! is_string( $_COOKIE[ Onboarding::COOKIE_FAN_PENDING ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			return $message;
-		}
-		$token = preg_replace( '/[^a-zA-Z0-9]/', '', wp_unslash( $_COOKIE[ Onboarding::COOKIE_FAN_PENDING ] ) );
-		if ( $token === '' || ! Onboarding::get_pending_fanvue_registration( $token ) ) {
-			return $message;
-		}
-		$rto = home_url( '/' );
-		if ( isset( $_GET['redirect_to'] ) && is_string( $_GET['redirect_to'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
-			$rto = wp_validate_redirect( rawurldecode( trim( wp_unslash( $_GET['redirect_to'] ) ) ), $rto );
-		}
-		$url = Onboarding::get_onboarding_url_with_pending( $token, $rto );
-		$box = '<div class="creatorreactor-fanvue-login-notice creatorreactor-fanvue-login-notice--resume" role="status" style="border-left:4px solid #00a32a;padding:12px;margin:0 0 16px;background:#edfaef;"><p style="margin:0 0 8px;">'
-			. esc_html__( 'You started signing in with Fanvue. Continue below to finish creating your account.', 'creatorreactor' )
-			. '</p><p style="margin:0;"><a class="button button-primary" href="' . esc_url( $url ) . '">'
-			. esc_html__( 'Continue account setup', 'creatorreactor' )
-			. '</a></p></div>';
-		return $box . $message;
+		// Onboarding has been removed from the UX, so we never append a resume box.
+		return $message;
 	}
 
 	/**

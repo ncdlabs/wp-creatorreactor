@@ -125,20 +125,6 @@
 	);
 
 	registerInner(
-		'creatorreactor/onboarding-incomplete',
-		__('CreatorReactor: Onboarding incomplete', 'creatorreactor'),
-		__('Inner blocks show only while a logged-in user still needs onboarding.', 'creatorreactor'),
-		'welcome-learn-more'
-	);
-
-	registerInner(
-		'creatorreactor/onboarding-complete',
-		__('CreatorReactor: Onboarding complete', 'creatorreactor'),
-		__('Inner blocks show only after a logged-in user has completed onboarding.', 'creatorreactor'),
-		'yes-alt'
-	);
-
-	registerInner(
 		'creatorreactor/fanvue-connected',
 		__('CreatorReactor: Fanvue connected', 'creatorreactor'),
 		__('Inner blocks show only for logged-in users with Fanvue linked.', 'creatorreactor'),
@@ -278,42 +264,6 @@
 				),
 				el(ServerSideRender, {
 					block: 'creatorreactor/fanvue-oauth'
-				})
-			);
-		},
-		save: function () {
-			return null;
-		}
-	});
-
-	blocks.registerBlockType('creatorreactor/onboarding', {
-		apiVersion: 3,
-		title: __('CreatorReactor: Fan onboarding', 'creatorreactor'),
-		description: __(
-			'First-time Fanvue login setup form (same as /creatorreactor-onboarding/).',
-			'creatorreactor'
-		),
-		category: 'creatorreactor',
-		icon: 'welcome-learn-more',
-		edit: function () {
-			var blockProps = useBlockProps({
-				className: 'creatorreactor-block-editor creatorreactor-onboarding-block'
-			});
-			return el(
-				'div',
-				blockProps,
-				el(
-					'div',
-					{ className: 'creatorreactor-block-hint' },
-					el('strong', null, __('Fan onboarding', 'creatorreactor')),
-					' — ',
-					__(
-						'Preview matches the front end (Agency mode shows nothing).',
-						'creatorreactor'
-					)
-				),
-				el(ServerSideRender, {
-					block: 'creatorreactor/onboarding'
 				})
 			);
 		},

@@ -245,8 +245,7 @@ final class LoginRedirectRegressionTest extends BaseTestCase
         $_GET['redirect_to'] = rawurlencode('https://example.com/members');
         $out = Login_Page::filter_login_message_pending_fanvue_resume('<p>base</p>');
 
-        self::assertStringContainsString('Continue account setup', $out);
-        self::assertStringContainsString('<p>base</p>', $out);
+        self::assertSame('<p>base</p>', $out);
     }
 
     public function testRenderSocialLoginMarkupOutputsShortcodeHtml(): void
