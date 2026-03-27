@@ -6,6 +6,8 @@
 	var HIDDEN_CLASS = 'creatorreactor-elementor-gate-hidden';
 	var MARKER_SELECTOR = '.creatorreactor-elementor-gate-marker[data-creatorreactor-gate-match]';
 	var DEBUG = window.CreatorReactorElementorGatesInheritanceDebug === true;
+	var lastDebugLogMs = 0;
+	var viewerState = null;
 
 	function ensureHideCss() {
 		if (document.querySelector('style[data-creatorreactor-elementor-gate-hidden="1"]')) {
@@ -18,23 +20,104 @@
 		document.head.appendChild(style);
 	}
 
-	function findPreferredElementorContainer(marker) {
-		// Prefer container types that Elementor uses to group widgets so siblings inherit visibility.
-		// Avoid `.e-con-inner` because it may be closer than `.e-con` and could hide less than expected.
-		var el = marker;
-		while (el && el !== document.body) {
-			if (el !== marker && el.matches && (el.matches('.e-con') || el.matches('.e-con-boxed'))) {
-				return el;
-			}
-			if (el !== marker && el.matches && el.matches('.elementor-container')) {
-				return el;
-			}
-			if (el !== marker && el.matches && el.matches('.elementor-section')) {
-				return el;
-			}
-			el = el.parentElement;
+	/**
+	 * True when this Elementor widget is another CreatorReactor gate (stop hiding trailing siblings).
+	 */
+	function isCreatorReactorGateWidget(node) {
+		if (!node || !node.classList || !node.classList.contains('elementor-widget')) {
+			return false;
 		}
-		return null;
+		return /elementor-widget-creatorreactor_/.test(node.className);
+	}
+
+	/**
+	 * When a gate fails, hide following sibling widgets in the same parent until the next
+	 * CreatorReactor gate. Covers layouts where images were placed as separate widgets after
+	 * the gate instead of inside the nested gate slot (shortcode output is empty but images
+	 * still render as siblings).
+	 */
+	function hideTrailingSiblingsAfterFailedGate(marker) {
+		var widget = marker.closest('.elementor-widget');
+		if (!widget || !widget.parentElement) {
+			return;
+		}
+		var next = widget.nextElementSibling;
+		while (next) {
+			if (isCreatorReactorGateWidget(next)) {
+				break;
+			}
+			next.classList.add(HIDDEN_CLASS);
+			next = next.nextElementSibling;
+		}
+	}
+
+	function resolveEffectiveMatch(marker) {
+		var match = marker.getAttribute('data-creatorreactor-gate-match');
+		var gate = marker.getAttribute('data-creatorreactor-gate');
+		var isLoggedIn = !!(document.body && document.body.classList && document.body.classList.contains('logged-in'));
+		var rolesAttr = marker.getAttribute('data-creatorreactor-user-roles') || '';
+		var roles = rolesAttr.split(',').map(function (r) { return r.trim(); }).filter(Boolean);
+		var hasFollowerRole = roles.indexOf('creatorreactor_follower') !== -1;
+		var hasSubscriberRole = roles.indexOf('creatorreactor_subscriber') !== -1;
+
+		if (viewerState && typeof viewerState === 'object') {
+			isLoggedIn = !!viewerState.loggedIn;
+			roles = Array.isArray(viewerState.roles) ? viewerState.roles : [];
+			hasFollowerRole = roles.indexOf('creatorreactor_follower') !== -1;
+			hasSubscriberRole = roles.indexOf('creatorreactor_subscriber') !== -1;
+		}
+
+		// Role-driven gates must be derived from role payload, not stale match markers.
+		if (gate === 'subscriber') {
+			return hasSubscriberRole ? '1' : '0';
+		}
+		if (gate === 'follower') {
+			return hasFollowerRole && !hasSubscriberRole ? '1' : '0';
+		}
+
+		// Cache-safe fallback for guests: never trust stale "match=1" for authenticated gates.
+		if (!isLoggedIn) {
+			if (gate === 'logged_out') {
+				return '1';
+			}
+			if (
+				gate === 'subscriber' ||
+				gate === 'follower' ||
+				gate === 'logged_in' ||
+				gate === 'logged_in_no_role' ||
+				gate === 'has_tier' ||
+				gate === 'fanvue_connected' ||
+				gate === 'fanvue_not_connected' ||
+				gate === 'onboarding_incomplete' ||
+				gate === 'onboarding_complete'
+			) {
+				return '0';
+			}
+		}
+
+		return match;
+	}
+
+	function refreshViewerState() {
+		var ajaxUrl = (window.ajaxurl && typeof window.ajaxurl === 'string')
+			? window.ajaxurl
+			: '/wp-admin/admin-ajax.php';
+		var url = ajaxUrl + (ajaxUrl.indexOf('?') === -1 ? '?' : '&') + 'action=creatorreactor_viewer_state';
+		fetch(url, { credentials: 'same-origin', cache: 'no-store' })
+			.then(function (resp) { return resp.ok ? resp.json() : null; })
+			.then(function (json) {
+				if (!json || json.success !== true || !json.data) {
+					return;
+				}
+				viewerState = {
+					loggedIn: !!json.data.logged_in,
+					roles: Array.isArray(json.data.roles) ? json.data.roles : []
+				};
+				scanAndHide();
+			})
+			.catch(function () {
+				// Keep marker-based fallback when endpoint is temporarily unavailable.
+			});
 	}
 
 	function scanAndHide() {
@@ -48,62 +131,49 @@
 			return;
 		}
 
-		// Semantics are determined per container based on any marker's chosen logic:
-		// - default 'and' (current): hide container if ANY gate fails => hide if !allMatch
-		// - 'or': show container if ANY gate passes => hide if !anyMatch
-		//
-		// If a container has a mixture of markers, we let 'or' win (less restrictive).
-		var containerState = new Map(); // container -> { allMatch: boolean, anyMatch: boolean, mode: 'and'|'or' }
-
+		// Gate inner HTML is omitted server-side when the visitor does not match (see Elementor
+		// widget render). Here we only hide non–gate sibling widgets (e.g. images dropped below
+		// the gate) until the next CreatorReactor gate. Do not add display:none to the gate
+		// widget itself — that could hide the wrong widget if DOM structure varies.
 		markers.forEach(function (marker) {
-			var match = marker.getAttribute('data-creatorreactor-gate-match');
-			var shouldMatch = match === '1';
-			var logic = marker.getAttribute('data-creatorreactor-gate-logic');
-			var mode = logic === 'or' ? 'or' : 'and';
-
-			var container = findPreferredElementorContainer(marker);
-			if (!container) {
+			var match = resolveEffectiveMatch(marker);
+			if (match === '1') {
 				return;
 			}
-
-			if (!containerState.has(container)) {
-				containerState.set(container, { allMatch: true, anyMatch: false, mode: 'and' });
-			}
-
-			var state = containerState.get(container);
-			state.allMatch = state.allMatch && shouldMatch;
-			state.anyMatch = state.anyMatch || shouldMatch;
-			if (mode === 'or') {
-				state.mode = 'or';
-			}
-		});
-
-		var hiddenCount = 0;
-		containerState.forEach(function (state, container) {
-			var shouldHide = state.mode === 'or' ? !state.anyMatch : !state.allMatch;
-			if (shouldHide) {
-				container.classList.add(HIDDEN_CLASS);
-				hiddenCount += 1;
-			} else {
-				container.classList.remove(HIDDEN_CLASS);
-			}
+			hideTrailingSiblingsAfterFailedGate(marker);
 		});
 
 		if (DEBUG) {
-			// eslint-disable-next-line no-console
-			console.log('[CreatorReactor] gate inheritance scan:', {
-				markers: markers.length,
-				containersHidden: hiddenCount
-			});
+			var now = Date.now();
+			if ( now - lastDebugLogMs > 1000 ) {
+				lastDebugLogMs = now;
+				// eslint-disable-next-line no-console
+				console.log('[CreatorReactor] gate inheritance scan:', {
+					markers: markers.length
+				});
+
+				markers.slice(0, 10).forEach(function (marker) {
+					// eslint-disable-next-line no-console
+					console.log('[CreatorReactor] gate marker:', {
+						gate: marker.getAttribute('data-creatorreactor-gate'),
+						match: marker.getAttribute('data-creatorreactor-gate-match'),
+						logic: marker.getAttribute('data-creatorreactor-gate-logic'),
+						roles: marker.getAttribute('data-creatorreactor-user-roles')
+					});
+				});
+			}
+		}
+	}
+
+	function runInitialScan() {
+		if (document.readyState === 'loading') {
+			document.addEventListener('DOMContentLoaded', scanAndHide);
+		} else {
+			scanAndHide();
 		}
 	}
 
 	function main() {
-		ensureHideCss();
-
-		// Initial scan.
-		scanAndHide();
-
 		// Elementor may render or re-render widgets after `DOMContentLoaded`.
 		// A MutationObserver makes this resilient in editor/preview and for dynamic pages.
 		var scheduled = false;
@@ -142,13 +212,34 @@
 			}
 		});
 
-		observer.observe(document.body, { childList: true, subtree: true });
+		var startObserver = function () {
+			if (!document.body) {
+				setTimeout(startObserver, 30);
+				return;
+			}
+			observer.observe(document.body, { childList: true, subtree: true });
+
+			// Retry scans shortly after load so we catch Elementor's first re-render.
+			var attempts = 0;
+			var maxAttempts = 10;
+			var attemptScan = function () {
+				attempts += 1;
+				scanAndHide();
+				if (attempts < maxAttempts) {
+					setTimeout(attemptScan, 60);
+				}
+			};
+			attemptScan();
+		};
+		startObserver();
 	}
 
-	if (document.readyState === 'loading') {
-		document.addEventListener('DOMContentLoaded', main, { passive: true });
-	} else {
-		main();
-	}
+	// Ensure the hide CSS exists ASAP so we don't briefly show gated containers
+	// before our first scan runs.
+	ensureHideCss();
+	refreshViewerState();
+	runInitialScan();
+	// Set up MutationObserver immediately. Elementor can render/re-render widgets after
+	// `DOMContentLoaded`, and waiting to attach observers can miss those updates.
+	main();
 })();
-

@@ -64,13 +64,21 @@ class Shortcodes {
 			return '';
 		}
 		$uid = get_current_user_id();
-		if ( Onboarding::user_needs_onboarding( $uid ) ) {
-			return Onboarding::incomplete_gate_notice();
-		}
-		if ( ! Entitlements::wp_user_has_active_follower_entitlement( $uid ) ) {
+		// Strict role-only behavior:
+		// - subscriber role should not receive follower content
+		// - follower role receives follower content
+		$user  = get_userdata( $uid );
+		$roles = ( $user && isset( $user->roles ) && is_array( $user->roles ) ) ? $user->roles : [];
+		$has_subscriber_role = in_array( 'creatorreactor_subscriber', $roles, true );
+		$has_follower_role   = in_array( 'creatorreactor_follower', $roles, true );
+
+		if ( $has_subscriber_role ) {
 			return '';
 		}
-		return self::render_enclosed( $content );
+		if ( $has_follower_role ) {
+			return self::render_enclosed( $content );
+		}
+		return '';
 	}
 
 	/**
@@ -82,13 +90,21 @@ class Shortcodes {
 			return '';
 		}
 		$uid = get_current_user_id();
-		if ( Onboarding::user_needs_onboarding( $uid ) ) {
-			return Onboarding::incomplete_gate_notice();
+		// Strict role-only behavior:
+		// - only creatorreactor_subscriber role receives subscriber content
+		// - follower role should not receive subscriber content
+		$user  = get_userdata( $uid );
+		$roles = ( $user && isset( $user->roles ) && is_array( $user->roles ) ) ? $user->roles : [];
+		$has_subscriber_role = in_array( 'creatorreactor_subscriber', $roles, true );
+		$has_follower_role   = in_array( 'creatorreactor_follower', $roles, true );
+
+		if ( $has_subscriber_role ) {
+			return self::render_enclosed( $content );
 		}
-		if ( ! Entitlements::wp_user_has_active_subscriber_entitlement( $uid ) ) {
+		if ( $has_follower_role ) {
 			return '';
 		}
-		return self::render_enclosed( $content );
+		return '';
 	}
 
 	/**
@@ -132,28 +148,8 @@ class Shortcodes {
 	 * @param string|null           $content Enclosed content.
 	 */
 	public static function has_tier( $atts, $content = null ) {
-		if ( ! is_user_logged_in() ) {
-			return '';
-		}
-		$uid = get_current_user_id();
-		if ( Onboarding::user_needs_onboarding( $uid ) ) {
-			return Onboarding::incomplete_gate_notice();
-		}
-
-		$atts    = is_array( $atts ) ? $atts : [];
-		$parsed  = shortcode_atts( [ 'tier' => '', 'product' => '' ], $atts, 'has_tier' );
-		$tier    = isset( $parsed['tier'] ) ? trim( sanitize_text_field( (string) $parsed['tier'] ) ) : '';
-		$product = isset( $parsed['product'] ) ? trim( sanitize_text_field( (string) $parsed['product'] ) ) : '';
-
-		$has_entitlement = Entitlements::check_user_entitlement(
-			$uid,
-			$tier !== '' ? $tier : null,
-			$product !== '' ? $product : null
-		);
-		if ( ! $has_entitlement ) {
-			return '';
-		}
-		return self::render_enclosed( $content );
+		// Deprecated: visibility logic is role-based only for now.
+		return '';
 	}
 
 	/**

@@ -284,4 +284,20 @@ final class EditorContextRegressionTest extends BaseTestCase
 
         self::assertFalse(Editor_Context::frontend_view_is_elementor_page());
     }
+
+    public function testIsElementorPreviewRequestTrueWhenElementorPreviewQueryVar(): void
+    {
+        Functions\when('is_admin')->justReturn(false);
+        $_GET['elementor-preview'] = 'abc123nonce';
+        self::assertTrue(Editor_Context::is_elementor_preview_request());
+        unset($_GET['elementor-preview']);
+    }
+
+    public function testIsElementorPreviewRequestFalseInAdminEvenWithQueryVar(): void
+    {
+        Functions\when('is_admin')->justReturn(true);
+        $_GET['elementor-preview'] = 'x';
+        self::assertFalse(Editor_Context::is_elementor_preview_request());
+        unset($_GET['elementor-preview']);
+    }
 }

@@ -233,114 +233,44 @@ final class ShortcodesRegressionTest extends BaseTestCase
         self::assertSame('', Shortcodes::fanvue_not_connected([], 'not connected content'));
     }
 
-    public function testFollowerReturnsOnboardingGateNoticeWhenUserNeedsOnboarding(): void
+    public function testFollowerReturnsEmptyWhenLoggedInWithoutFollowerRole(): void
     {
         $this->mockWpdb([]);
         Functions\when('is_user_logged_in')->justReturn(true);
         Functions\when('get_current_user_id')->justReturn(55);
-        Functions\when('get_userdata')->alias(static fn ($userId) => (object) ['user_email' => 'fan@example.com']);
-        Functions\when('current_time')->justReturn('2026-03-24 00:00:00');
-        Functions\when('get_user_meta')->alias(
-            static function ($userId, $key, $single) {
-                if ($userId !== 55) {
-                    return '';
-                }
-                if ($key === 'creatorreactor_onboarding_complete') {
-                    return '';
-                }
-                if ($key === 'creatorreactor_fanvue_oauth_linked') {
-                    return '1';
-                }
-                return '';
-            }
+        Functions\when('get_userdata')->alias(
+            static fn ($userId) => (object) [
+                'user_email' => 'fan@example.com',
+                'roles'      => [],
+            ]
         );
-        Functions\when('apply_filters')->alias(
-            static fn ($tag, $value, ...$rest) => $tag === 'creatorreactor_user_needs_onboarding' ? true : $value
-        );
-        Functions\when('home_url')->alias(static fn ($path = '/') => 'https://example.com' . $path);
-        Functions\when('add_query_arg')->alias(
-            static fn ($key, $value, $url) => $url . (str_contains($url, '?') ? '&' : '?') . $key . '=' . $value
-        );
-        Functions\when('wp_validate_redirect')->alias(static fn ($url, $fallback = '') => (string) $url);
-        Functions\when('esc_url')->alias(static fn ($url): string => (string) $url);
         Functions\expect('do_shortcode')->never();
 
         $out = Shortcodes::follower([], 'premium content');
         self::assertSame('', $out);
     }
 
-    public function testSubscriberReturnsOnboardingGateNoticeWhenUserNeedsOnboarding(): void
+    public function testSubscriberReturnsEmptyWhenLoggedInWithoutSubscriberRole(): void
     {
         $this->mockWpdb([]);
         Functions\when('is_user_logged_in')->justReturn(true);
         Functions\when('get_current_user_id')->justReturn(77);
-        Functions\when('get_userdata')->alias(static fn ($userId) => (object) ['user_email' => 'sub@example.com']);
-        Functions\when('current_time')->justReturn('2026-03-24 00:00:00');
-        Functions\when('get_user_meta')->alias(
-            static function ($userId, $key, $single) {
-                if ($userId !== 77) {
-                    return '';
-                }
-                if ($key === 'creatorreactor_onboarding_complete') {
-                    return '';
-                }
-                if ($key === 'creatorreactor_fanvue_oauth_linked') {
-                    return '1';
-                }
-                return '';
-            }
+        Functions\when('get_userdata')->alias(
+            static fn ($userId) => (object) [
+                'user_email' => 'sub@example.com',
+                'roles'      => [],
+            ]
         );
-        Functions\when('apply_filters')->alias(
-            static fn ($tag, $value, ...$rest) => $tag === 'creatorreactor_user_needs_onboarding' ? true : $value
-        );
-        Functions\when('home_url')->alias(static fn ($path = '/') => 'https://example.com' . $path);
-        Functions\when('add_query_arg')->alias(
-            static fn ($key, $value, $url) => $url . (str_contains($url, '?') ? '&' : '?') . $key . '=' . $value
-        );
-        Functions\when('wp_validate_redirect')->alias(static fn ($url, $fallback = '') => (string) $url);
-        Functions\when('esc_url')->alias(static fn ($url): string => (string) $url);
         Functions\expect('do_shortcode')->never();
 
         $out = Shortcodes::subscriber([], 'subscriber content');
         self::assertSame('', $out);
     }
 
-    public function testHasTierReturnsOnboardingGateNoticeWhenUserNeedsOnboarding(): void
+    public function testHasTierReturnsEmptyWhenUserNeedsOnboarding(): void
     {
-        Functions\when('is_user_logged_in')->justReturn(true);
-        Functions\when('get_current_user_id')->justReturn(88);
-        Functions\when('current_time')->justReturn('2026-03-24 00:00:00');
-        Functions\when('get_userdata')->alias(static fn ($userId) => (object) ['user_email' => 'tier@example.com']);
-        Functions\when('get_user_meta')->alias(
-            static function ($userId, $key, $single) {
-                if ($userId !== 88) {
-                    return '';
-                }
-                if ($key === 'creatorreactor_onboarding_complete') {
-                    return '';
-                }
-                if ($key === 'creatorreactor_fanvue_oauth_linked') {
-                    return '1';
-                }
-                return '';
-            }
-        );
-        Functions\when('apply_filters')->alias(
-            static fn ($tag, $value, ...$rest) => $tag === 'creatorreactor_user_needs_onboarding' ? true : $value
-        );
-        Functions\when('home_url')->alias(static fn ($path = '/') => 'https://example.com' . $path);
-        Functions\when('add_query_arg')->alias(
-            static fn ($key, $value, $url) => $url . (str_contains($url, '?') ? '&' : '?') . $key . '=' . $value
-        );
-        Functions\when('wp_validate_redirect')->alias(static fn ($url, $fallback = '') => (string) $url);
-        Functions\when('esc_url')->alias(static fn ($url): string => (string) $url);
-        Functions\when('shortcode_atts')->alias(
-            static fn ($pairs, $atts, $shortcode = '') => array_merge((array) $pairs, (array) $atts)
-        );
         Functions\expect('do_shortcode')->never();
-
-        $out = Shortcodes::has_tier(['tier' => 'premium', 'product' => 'fanvue'], 'tier content');
-        self::assertSame('', $out);
+        self::assertSame('', Shortcodes::has_tier(['tier' => 'premium', 'product' => 'fanvue'], 'tier content'));
     }
 
     public function testFollowerRendersContentWhenOnboardingCompleteAndFollowerEntitled(): void
@@ -353,7 +283,10 @@ final class ShortcodesRegressionTest extends BaseTestCase
             static fn ($userId, $key, $single) => $key === 'creatorreactor_onboarding_complete' ? '1' : ''
         );
         Functions\when('get_userdata')->alias(
-            static fn ($userId) => (object) ['user_email' => 'fan@example.com']
+			static fn ($userId) => (object) [
+				'user_email' => 'fan@example.com',
+				'roles'      => [ 'creatorreactor_follower' ],
+			]
         );
         Functions\when('current_time')->justReturn('2026-03-24 00:00:00');
         Functions\expect('do_shortcode')->once()->with('follower-only')->andReturn('rendered follower-only');
@@ -371,7 +304,10 @@ final class ShortcodesRegressionTest extends BaseTestCase
             static fn ($userId, $key, $single) => $key === 'creatorreactor_onboarding_complete' ? '1' : ''
         );
         Functions\when('get_userdata')->alias(
-            static fn ($userId) => (object) ['user_email' => 'fan@example.com']
+			static fn ($userId) => (object) [
+				'user_email' => 'fan@example.com',
+				'roles'      => [],
+			]
         );
         Functions\when('current_time')->justReturn('2026-03-24 00:00:00');
         Functions\expect('do_shortcode')->never();
@@ -389,7 +325,10 @@ final class ShortcodesRegressionTest extends BaseTestCase
             static fn ($userId, $key, $single) => $key === 'creatorreactor_onboarding_complete' ? '1' : ''
         );
         Functions\when('get_userdata')->alias(
-            static fn ($userId) => (object) ['user_email' => 'sub@example.com']
+			static fn ($userId) => (object) [
+				'user_email' => 'sub@example.com',
+				'roles'      => [ 'creatorreactor_subscriber' ],
+			]
         );
         Functions\when('current_time')->justReturn('2026-03-24 00:00:00');
         Functions\expect('do_shortcode')->once()->with('subscriber-only')->andReturn('rendered subscriber-only');
@@ -407,7 +346,10 @@ final class ShortcodesRegressionTest extends BaseTestCase
             static fn ($userId, $key, $single) => $key === 'creatorreactor_onboarding_complete' ? '1' : ''
         );
         Functions\when('get_userdata')->alias(
-            static fn ($userId) => (object) ['user_email' => 'sub@example.com']
+			static fn ($userId) => (object) [
+				'user_email' => 'sub@example.com',
+				'roles'      => [],
+			]
         );
         Functions\when('current_time')->justReturn('2026-03-24 00:00:00');
         Functions\expect('do_shortcode')->never();
@@ -415,64 +357,16 @@ final class ShortcodesRegressionTest extends BaseTestCase
         self::assertSame('', Shortcodes::subscriber([], 'subscriber-only'));
     }
 
-    public function testHasTierRendersContentWhenOnboardingCompleteAndTierMatches(): void
+    public function testHasTierReturnsEmptyWhenTierMatches(): void
     {
-        $this->mockWpdb([], (object) ['id' => 1]);
-
-        Functions\when('is_user_logged_in')->justReturn(true);
-        Functions\when('get_current_user_id')->justReturn(105);
-        Functions\when('get_user_meta')->alias(
-            static fn ($userId, $key, $single) => $key === 'creatorreactor_onboarding_complete' ? '1' : ''
-        );
-        Functions\when('get_userdata')->alias(
-            static fn ($userId) => (object) ['user_email' => 'tier@example.com']
-        );
-        Functions\when('current_time')->justReturn('2026-03-24 00:00:00');
-        Functions\when('shortcode_atts')->alias(
-            static fn ($pairs, $atts, $shortcode = '') => array_merge((array) $pairs, (array) $atts)
-        );
-        Functions\when('sanitize_text_field')->alias(
-            static fn ($value): string => trim((string) $value)
-        );
-        Functions\when('sanitize_key')->alias(
-            static fn ($value): string => strtolower(trim((string) $value))
-        );
-        Functions\expect('do_shortcode')->once()->with('tier-only')->andReturn('rendered tier-only');
-
-        self::assertSame(
-            'rendered tier-only',
-            Shortcodes::has_tier(['tier' => 'premium', 'product' => 'fanvue'], 'tier-only')
-        );
+        Functions\expect('do_shortcode')->never();
+        self::assertSame('', Shortcodes::has_tier(['tier' => 'premium', 'product' => 'fanvue'], 'tier-only'));
     }
 
-    public function testHasTierReturnsEmptyWhenOnboardingCompleteButTierDoesNotMatch(): void
+    public function testHasTierReturnsEmptyWhenTierDoesNotMatch(): void
     {
-        $this->mockWpdb([], null);
-
-        Functions\when('is_user_logged_in')->justReturn(true);
-        Functions\when('get_current_user_id')->justReturn(106);
-        Functions\when('get_user_meta')->alias(
-            static fn ($userId, $key, $single) => $key === 'creatorreactor_onboarding_complete' ? '1' : ''
-        );
-        Functions\when('get_userdata')->alias(
-            static fn ($userId) => (object) ['user_email' => 'tier@example.com']
-        );
-        Functions\when('current_time')->justReturn('2026-03-24 00:00:00');
-        Functions\when('shortcode_atts')->alias(
-            static fn ($pairs, $atts, $shortcode = '') => array_merge((array) $pairs, (array) $atts)
-        );
-        Functions\when('sanitize_text_field')->alias(
-            static fn ($value): string => trim((string) $value)
-        );
-        Functions\when('sanitize_key')->alias(
-            static fn ($value): string => strtolower(trim((string) $value))
-        );
         Functions\expect('do_shortcode')->never();
-
-        self::assertSame(
-            '',
-            Shortcodes::has_tier(['tier' => 'premium', 'product' => 'fanvue'], 'tier-only')
-        );
+        self::assertSame('', Shortcodes::has_tier(['tier' => 'premium', 'product' => 'fanvue'], 'tier-only'));
     }
 
     public function testLoggedInReturnsEmptyWhenContentIsNullOrEmpty(): void
@@ -656,25 +550,9 @@ final class ShortcodesRegressionTest extends BaseTestCase
         self::assertStringNotContainsString('href="https://example.com/wp-json/', $out);
     }
 
-    public function testHasTierRendersWhenOnlyProductAttributeMatches(): void
+    public function testHasTierReturnsEmptyWhenOnlyProductAttributeMatches(): void
     {
-        $this->mockWpdb([], (object) ['id' => 1, 'product' => 'fanvue', 'status' => 'active', 'tier' => 'any']);
-
-        Functions\when('is_user_logged_in')->justReturn(true);
-        Functions\when('get_current_user_id')->justReturn(200);
-        Functions\when('get_user_meta')->alias(
-            static fn ($userId, $key, $single) => $key === 'creatorreactor_onboarding_complete' ? '1' : ''
-        );
-        Functions\when('get_userdata')->alias(
-            static fn ($userId) => (object) ['user_email' => 'tier-by-product@example.com']
-        );
-        Functions\when('current_time')->justReturn('2099-01-01 00:00:00');
-        Functions\when('shortcode_atts')->alias(
-            static fn ($pairs, $atts, $shortcode = '') => array_merge((array) $pairs, (array) $atts)
-        );
-        Functions\expect('do_shortcode')->once()->with('product gate')->andReturn('rendered product gate');
-
-        $out = Shortcodes::has_tier(['product' => 'fanvue'], 'product gate');
-        self::assertSame('rendered product gate', $out);
+        Functions\expect('do_shortcode')->never();
+        self::assertSame('', Shortcodes::has_tier(['product' => 'fanvue'], 'product gate'));
     }
 }

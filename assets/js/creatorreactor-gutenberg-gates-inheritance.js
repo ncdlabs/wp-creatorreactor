@@ -6,6 +6,8 @@
 	var HIDDEN_CLASS = 'creatorreactor-gutenberg-gate-hidden';
 	var MARKER_SELECTOR = '.creatorreactor-gutenberg-gate-marker[data-creatorreactor-gate-match]';
 	var DEBUG = window.CreatorReactorGutenbergGatesInheritanceDebug === true;
+	var lastDebugLogMs = 0;
+	var viewerState = null;
 
 	function ensureHideCss() {
 		if (document.querySelector('style[data-creatorreactor-gutenberg-gate-hidden="1"]')) {
@@ -37,6 +39,75 @@
 		return null;
 	}
 
+	function resolveEffectiveMatch(marker) {
+		var match = marker.getAttribute('data-creatorreactor-gate-match');
+		var gate = marker.getAttribute('data-creatorreactor-gate');
+		var isLoggedIn = !!(document.body && document.body.classList && document.body.classList.contains('logged-in'));
+		var rolesAttr = marker.getAttribute('data-creatorreactor-user-roles') || '';
+		var roles = rolesAttr.split(',').map(function (r) { return r.trim(); }).filter(Boolean);
+		var hasFollowerRole = roles.indexOf('creatorreactor_follower') !== -1;
+		var hasSubscriberRole = roles.indexOf('creatorreactor_subscriber') !== -1;
+
+		if (viewerState && typeof viewerState === 'object') {
+			isLoggedIn = !!viewerState.loggedIn;
+			roles = Array.isArray(viewerState.roles) ? viewerState.roles : [];
+			hasFollowerRole = roles.indexOf('creatorreactor_follower') !== -1;
+			hasSubscriberRole = roles.indexOf('creatorreactor_subscriber') !== -1;
+		}
+
+		// Role-driven gates must be derived from role payload, not stale match markers.
+		if (gate === 'subscriber') {
+			return hasSubscriberRole ? '1' : '0';
+		}
+		if (gate === 'follower') {
+			return hasFollowerRole && !hasSubscriberRole ? '1' : '0';
+		}
+
+		// Cache-safe fallback for guests: never trust stale "match=1" for authenticated gates.
+		if (!isLoggedIn) {
+			if (gate === 'logged_out') {
+				return '1';
+			}
+			if (
+				gate === 'subscriber' ||
+				gate === 'follower' ||
+				gate === 'logged_in' ||
+				gate === 'logged_in_no_role' ||
+				gate === 'has_tier' ||
+				gate === 'fanvue_connected' ||
+				gate === 'fanvue_not_connected' ||
+				gate === 'onboarding_incomplete' ||
+				gate === 'onboarding_complete'
+			) {
+				return '0';
+			}
+		}
+
+		return match;
+	}
+
+	function refreshViewerState() {
+		var ajaxUrl = (window.ajaxurl && typeof window.ajaxurl === 'string')
+			? window.ajaxurl
+			: '/wp-admin/admin-ajax.php';
+		var url = ajaxUrl + (ajaxUrl.indexOf('?') === -1 ? '?' : '&') + 'action=creatorreactor_viewer_state';
+		fetch(url, { credentials: 'same-origin', cache: 'no-store' })
+			.then(function (resp) { return resp.ok ? resp.json() : null; })
+			.then(function (json) {
+				if (!json || json.success !== true || !json.data) {
+					return;
+				}
+				viewerState = {
+					loggedIn: !!json.data.logged_in,
+					roles: Array.isArray(json.data.roles) ? json.data.roles : []
+				};
+				scanAndHide();
+			})
+			.catch(function () {
+				// Keep marker-based fallback when endpoint is temporarily unavailable.
+			});
+	}
+
 	function scanAndHide() {
 		Array.prototype.slice
 			.call(document.querySelectorAll('.' + HIDDEN_CLASS))
@@ -47,39 +118,16 @@
 			return;
 		}
 
-		// Semantics are determined per container based on any marker's chosen logic:
-		// - default 'and' (current): hide container if ANY gate fails => hide if !allMatch
-		// - 'or': show container if ANY gate passes => hide if !anyMatch
-		//
-		// If a container has a mixture of markers, we let 'or' win (less restrictive).
-		var containerState = new Map(); // container -> { allMatch, anyMatch, mode }
-
+		// Deterministic per-container behavior (your "1 gate rule per container" setup):
+		// toggle each nearest block container directly based on this marker's match value.
+		var hiddenCount = 0;
 		markers.forEach(function (marker) {
-			var match = marker.getAttribute('data-creatorreactor-gate-match');
-			var shouldMatch = match === '1';
-			var logic = marker.getAttribute('data-creatorreactor-gate-logic');
-			var mode = logic === 'or' ? 'or' : 'and';
-
+			var match = resolveEffectiveMatch(marker);
+			var shouldHide = match !== '1';
 			var container = findPreferredGutenbergContainer(marker);
 			if (!container) {
 				return;
 			}
-
-			if (!containerState.has(container)) {
-				containerState.set(container, { allMatch: true, anyMatch: false, mode: 'and' });
-			}
-
-			var state = containerState.get(container);
-			state.allMatch = state.allMatch && shouldMatch;
-			state.anyMatch = state.anyMatch || shouldMatch;
-			if (mode === 'or') {
-				state.mode = 'or';
-			}
-		});
-
-		var hiddenCount = 0;
-		containerState.forEach(function (state, container) {
-			var shouldHide = state.mode === 'or' ? !state.anyMatch : !state.allMatch;
 			if (shouldHide) {
 				container.classList.add(HIDDEN_CLASS);
 				hiddenCount += 1;
@@ -89,17 +137,29 @@
 		});
 
 		if (DEBUG) {
-			// eslint-disable-next-line no-console
-			console.log('[CreatorReactor] gutenberg gate inheritance scan:', {
-				markers: markers.length,
-				containersHidden: hiddenCount
-			});
+			var now = Date.now();
+			if ( now - lastDebugLogMs > 1000 ) {
+				lastDebugLogMs = now;
+				// eslint-disable-next-line no-console
+				console.log('[CreatorReactor] gutenberg gate inheritance scan:', {
+					markers: markers.length,
+					containersHidden: hiddenCount
+				});
+
+				markers.slice(0, 10).forEach(function (marker) {
+					// eslint-disable-next-line no-console
+					console.log('[CreatorReactor] gate marker:', {
+						gate: marker.getAttribute('data-creatorreactor-gate'),
+						match: marker.getAttribute('data-creatorreactor-gate-match'),
+						logic: marker.getAttribute('data-creatorreactor-gate-logic'),
+						roles: marker.getAttribute('data-creatorreactor-user-roles')
+					});
+				});
+			}
 		}
 	}
 
 	function main() {
-		ensureHideCss();
-
 		scanAndHide();
 
 		var markers = Array.prototype.slice.call(document.querySelectorAll(MARKER_SELECTOR));
@@ -127,13 +187,25 @@
 		var observer = new MutationObserver(function () {
 			scheduleScan();
 		});
-		observer.observe(document.body, { childList: true, subtree: true });
+		var startObserver = function () {
+			if (!document.body) {
+				setTimeout(startObserver, 30);
+				return;
+			}
+			observer.observe(document.body, { childList: true, subtree: true });
+		};
+		startObserver();
 	}
 
-	if (document.readyState === 'loading') {
-		document.addEventListener('DOMContentLoaded', main, { passive: true });
-	} else {
-		main();
-	}
+	// Ensure the hide CSS exists ASAP so we don't briefly show gated containers
+	// before our first scan runs.
+	ensureHideCss();
+	refreshViewerState();
+
+	// Best-effort scan immediately.
+	scanAndHide();
+
+	// Set up MutationObserver immediately (do not wait for `DOMContentLoaded`).
+	main();
 })();
 

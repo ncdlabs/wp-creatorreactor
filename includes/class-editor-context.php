@@ -79,6 +79,22 @@ class Editor_Context {
 	}
 
 	/**
+	 * Front-end request is Elementor’s live preview (editor canvas iframe), not a normal visitor view.
+	 * Gate visibility scripts must not run here or they hide gated containers and block drag-and-drop.
+	 *
+	 * Only the `elementor-preview` query parameter is used. Elementor’s `is_preview_mode()` /
+	 * `is_edit_mode()` can be true on ordinary front-end requests in some versions, which would
+	 * incorrectly skip scripts and break gated layout for visitors.
+	 */
+	public static function is_elementor_preview_request() {
+		if ( is_admin() ) {
+			return false;
+		}
+		// phpcs:ignore WordPress.Security.NonceVerification.Recommended -- presence-only probe for preview URL shape.
+		return isset( $_GET['elementor-preview'] );
+	}
+
+	/**
 	 * Admin: current screen is the block editor (post editor with blocks).
 	 */
 	public static function is_block_editor_screen() {

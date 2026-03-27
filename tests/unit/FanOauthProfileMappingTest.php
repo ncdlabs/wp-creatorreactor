@@ -153,7 +153,7 @@ final class FanOauthProfileMappingTest extends BaseTestCase
                 'subscription' => ['tier' => 'vip'],
             ],
         ]);
-        self::assertSame('creatorreactor_subscriber', $slug);
+        self::assertSame('creatorreactor_follower', $slug);
     }
 
     public function testNormalizeTierAcceptsNumericId(): void

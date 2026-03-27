@@ -681,15 +681,31 @@ class Fan_OAuth {
 
 		$tier_raw  = CreatorReactor_Client::tier_raw_from_oauth_data( $data );
 		$tier_norm = $tier_raw !== null ? CreatorReactor_Client::normalize_tier( $tier_raw ) : null;
-		if ( is_string( $tier_norm ) && $tier_norm !== '' ) {
-			return 'creatorreactor_subscriber';
-		}
 
+		// Prefer explicit role in OAuth payload first.
+		// Some payloads may include a subscription tier for followers; we should not treat that as subscriber.
 		if ( in_array( $role_raw, [ 'follower', 'fan' ], true ) ) {
 			return 'creatorreactor_follower';
 		}
 
 		if ( in_array( $role_raw, [ 'subscriber', 'subscribed' ], true ) ) {
+			return 'creatorreactor_subscriber';
+		}
+
+		// Fallback: infer from tier when role is missing/unknown.
+		if ( is_string( $tier_norm ) && $tier_norm !== '' ) {
+			$mapped = Entitlements::mapped_fanvue_wp_role_from_stored_tier( (string) $tier_raw );
+			if ( $mapped === 'creatorreactor_follower' ) {
+				return 'creatorreactor_follower';
+			}
+			if ( $mapped === 'creatorreactor_subscriber' ) {
+				return 'creatorreactor_subscriber';
+			}
+			// Heuristic: if tier name contains follower keywords, treat as follower.
+			$t = strtolower( (string) $tier_norm );
+			if ( strpos( $t, 'follower' ) !== false || strpos( $t, '_follower' ) !== false || strpos( $t, 'fan' ) !== false ) {
+				return 'creatorreactor_follower';
+			}
 			return 'creatorreactor_subscriber';
 		}
 

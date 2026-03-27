@@ -3,7 +3,7 @@
  * Plugin Name: CreatorReactor
  * Plugin URI: https://github.com/ncdlabs/creatorreactor
  * Description: OAuth integration, sync, and entitlements for creator products (CreatorReactor, with support for additional products such as OnlyFans).
- * Version: 2.0.3
+ * Version: 2.0.37
  * Author: ncdLabs
  * Author URI: https://ncdlabs.com
  * License: GPL v2 or later
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'CREATORREACTOR_VERSION', '2.0.3' );
+define( 'CREATORREACTOR_VERSION', '2.0.37' );
 define( 'CREATORREACTOR_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CREATORREACTOR_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'CREATORREACTOR_TABLE_ENTITLEMENTS', 'creatorreactor_entitlements' );

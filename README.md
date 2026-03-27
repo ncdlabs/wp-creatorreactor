@@ -2,7 +2,7 @@
 
 WordPress plugin for OAuth, scheduled subscriber/follower sync, and entitlement checks for creator platforms (Fanvue today; additional products such as OnlyFans are supported at the data model level). It also provides shortcodes, Gutenberg blocks, and optional Elementor widgets for tier gates and Fanvue login on the front end.
 
-**Version:** 2.0.3 (see `creatorreactor.php`)
+**Version:** 2.0.18 (see `creatorreactor.php`)
 
 **Author:** Lou Grossi · [ncdLabs](https://ncdlabs.com)
 
@@ -132,7 +132,7 @@ Higher-level wrappers for profile/subscribers/followers (respecting direct vs br
 
 ## Repository layout
 
-Repository root is the plugin directory (install as `wp-content/plugins/creatorreactor/` or zip contents).
+Repository root is the plugin directory. Typical install path is `wp-content/plugins/wp-creatorreactor/` (matches release zips and `deploy.sh`). You can use `creatorreactor/` instead if you prefer; the folder name must stay consistent when updating.
 
 ```
 .
@@ -203,7 +203,18 @@ From the plugin root:
 ./build-zip.sh
 ```
 
-This reads the version from `creatorreactor.php` and writes `creatorreactor-<version>.zip` including runtime plugin assets and code directories (`includes/`, `js/`, `css/`, `templates/`, `img/`, `assets/`, `languages/`) plus `creatorreactor.php`.
+This reads the version from `creatorreactor.php` and writes **`wp-creatorreactor-<version>.zip`** (by default) whose root is a **single folder** `wp-creatorreactor/` containing `creatorreactor.php`, `uninstall.php`, and runtime directories (`includes/`, `js/`, `css/`, `templates/`, `img/`, `assets/`, and `languages/` if present). The zip **filename** matches the folder slug so you do not confuse it with an older `creatorreactor-*.zip` that used a different directory name.
+
+WordPress treats an upload as the **same** plugin only when that folder name matches the existing path under `wp-content/plugins/` (for example `…/plugins/wp-creatorreactor/creatorreactor.php`). If the names differ, WordPress installs a **second** copy with the same plugin name.
+
+If your server uses a different folder (for example `creatorreactor`), build with:
+
+`PLUGIN_SLUG=creatorreactor ./build-zip.sh`  
+(which produces `creatorreactor-<version>.zip`)
+
+### Messy admin state (duplicate plugin, or “deleted successfully” but it still shows)
+
+That usually means **two folders** under `wp-content/plugins/` (for example both `creatorreactor/` and `wp-creatorreactor/`), or files left on disk after a failed delete. **Deactivate** the plugin, then **via SFTP or hosting file manager** remove **every** CreatorReactor folder (`creatorreactor`, `wp-creatorreactor`, and any `-old` copies). Confirm none remain, then upload **one** zip built with `./build-zip.sh` (so only `wp-creatorreactor/` exists) and activate. Using **rsync** (`deploy.sh`) avoids the WordPress uploader entirely.
 
 ## License
 
