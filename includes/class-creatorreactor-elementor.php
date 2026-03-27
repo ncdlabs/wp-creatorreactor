@@ -80,7 +80,7 @@ final class Elementor_Integration {
 			CREATORREACTOR_PLUGIN_URL . 'assets/js/creatorreactor-elementor-gates-inheritance.js',
 			[],
 			$version,
-			true
+			false
 		);
 	}
 

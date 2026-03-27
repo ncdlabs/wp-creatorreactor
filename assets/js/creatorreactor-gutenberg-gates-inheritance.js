@@ -55,14 +55,6 @@
 			hasSubscriberRole = roles.indexOf('creatorreactor_subscriber') !== -1;
 		}
 
-		// Role-driven gates must be derived from role payload, not stale match markers.
-		if (gate === 'subscriber') {
-			return hasSubscriberRole ? '1' : '0';
-		}
-		if (gate === 'follower') {
-			return hasFollowerRole && !hasSubscriberRole ? '1' : '0';
-		}
-
 		// Cache-safe fallback for guests: never trust stale "match=1" for authenticated gates.
 		if (!isLoggedIn) {
 			if (gate === 'logged_out') {
@@ -81,6 +73,20 @@
 			) {
 				return '0';
 			}
+		}
+
+		// For authenticated users, hide role-gated content until live viewer state arrives.
+		// This prevents a first-paint flash from stale cached role attributes.
+		if (!viewerState && (gate === 'subscriber' || gate === 'follower')) {
+			return '0';
+		}
+
+		// Role-driven gates must be derived from role payload, not stale match markers.
+		if (gate === 'subscriber') {
+			return hasSubscriberRole ? '1' : '0';
+		}
+		if (gate === 'follower') {
+			return hasFollowerRole && !hasSubscriberRole ? '1' : '0';
 		}
 
 		return match;

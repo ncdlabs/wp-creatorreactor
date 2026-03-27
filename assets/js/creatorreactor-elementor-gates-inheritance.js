@@ -4,6 +4,8 @@
 	'use strict';
 
 	var HIDDEN_CLASS = 'creatorreactor-elementor-gate-hidden';
+	var PREHIDE_CLASS = 'creatorreactor-elementor-gate-prehide';
+	var GLOBAL_PREHIDE_CLASS = 'creatorreactor-elementor-gate-global-prehide';
 	var MARKER_SELECTOR = '.creatorreactor-elementor-gate-marker[data-creatorreactor-gate-match]';
 	var DEBUG = window.CreatorReactorElementorGatesInheritanceDebug === true;
 	var lastDebugLogMs = 0;
@@ -16,8 +18,23 @@
 
 		var style = document.createElement('style');
 		style.setAttribute('data-creatorreactor-elementor-gate-hidden', '1');
-		style.textContent = '.' + HIDDEN_CLASS + '{display:none !important;}';
+		style.textContent = ''
+			+ '.' + HIDDEN_CLASS + '{display:none !important;}'
+			+ '.' + PREHIDE_CLASS + '{display:none !important;}'
+			+ '.' + GLOBAL_PREHIDE_CLASS + ' .elementor-widget[class*="elementor-widget-creatorreactor_"] ~ .elementor-widget{display:none !important;}';
 		document.head.appendChild(style);
+	}
+
+	function enableGlobalPrehide() {
+		if (document.documentElement && document.documentElement.classList) {
+			document.documentElement.classList.add(GLOBAL_PREHIDE_CLASS);
+		}
+	}
+
+	function disableGlobalPrehide() {
+		if (document.documentElement && document.documentElement.classList) {
+			document.documentElement.classList.remove(GLOBAL_PREHIDE_CLASS);
+		}
 	}
 
 	/**
@@ -36,19 +53,46 @@
 	 * the gate instead of inside the nested gate slot (shortcode output is empty but images
 	 * still render as siblings).
 	 */
-	function hideTrailingSiblingsAfterFailedGate(marker) {
+	function collectTrailingSiblings(marker) {
 		var widget = marker.closest('.elementor-widget');
 		if (!widget || !widget.parentElement) {
-			return;
+			return [];
 		}
+		var out = [];
 		var next = widget.nextElementSibling;
 		while (next) {
 			if (isCreatorReactorGateWidget(next)) {
 				break;
 			}
-			next.classList.add(HIDDEN_CLASS);
+			out.push(next);
 			next = next.nextElementSibling;
 		}
+		return out;
+	}
+
+	function hideTrailingSiblingsAfterFailedGate(marker) {
+		var nodes = collectTrailingSiblings(marker);
+		nodes.forEach(function (node) {
+			node.classList.remove(PREHIDE_CLASS);
+			node.classList.add(HIDDEN_CLASS);
+		});
+	}
+
+	function revealTrailingSiblingsAfterPassedGate(marker) {
+		var nodes = collectTrailingSiblings(marker);
+		nodes.forEach(function (node) {
+			node.classList.remove(PREHIDE_CLASS);
+			node.classList.remove(HIDDEN_CLASS);
+		});
+	}
+
+	function applyDefaultPrehide(markers) {
+		markers.forEach(function (marker) {
+			var nodes = collectTrailingSiblings(marker);
+			nodes.forEach(function (node) {
+				node.classList.add(PREHIDE_CLASS);
+			});
+		});
 	}
 
 	function resolveEffectiveMatch(marker) {
@@ -65,14 +109,6 @@
 			roles = Array.isArray(viewerState.roles) ? viewerState.roles : [];
 			hasFollowerRole = roles.indexOf('creatorreactor_follower') !== -1;
 			hasSubscriberRole = roles.indexOf('creatorreactor_subscriber') !== -1;
-		}
-
-		// Role-driven gates must be derived from role payload, not stale match markers.
-		if (gate === 'subscriber') {
-			return hasSubscriberRole ? '1' : '0';
-		}
-		if (gate === 'follower') {
-			return hasFollowerRole && !hasSubscriberRole ? '1' : '0';
 		}
 
 		// Cache-safe fallback for guests: never trust stale "match=1" for authenticated gates.
@@ -93,6 +129,20 @@
 			) {
 				return '0';
 			}
+		}
+
+		// For authenticated users, hide role-gated content until live viewer state arrives.
+		// This prevents a first-paint flash from stale cached role attributes.
+		if (!viewerState && (gate === 'subscriber' || gate === 'follower')) {
+			return '0';
+		}
+
+		// Role-driven gates must be derived from role payload, not stale match markers.
+		if (gate === 'subscriber') {
+			return hasSubscriberRole ? '1' : '0';
+		}
+		if (gate === 'follower') {
+			return hasFollowerRole && !hasSubscriberRole ? '1' : '0';
 		}
 
 		return match;
@@ -123,13 +173,19 @@
 	function scanAndHide() {
 		// Keep state consistent for dynamic re-renders by clearing previous results.
 		Array.prototype.slice
-			.call(document.querySelectorAll('.' + HIDDEN_CLASS))
-			.forEach(function (el) { el.classList.remove(HIDDEN_CLASS); });
+			.call(document.querySelectorAll('.' + HIDDEN_CLASS + ',.' + PREHIDE_CLASS))
+			.forEach(function (el) {
+				el.classList.remove(HIDDEN_CLASS);
+				el.classList.remove(PREHIDE_CLASS);
+			});
 
 		var markers = Array.prototype.slice.call(document.querySelectorAll(MARKER_SELECTOR));
 		if (!markers.length) {
+			disableGlobalPrehide();
 			return;
 		}
+		// Prevent first-paint flashes: hide gate sibling ranges by default, then reveal only matches.
+		applyDefaultPrehide(markers);
 
 		// Gate inner HTML is omitted server-side when the visitor does not match (see Elementor
 		// widget render). Here we only hide non–gate sibling widgets (e.g. images dropped below
@@ -138,10 +194,12 @@
 		markers.forEach(function (marker) {
 			var match = resolveEffectiveMatch(marker);
 			if (match === '1') {
+				revealTrailingSiblingsAfterPassedGate(marker);
 				return;
 			}
 			hideTrailingSiblingsAfterFailedGate(marker);
 		});
+		disableGlobalPrehide();
 
 		if (DEBUG) {
 			var now = Date.now();
@@ -237,6 +295,7 @@
 	// Ensure the hide CSS exists ASAP so we don't briefly show gated containers
 	// before our first scan runs.
 	ensureHideCss();
+	enableGlobalPrehide();
 	refreshViewerState();
 	runInitialScan();
 	// Set up MutationObserver immediately. Elementor can render/re-render widgets after
