@@ -12,7 +12,6 @@
 	var __ = i18n.__;
 	var ServerSideRender = serverSideRender;
 	var PanelBody = components.PanelBody;
-	var TextControl = components.TextControl;
 	var SelectControl = components.SelectControl;
 
 	function registerInner(name, title, description, icon) {
@@ -137,104 +136,6 @@
 		__('Inner blocks show only for logged-in users without Fanvue linked.', 'creatorreactor'),
 		'visibility'
 	);
-
-	blocks.registerBlockType('creatorreactor/has-tier', {
-		apiVersion: 3,
-		title: __('CreatorReactor: Has tier', 'creatorreactor'),
-		description: __('Inner blocks show only for a logged-in user with matching tier.', 'creatorreactor'),
-		category: 'creatorreactor',
-		icon: 'awards',
-		attributes: {
-			tier: {
-				type: 'string',
-				default: ''
-			},
-			product: {
-				type: 'string',
-				default: ''
-			},
-			container_logic: {
-				type: 'string',
-				default: 'and'
-			}
-		},
-		edit: function (props) {
-			var blockProps = useBlockProps({
-				className: 'creatorreactor-block-editor creatorreactor-has-tier-block'
-			});
-			var attrs = props.attributes || {};
-			var tierLabel = attrs.tier ? attrs.tier : __('any tier', 'creatorreactor');
-			var productLabel = attrs.product ? attrs.product : __('any product', 'creatorreactor');
-			var containerLogic = attrs.container_logic ? attrs.container_logic : 'and';
-			return el(
-				Fragment,
-				null,
-				el(
-					InspectorControls,
-					null,
-					el(
-						PanelBody,
-						{ title: __('Tier conditions', 'creatorreactor'), initialOpen: true },
-						el(TextControl, {
-							label: __('Tier', 'creatorreactor'),
-							value: attrs.tier || '',
-							onChange: function (value) {
-								props.setAttributes({ tier: value });
-							},
-							help: __('Example: premium. Leave empty to match any active tier.', 'creatorreactor')
-						}),
-						el(TextControl, {
-							label: __('Product', 'creatorreactor'),
-							value: attrs.product || '',
-							onChange: function (value) {
-								props.setAttributes({ product: value });
-							},
-							help: __('Example: fanvue. Leave empty to match across products.', 'creatorreactor')
-						})
-					)
-					,
-					el(
-						PanelBody,
-						{ title: __('Container visibility', 'creatorreactor'), initialOpen: false },
-						el(SelectControl, {
-							label: __('Container visibility logic', 'creatorreactor'),
-							value: containerLogic,
-							options: [
-								{
-									label: __('AND (current): hide container if any gate fails', 'creatorreactor'),
-									value: 'and'
-								},
-								{
-									label: __('OR: show container if any gate passes', 'creatorreactor'),
-									value: 'or'
-								}
-							],
-							onChange: function (value) {
-								props.setAttributes({ container_logic: value });
-							}
-						})
-					)
-				),
-				el(
-					'div',
-					blockProps,
-					el(
-						'div',
-						{ className: 'creatorreactor-block-hint' },
-						el('strong', null, __('CreatorReactor: Has tier', 'creatorreactor')),
-						' — ',
-						tierLabel,
-						' / ',
-						productLabel
-					),
-					el(InnerBlocks, null)
-				)
-			);
-		},
-		save: function () {
-			return el(InnerBlocks.Content, null);
-		}
-	});
 
 	blocks.registerBlockType('creatorreactor/fanvue-oauth', {
 		apiVersion: 3,

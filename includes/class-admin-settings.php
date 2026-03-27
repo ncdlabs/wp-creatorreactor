@@ -1335,9 +1335,6 @@ class Admin_Settings {
 			<p><strong><?php esc_html_e( 'Logged-out only', 'creatorreactor' ); ?></strong></p>
 			<pre class="creatorreactor-guide-code" style="white-space: pre-wrap; word-break: break-word; background: #f6f7f7; padding: 12px; border: 1px solid #c3c4c7;"><code><?php echo esc_html( "[logged_out]\nPlease log in to view this content.\n[/logged_out]" ); ?></code></pre>
 
-			<p><strong><?php esc_html_e( 'Tier gate (optional product)', 'creatorreactor' ); ?></strong></p>
-			<pre class="creatorreactor-guide-code" style="white-space: pre-wrap; word-break: break-word; background: #f6f7f7; padding: 12px; border: 1px solid #c3c4c7;"><code><?php echo esc_html( "[has_tier tier=\"premium\" product=\"fanvue\"]\nThis content is only visible to premium tier users.\n[/has_tier]" ); ?></code></pre>
-
 			<hr />
 
 			<p><strong><?php esc_html_e( 'Fanvue login button', 'creatorreactor' ); ?></strong></p>
@@ -1432,10 +1429,6 @@ class Admin_Settings {
 						<tr>
 							<td><code style="word-break: break-word;">[logged_in] … [/logged_in]</code></td>
 							<td><?php esc_html_e( 'Shows inner content only when the visitor is logged in.', 'creatorreactor' ); ?></td>
-						</tr>
-						<tr>
-							<td><code style="word-break: break-word;">[has_tier tier="premium" product="fanvue"] … [/has_tier]</code></td>
-							<td><?php esc_html_e( 'Shows inner content when the logged-in user has an active entitlement for a specific tier; product is optional.', 'creatorreactor' ); ?></td>
 						</tr>
 						<tr>
 							<td><code style="word-break: break-word;">[fanvue_connected] … [/fanvue_connected]</code></td>

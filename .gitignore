@@ -1,5 +1,6 @@
 # Build artifacts (see build-zip.sh)
 creatorreactor-*.zip
+wp-creatorreactor-*.zip
 
 # Composer (if added later)
 /vendor/

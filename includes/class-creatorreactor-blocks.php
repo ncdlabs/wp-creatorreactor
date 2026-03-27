@@ -30,12 +30,14 @@ class Blocks {
 		if ( is_admin() ) {
 			return;
 		}
+		$version = defined( 'CREATORREACTOR_VERSION' ) ? CREATORREACTOR_VERSION : '1.0.0';
+
 		wp_enqueue_script(
 			'creatorreactor-gutenberg-gates-inheritance',
 			CREATORREACTOR_PLUGIN_URL . 'assets/js/creatorreactor-gutenberg-gates-inheritance.js',
 			[],
-			defined( 'CREATORREACTOR_VERSION' ) ? CREATORREACTOR_VERSION : '1.0.0',
-			true
+			$version,
+			false
 		);
 	}
 
@@ -304,9 +306,15 @@ class Blocks {
 		$out = '';
 		if ( is_user_logged_in() ) {
 			$uid = get_current_user_id();
-			if ( Onboarding::user_needs_onboarding( $uid ) ) {
-				$out = Onboarding::incomplete_gate_notice();
-			} elseif ( Entitlements::wp_user_has_active_follower_entitlement( $uid ) ) {
+			// Strict role-only behavior:
+			// - subscriber role should not receive follower content
+			// - follower role receives follower content
+			$user  = get_userdata( $uid );
+			$roles = ( $user && isset( $user->roles ) && is_array( $user->roles ) ) ? $user->roles : [];
+			$has_subscriber_role = in_array( 'creatorreactor_subscriber', $roles, true );
+			$has_follower_role   = in_array( 'creatorreactor_follower', $roles, true );
+
+			if ( $has_follower_role && ! $has_subscriber_role ) {
 				$out = self::render_inner_content( $content );
 			}
 		}
@@ -324,9 +332,14 @@ class Blocks {
 		$out = '';
 		if ( is_user_logged_in() ) {
 			$uid = get_current_user_id();
-			if ( Onboarding::user_needs_onboarding( $uid ) ) {
-				$out = Onboarding::incomplete_gate_notice();
-			} elseif ( Entitlements::wp_user_has_active_subscriber_entitlement( $uid ) ) {
+			// Strict role-only behavior:
+			// - subscriber role receives subscriber content
+			// - follower role should not receive subscriber content
+			$user  = get_userdata( $uid );
+			$roles = ( $user && isset( $user->roles ) && is_array( $user->roles ) ) ? $user->roles : [];
+			$has_subscriber_role = in_array( 'creatorreactor_subscriber', $roles, true );
+
+			if ( $has_subscriber_role ) {
 				$out = self::render_inner_content( $content );
 			}
 		}
@@ -388,26 +401,8 @@ class Blocks {
 	 * @param \WP_Block            $block      Block instance.
 	 */
 	public static function render_has_tier( $attributes, $content, $_block ) {
+		// Deprecated: visibility logic is role-based only for now.
 		$out = '';
-		if ( is_user_logged_in() ) {
-			$uid = get_current_user_id();
-			if ( Onboarding::user_needs_onboarding( $uid ) ) {
-				$out = Onboarding::incomplete_gate_notice();
-			} else {
-				$attributes = is_array( $attributes ) ? $attributes : [];
-				$tier       = isset( $attributes['tier'] ) ? trim( sanitize_text_field( (string) $attributes['tier'] ) ) : '';
-				$product    = isset( $attributes['product'] ) ? trim( sanitize_text_field( (string) $attributes['product'] ) ) : '';
-
-				$has_entitlement = Entitlements::check_user_entitlement(
-					$uid,
-					$tier !== '' ? $tier : null,
-					$product !== '' ? $product : null
-				);
-				if ( $has_entitlement ) {
-					$out = self::render_inner_content( $content );
-				}
-			}
-		}
 
 		$matched = trim( (string) $out ) !== '';
 		$logic   = self::resolve_container_logic( $attributes );
@@ -421,11 +416,7 @@ class Blocks {
 	 */
 	public static function render_onboarding_incomplete( $attributes, $content, $_block ) {
 		$out = '';
-		if ( is_user_logged_in() ) {
-			if ( Onboarding::user_needs_onboarding( get_current_user_id() ) ) {
-				$out = self::render_inner_content( $content );
-			}
-		}
+		// Onboarding visibility gates are disabled; never render "incomplete" content.
 		$matched = trim( (string) $out ) !== '';
 		$logic   = self::resolve_container_logic( $attributes );
 		return self::render_gate_marker( 'onboarding_incomplete', $matched, $logic ) . ( $out !== '' ? (string) $out : '' );
@@ -439,9 +430,8 @@ class Blocks {
 	public static function render_onboarding_complete( $attributes, $content, $_block ) {
 		$out = '';
 		if ( is_user_logged_in() ) {
-			if ( ! Onboarding::user_needs_onboarding( get_current_user_id() ) ) {
-				$out = self::render_inner_content( $content );
-			}
+			// Onboarding visibility gates are disabled; treat logged-in users as complete.
+			$out = self::render_inner_content( $content );
 		}
 		$matched = trim( (string) $out ) !== '';
 		$logic   = self::resolve_container_logic( $attributes );
@@ -538,10 +528,19 @@ class Blocks {
 		$match_str = $matched ? '1' : '0';
 		$logic     = $logic === 'or' ? 'or' : 'and';
 
+		$roles = '';
+		if ( is_user_logged_in() ) {
+			$user = wp_get_current_user();
+			if ( $user && ! empty( $user->roles ) && is_array( $user->roles ) ) {
+				$roles = implode( ',', array_map( 'sanitize_key', $user->roles ) );
+			}
+		}
+
 		return '<span class="creatorreactor-gutenberg-gate-marker"'
 			. ' data-creatorreactor-gate="' . esc_attr( $gate ) . '"'
 			. ' data-creatorreactor-gate-match="' . esc_attr( $match_str ) . '"'
 			. ' data-creatorreactor-gate-logic="' . esc_attr( $logic ) . '"'
+			. ' data-creatorreactor-user-roles="' . esc_attr( $roles ) . '"'
 			. ' style="display:none" aria-hidden="true"></span>';
 	}
 

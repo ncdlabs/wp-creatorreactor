@@ -60,6 +60,7 @@ final class Elementor_Integration {
 
 		add_action( 'elementor/widgets/register', [ __CLASS__, 'register_widgets' ] );
 		add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_frontend_gates_inheritance_assets' ], 20 );
+		add_action( 'admin_enqueue_scripts', [ __CLASS__, 'enqueue_elementor_gates_editor_constraint_assets' ], 20 );
 	}
 
 	/**
@@ -69,21 +70,55 @@ final class Elementor_Integration {
 		if ( is_admin() ) {
 			return;
 		}
-
-		// Avoid enqueueing on non-Elementor pages where markers cannot exist.
-		$is_preview = isset( $_GET['elementor-preview'] ) && (string) $_GET['elementor-preview'] !== '';
-		$uses_elementor = class_exists( __NAMESPACE__ . '\\Editor_Context' )
-			&& ( Editor_Context::frontend_view_is_elementor_page() || Editor_Context::post_uses_elementor_storage() );
-		if ( ! $uses_elementor && ! $is_preview ) {
+		if ( class_exists( __NAMESPACE__ . '\\Editor_Context' ) && Editor_Context::is_elementor_preview_request() ) {
 			return;
 		}
+		$version = defined( 'CREATORREACTOR_VERSION' ) ? CREATORREACTOR_VERSION : '1.0.0';
 
 		wp_enqueue_script(
 			'creatorreactor-elementor-gates-inheritance',
 			CREATORREACTOR_PLUGIN_URL . 'assets/js/creatorreactor-elementor-gates-inheritance.js',
 			[],
-			defined( 'CREATORREACTOR_VERSION' ) ? CREATORREACTOR_VERSION : '1.0.0',
+			$version,
 			true
+		);
+	}
+
+	/**
+	 * Elementor editor: enforce "1 gate widget per container" so the layout doesn't
+	 * become ambiguous for inheritance logic.
+	 *
+	 * This is only loaded on Elementor builder requests: post.php?action=elementor.
+	 *
+	 * @return void
+	 */
+	public static function enqueue_elementor_gates_editor_constraint_assets() {
+		if ( ! is_admin() ) {
+			return;
+		}
+		if ( ! class_exists( __NAMESPACE__ . '\\Editor_Context' ) ) {
+			return;
+		}
+		if ( ! Editor_Context::is_elementor_edit_request() ) {
+			return;
+		}
+
+		$version = defined( 'CREATORREACTOR_VERSION' ) ? CREATORREACTOR_VERSION : '1.0.0';
+
+		wp_enqueue_script(
+			'creatorreactor-elementor-gates-editor-constraint',
+			CREATORREACTOR_PLUGIN_URL . 'assets/js/creatorreactor-elementor-gates-editor-constraint.js',
+			[],
+			$version,
+			true
+		);
+
+		wp_localize_script(
+			'creatorreactor-elementor-gates-editor-constraint',
+			'CreatorReactorElementorGateEditorConstraint',
+			[
+				'warningText' => __( 'Only one CreatorReactor content gate widget per container is allowed.', 'creatorreactor' ),
+			]
 		);
 	}
 
