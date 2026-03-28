@@ -202,7 +202,7 @@ class Login_Page {
 	cursor: pointer;
 	pointer-events: auto;
 	text-decoration: none;
-	color: #2271b1;
+	color: #8e2d77;
 }
 .creatorreactor-fanvue-oauth-text {
 	display: block;
