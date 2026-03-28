@@ -82,7 +82,7 @@ class Blocks {
 	}
 
 	public static function register() {
-		$editor_css = '.creatorreactor-block-hint{font-size:12px;color:#757575;margin:0 0 10px;padding:6px 8px;background:#f0f0f1;border-radius:4px}.creatorreactor-block-hint strong{color:#1d2327};'
+		$editor_css = '.creatorreactor-block-hint{font-size:12px;color:#6b5a74;margin:0 0 10px;padding:6px 8px;background:#faf3f8;border-radius:4px;border:1px solid #e8e0ed}.creatorreactor-block-hint strong{color:#301934};'
         . '.wp-block-creatorreactor-follower,'
         . '.wp-block-creatorreactor-subscriber,'
         . '.wp-block-creatorreactor-not-logged-in,'
@@ -92,7 +92,7 @@ class Blocks {
         . '.wp-block-creatorreactor-fanvue-connected,'
         . '.wp-block-creatorreactor-fanvue-not-connected,'
         . '.wp-block-creatorreactor-fanvue-oauth {'
-        . 'border: 2px dashed #ccc;'
+        . 'border: 2px dashed #d8c8df;'
         . 'padding: 10px;'
         . 'margin: 10px 0;'
         . '}';

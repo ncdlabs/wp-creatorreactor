@@ -74,6 +74,30 @@ class Admin_Settings {
 	}
 
 	/**
+	 * Top-level wp-admin menu icon: CR monogram SVG (replaces generic dashicon).
+	 *
+	 * Uses a data URI so the SVG renders like core Dashicons without relying on .svg MIME delivery.
+	 *
+	 * @return string Data URI or dashicons-* class fallback.
+	 */
+	private static function admin_menu_icon() {
+		static $cached = null;
+		if ( null !== $cached ) {
+			return $cached;
+		}
+		$file = CREATORREACTOR_PLUGIN_DIR . 'img/cr-menu-icon.svg';
+		if ( ! is_readable( $file ) ) {
+			return $cached = 'dashicons-chart-pie';
+		}
+		$svg = file_get_contents( $file );
+		if ( false === $svg || '' === trim( $svg ) ) {
+			return $cached = 'dashicons-chart-pie';
+		}
+		$svg = preg_replace( '/>\s+</s', '><', trim( $svg ) );
+		return $cached = 'data:image/svg+xml;base64,' . base64_encode( $svg );
+	}
+
+	/**
 	 * Print an <img> for the CreatorReactor logo.
 	 *
 	 * @param string $extra_class Optional extra CSS class(es).
@@ -110,6 +134,8 @@ class Admin_Settings {
 		add_action( 'wp_ajax_creatorreactor_integration_check_ignore', [ __CLASS__, 'ajax_integration_check_ignore' ] );
 		add_action( 'show_user_profile', [ __CLASS__, 'render_user_profile_creatorreactor_uuid_field' ] );
 		add_action( 'edit_user_profile', [ __CLASS__, 'render_user_profile_creatorreactor_uuid_field' ] );
+		add_action( 'admin_init', [ __CLASS__, 'maybe_redirect_creatorreactor_users_from_wp_admin' ], 1 );
+		add_filter( 'show_admin_bar', [ __CLASS__, 'filter_show_admin_bar_for_creatorreactor_users' ], 10, 1 );
 		add_filter(
 			'plugin_action_links_' . plugin_basename( CREATORREACTOR_PLUGIN_DIR . 'creatorreactor.php' ),
 			[ __CLASS__, 'add_plugin_action_links' ]
@@ -184,7 +210,7 @@ class Admin_Settings {
 			'social_login_configure_oauth'    => [
 				'type'          => 'redirect',
 				'title'         => __( 'Configure Fanvue OAuth', 'creatorreactor' ),
-				'message'       => __( 'Social login on wp-login requires Fanvue Client ID and Client Secret (Creator mode). You will be taken to Settings → Fanvue → OAuth to enter them, then save. After that, run integration checks again or use Fix on the social login check to enable the wp-login button.', 'creatorreactor' ),
+				'message'       => __( 'Social login on wp-login requires Fanvue Client ID and Client Secret (Creator mode). You will be taken to Settings → Fanvue → OAuth to enter them, then save. After that, open Settings → Debug to run checks again or use Fix on the social login check to enable the wp-login button.', 'creatorreactor' ),
 				'redirect_url'  => $oauth_url,
 			],
 			'open_plugins_registration_conflict' => [
@@ -531,6 +557,8 @@ class Admin_Settings {
 			'entitlement_cache_ttl_seconds' => 900,
 			'replace_wp_login_with_social' => false,
 			'display_timezone' => 'system',
+			'restrict_creatorreactor_users_wp_admin' => true,
+			'hide_admin_bar_for_creatorreactor_users' => true,
 		];
 
 		if ( is_array( $broker_opts ) && ! empty( $broker_opts ) ) {
@@ -693,11 +721,32 @@ class Admin_Settings {
 		$opts = self::decrypt_option_fields( $opts );
 		$opts['creatorreactor_oauth_scopes'] = CreatorReactor_OAuth::normalize_scopes_string( $opts['creatorreactor_oauth_scopes'] ?? '' );
 		$opts['display_timezone'] = self::sanitize_display_timezone( $opts['display_timezone'] ?? 'system' );
+		$opts['restrict_creatorreactor_users_wp_admin']       = self::stored_bool_default_true( $opts, 'restrict_creatorreactor_users_wp_admin' );
+		$opts['hide_admin_bar_for_creatorreactor_users']      = self::stored_bool_default_true( $opts, 'hide_admin_bar_for_creatorreactor_users' );
 		return $opts;
 	}
 
 	public static function get_raw_options() {
 		return get_option( self::OPTION_NAME, [] );
+	}
+
+	/**
+	 * Boolean option: missing key defaults to true (legacy / unset = plugin default on).
+	 *
+	 * @param array<string, mixed> $stored Options array.
+	 */
+	private static function stored_bool_default_true( array $stored, string $key ): bool {
+		if ( ! array_key_exists( $key, $stored ) ) {
+			return true;
+		}
+		return ! empty( $stored[ $key ] );
+	}
+
+	/**
+	 * Drop cached copy of plugin settings so the next read matches the database (e.g. after another screen updated the option).
+	 */
+	private static function flush_creatorreactor_settings_cache() {
+		wp_cache_delete( self::OPTION_NAME, 'options' );
 	}
 
 	public static function is_encrypted( $value ) {
@@ -1101,6 +1150,22 @@ class Admin_Settings {
 			$opts['replace_wp_login_with_social'] = ! empty( $raw_opts['replace_wp_login_with_social'] );
 		}
 
+		if ( array_key_exists( 'restrict_creatorreactor_users_wp_admin', $input ) ) {
+			$opts['restrict_creatorreactor_users_wp_admin'] = ! empty( $input['restrict_creatorreactor_users_wp_admin'] );
+		} else {
+			$opts['restrict_creatorreactor_users_wp_admin'] = array_key_exists( 'restrict_creatorreactor_users_wp_admin', $raw_opts )
+				? ! empty( $raw_opts['restrict_creatorreactor_users_wp_admin'] )
+				: true;
+		}
+
+		if ( array_key_exists( 'hide_admin_bar_for_creatorreactor_users', $input ) ) {
+			$opts['hide_admin_bar_for_creatorreactor_users'] = ! empty( $input['hide_admin_bar_for_creatorreactor_users'] );
+		} else {
+			$opts['hide_admin_bar_for_creatorreactor_users'] = array_key_exists( 'hide_admin_bar_for_creatorreactor_users', $raw_opts )
+				? ! empty( $raw_opts['hide_admin_bar_for_creatorreactor_users'] )
+				: true;
+		}
+
 		if ( array_key_exists( 'display_timezone', $input ) ) {
 			$opts['display_timezone'] = self::sanitize_display_timezone( wp_unslash( $input['display_timezone'] ) );
 		} else {
@@ -1151,6 +1216,90 @@ class Admin_Settings {
 		}
 		$o = self::get_options();
 		return ! empty( $o['replace_wp_login_with_social'] );
+	}
+
+	/**
+	 * Whether CreatorReactor role users without manage_options are blocked from wp-admin (default: on).
+	 */
+	public static function is_restrict_creatorreactor_users_wp_admin_enabled() {
+		$o = self::get_options();
+		return ! empty( $o['restrict_creatorreactor_users_wp_admin'] );
+	}
+
+	/**
+	 * Whether to hide the front-end admin bar for CreatorReactor role users without manage_options (default: on).
+	 */
+	public static function is_hide_admin_bar_for_creatorreactor_users_enabled() {
+		$o = self::get_options();
+		return ! empty( $o['hide_admin_bar_for_creatorreactor_users'] );
+	}
+
+	/**
+	 * Logged-in user has at least one role whose slug starts with creatorreactor_.
+	 *
+	 * @param int|null $user_id Defaults to current user.
+	 */
+	public static function user_has_creatorreactor_role( $user_id = null ) {
+		if ( $user_id === null ) {
+			if ( ! is_user_logged_in() ) {
+				return false;
+			}
+			$user_id = get_current_user_id();
+		}
+		$user_id = (int) $user_id;
+		if ( $user_id <= 0 ) {
+			return false;
+		}
+		$user = get_userdata( $user_id );
+		if ( ! $user || ! isset( $user->roles ) || ! is_array( $user->roles ) ) {
+			return false;
+		}
+		foreach ( $user->roles as $role ) {
+			if ( is_string( $role ) && strpos( $role, 'creatorreactor_' ) === 0 ) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Redirect fans (creatorreactor_* roles) without manage_options away from wp-admin.
+	 */
+	public static function maybe_redirect_creatorreactor_users_from_wp_admin() {
+		if ( ! is_user_logged_in() || wp_doing_ajax() ) {
+			return;
+		}
+		if ( current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		if ( ! self::is_restrict_creatorreactor_users_wp_admin_enabled() ) {
+			return;
+		}
+		if ( ! self::user_has_creatorreactor_role() ) {
+			return;
+		}
+		wp_safe_redirect( home_url( '/' ) );
+		exit;
+	}
+
+	/**
+	 * @param bool $show Whether WordPress would show the admin bar.
+	 * @return bool
+	 */
+	public static function filter_show_admin_bar_for_creatorreactor_users( $show ) {
+		if ( ! $show || ! is_user_logged_in() ) {
+			return $show;
+		}
+		if ( current_user_can( 'manage_options' ) ) {
+			return $show;
+		}
+		if ( ! self::is_hide_admin_bar_for_creatorreactor_users_enabled() ) {
+			return $show;
+		}
+		if ( ! self::user_has_creatorreactor_role() ) {
+			return $show;
+		}
+		return false;
 	}
 
 	/**
@@ -1875,7 +2024,7 @@ class Admin_Settings {
 					</section>
 					<section id="cr-docs-debug" class="creatorreactor-doc-section">
 						<h3><?php esc_html_e( 'Debug', 'creatorreactor' ); ?></h3>
-						<p><?php esc_html_e( 'Debug tab provides logs and recovery actions for incident response.', 'creatorreactor' ); ?></p>
+						<p><?php esc_html_e( 'Debug tab provides integration health checks, logs, and recovery actions for incident response.', 'creatorreactor' ); ?></p>
 						<h4><?php esc_html_e( 'Troubleshooting runbook', 'creatorreactor' ); ?></h4>
 						<ol>
 							<li><?php esc_html_e( 'Check Dashboard module lights to identify failing area.', 'creatorreactor' ); ?></li>
@@ -2050,11 +2199,16 @@ class Admin_Settings {
 	/**
 	 * General settings tab: site-wide plugin options.
 	 *
-	 * @param array<string, mixed> $opts Options from {@see get_options()}.
+	 * Reloads settings from the database (bypassing a stale object cache) so checkboxes match the latest stored state.
 	 */
-	private static function render_general_tab_body( array $opts ) {
+	private static function render_general_tab_body() {
+		self::flush_creatorreactor_settings_cache();
+		$opts = self::get_options();
+
 		$social_ok = self::is_fan_social_login_configured();
 		$checked   = $social_ok && ! empty( $opts['replace_wp_login_with_social'] );
+		$restrict_wp_admin = ! empty( $opts['restrict_creatorreactor_users_wp_admin'] );
+		$hide_admin_bar    = ! empty( $opts['hide_admin_bar_for_creatorreactor_users'] );
 		$display_timezone = self::sanitize_display_timezone( $opts['display_timezone'] ?? 'system' );
 		$site_timezone_name = wp_timezone_string();
 		if ( ! is_string( $site_timezone_name ) || $site_timezone_name === '' ) {
@@ -2091,6 +2245,25 @@ class Admin_Settings {
 								<?php echo wp_timezone_choice( $display_timezone !== 'system' ? $display_timezone : '' ); // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped ?>
 							</select>
 							<p class="description"><?php esc_html_e( 'Controls how timestamps are shown on the Users page.', 'creatorreactor' ); ?></p>
+						</td>
+					</tr>
+					<tr>
+						<th scope="row"><?php esc_html_e( 'WordPress admin', 'creatorreactor' ); ?></th>
+						<td>
+							<input type="hidden" name="<?php echo esc_attr( self::OPTION_NAME ); ?>[restrict_creatorreactor_users_wp_admin]" value="0" />
+							<label for="creatorreactor_restrict_creatorreactor_users_wp_admin">
+								<input type="checkbox" id="creatorreactor_restrict_creatorreactor_users_wp_admin" name="<?php echo esc_attr( self::OPTION_NAME ); ?>[restrict_creatorreactor_users_wp_admin]" value="1" <?php checked( $restrict_wp_admin ); ?> />
+								<?php esc_html_e( 'Restrict users from accessing wp-admin', 'creatorreactor' ); ?>
+							</label>
+							<p class="description"><?php esc_html_e( 'When checked, logged-in users with a CreatorReactor role (and without site admin capabilities) cannot open wp-admin screens.', 'creatorreactor' ); ?></p>
+							<p style="margin-top: 12px;">
+								<input type="hidden" name="<?php echo esc_attr( self::OPTION_NAME ); ?>[hide_admin_bar_for_creatorreactor_users]" value="0" />
+								<label for="creatorreactor_hide_admin_bar_for_creatorreactor_users">
+									<input type="checkbox" id="creatorreactor_hide_admin_bar_for_creatorreactor_users" name="<?php echo esc_attr( self::OPTION_NAME ); ?>[hide_admin_bar_for_creatorreactor_users]" value="1" <?php checked( $hide_admin_bar ); ?> />
+									<?php esc_html_e( 'Remove top admin bar for logged in users', 'creatorreactor' ); ?>
+								</label>
+							</p>
+							<p class="description"><?php esc_html_e( 'When checked, the WordPress admin bar is hidden on the site front end for CreatorReactor role users who are not site admins.', 'creatorreactor' ); ?></p>
 						</td>
 					</tr>
 				</table>
@@ -2288,7 +2461,7 @@ class Admin_Settings {
 	/**
 	 * Integration checks (Settings tab and/or Dashboard).
 	 *
-	 * @param string $context 'settings' — CreatorReactor → Settings → Integration Checks; 'dashboard' — same list on Dashboard.
+	 * @param string $context 'settings' — CreatorReactor → Settings → Debug; 'dashboard' — same list on Dashboard.
 	 */
 	private static function render_integration_checks_tab_body( $context = 'settings' ) {
 		$context = ( $context === 'dashboard' ) ? 'dashboard' : 'settings';
@@ -2303,7 +2476,7 @@ class Admin_Settings {
 		} else {
 			$integration_refresh_url = self::admin_page_url(
 				[
-					'tab'     => 'integration-checks',
+					'tab'     => 'debug',
 					'cr_ic_r' => (string) time(),
 				],
 				self::PAGE_SETTINGS_SLUG
@@ -2875,6 +3048,7 @@ class Admin_Settings {
 	}
 
 	private static function render_debug_tab_body() {
+		self::render_integration_checks_tab_body( 'settings' );
 		$debug_entries = self::get_debug_log_entries();
 		$available_types = [
 			'all'                   => __( 'All types', 'creatorreactor' ),
@@ -2904,7 +3078,7 @@ class Admin_Settings {
 		unset( $available_types['all'] );
 		$timezone_context = self::get_selected_display_timezone_context();
 		?>
-		<div class="creatorreactor-section">
+		<div class="creatorreactor-section creatorreactor-debug-tab-logs">
 			<h2><?php esc_html_e( 'Debug Logs', 'creatorreactor' ); ?></h2>
 			<p class="creatorreactor-muted"><?php printf( esc_html__( 'Displaying timestamps in: %s.', 'creatorreactor' ), esc_html( $timezone_context['label'] ) ); ?></p>
 			<div id="creatorreactor-debug-tag-filters" style="display:flex; gap:8px; flex-wrap:wrap; margin: 12px 0 16px;">
@@ -2948,6 +3122,11 @@ class Admin_Settings {
 			</div>
 		</div>
 		<style>
+			.creatorreactor-debug-tab-logs {
+				margin-top: 28px;
+				padding-top: 24px;
+				border-top: 1px solid #dcdcde;
+			}
 			#creatorreactor-debug-tag-filters .creatorreactor-debug-tag {
 				border-radius: 999px;
 				min-width: 108px;
@@ -2961,8 +3140,8 @@ class Admin_Settings {
 				white-space: nowrap;
 			}
 			#creatorreactor-debug-tag-filters .creatorreactor-debug-tag.is-selected {
-				background: #2271b1;
-				border-color: #2271b1;
+				background: #8e2d77;
+				border-color: #8e2d77;
 				color: #fff;
 			}
 		</style>
@@ -3411,7 +3590,19 @@ class Admin_Settings {
 		}
 
 		$css = '
-		.creatorreactor-wrap { margin-top: 20px; max-width: 1100px; }
+		.creatorreactor-wrap {
+			margin-top: 20px;
+			max-width: 1100px;
+			--cr-brand-deep: #301934;
+			--cr-brand-magenta: #8e2d77;
+			--cr-brand-pink: #d64d7f;
+			--cr-brand-coral: #f9a891;
+			--cr-accent: var(--cr-brand-magenta);
+			--cr-accent-strong: #6d2459;
+			--cr-accent-deep: #4b1d66;
+			--cr-link: var(--cr-brand-magenta);
+			--cr-link-hover: #5c2364;
+		}
 		.creatorreactor-settings-header {
 			display: flex;
 			align-items: flex-start;
@@ -3422,10 +3613,10 @@ class Admin_Settings {
 		.creatorreactor-settings-header-brand { flex-shrink: 0; }
 		.creatorreactor-brand-logo { max-height: 44px; width: auto; height: auto; display: block; }
 		.creatorreactor-settings-header-text { flex: 1; min-width: 200px; }
-		.creatorreactor-settings-header h1 { margin-bottom: 5px; }
-		.creatorreactor-settings-header p { color: #646970; margin-top: 0; }
+		.creatorreactor-settings-header h1 { margin-bottom: 5px; color: var(--cr-brand-deep, #301934); }
+		.creatorreactor-settings-header p { color: #6b5a74; margin-top: 0; }
 		.creatorreactor-section { background: #fff; border: 1px solid #dcdcde; border-radius: 4px; padding: 20px; margin-bottom: 20px; }
-		.creatorreactor-section h2 { margin-top: 0; padding-bottom: 10px; border-bottom: 1px solid #dcdcde; font-size: 16px; }
+		.creatorreactor-section h2 { margin-top: 0; padding-bottom: 10px; border-bottom: 1px solid #dcdcde; font-size: 16px; color: var(--cr-brand-deep, #301934); }
 		.creatorreactor-section h3 { margin-top: 0; font-size: 14px; }
 		details.creatorreactor-shortcodes-guide-details { padding: 0; }
 		details.creatorreactor-shortcodes-guide-details > summary.creatorreactor-shortcodes-guide-summary {
@@ -3528,11 +3719,11 @@ class Admin_Settings {
 		}
 		.creatorreactor-auth-mode-segmented label.is-selected {
 			background: #fff;
-			box-shadow: inset 0 0 0 2px #2271b1;
+			box-shadow: inset 0 0 0 2px var(--cr-accent, #8e2d77);
 			z-index: 1;
 		}
 		.creatorreactor-auth-mode-segmented input.creatorreactor-auth-mode-input:focus-visible + span {
-			outline: 2px solid #2271b1;
+			outline: 2px solid var(--cr-accent, #8e2d77);
 			outline-offset: 2px;
 		}
 		.creatorreactor-auth-mode-hint { margin: 12px 0 0; color: #646970; font-size: 13px; max-width: 520px; }
@@ -3540,7 +3731,7 @@ class Admin_Settings {
 		.creatorreactor-auth-mode-hint ol li { margin: 4px 0; }
 		.creatorreactor-auth-mode-hint-url { display: block; margin: 4px 0 0 1.25em; }
 		.creatorreactor-mode-notice { padding: 12px 15px; border-radius: 4px; margin: 15px 0; }
-		.creatorreactor-mode-notice.direct { background: #f0f6fc; border-left: 4px solid #2271b1; }
+		.creatorreactor-mode-notice.direct { background: #faf3f8; border-left: 4px solid var(--cr-accent, #8e2d77); }
 		.creatorreactor-mode-notice.broker { background: #f0f6ce; border-left: 4px solid #00a32a; }
 		.creatorreactor-mode-notice p { margin: 0; font-size: 13px; }
 		.creatorreactor-broker-field { transition: opacity 0.2s ease; }
@@ -3586,6 +3777,13 @@ class Admin_Settings {
 		.creatorreactor-tab-nav .nav-tab {
 			white-space: nowrap;
 		}
+		.creatorreactor-wrap .creatorreactor-tab-nav .nav-tab:hover {
+			color: var(--cr-accent, #8e2d77);
+		}
+		.creatorreactor-wrap .creatorreactor-tab-nav .nav-tab.nav-tab-active {
+			border-bottom-color: var(--cr-accent, #8e2d77);
+			color: var(--cr-brand-deep, #301934);
+		}
 		.creatorreactor-tab-panel { display: none; }
 		.creatorreactor-tab-panel.is-active { display: block; }
 		.creatorreactor-sync-row { display: flex; gap: 15px; align-items: flex-end; margin-top: 15px; }
@@ -3598,20 +3796,21 @@ class Admin_Settings {
 		.creatorreactor-meta-list { margin: 0; }
 		.creatorreactor-meta-list p { margin: 0 0 10px; }
 		.creatorreactor-dashboard-shell {
-			--cr-bg: #f4f6f8;
+			--cr-bg: #faf7fb;
 			--cr-surface: #ffffff;
-			--cr-surface-muted: #f3f6fb;
-			--cr-border: #dfe5ee;
-			--cr-text: #111827;
-			--cr-text-muted: #6b7280;
-			--cr-accent: #4f46e5;
-			--cr-accent-strong: #4338ca;
+			--cr-surface-muted: #f7f1f6;
+			--cr-border: #e8e0ed;
+			--cr-text: #301934;
+			--cr-text-muted: #6b5a74;
+			--cr-text-strong: #301934;
+			--cr-accent: #8e2d77;
+			--cr-accent-strong: #6d2459;
 			--cr-danger: #dc2626;
-			background: linear-gradient(180deg, #f8faff 0%, #f3f5fb 100%);
+			background: linear-gradient(180deg, #fefcfd 0%, #f5eef4 100%);
 			border: 1px solid var(--cr-border);
 			border-radius: 16px;
 			padding: 28px;
-			box-shadow: 0 18px 44px rgba(30, 41, 59, 0.12);
+			box-shadow: 0 18px 44px rgba(48, 25, 52, 0.12);
 			width: 100%;
 			box-sizing: border-box;
 		}
@@ -3689,11 +3888,11 @@ class Admin_Settings {
 		}
 		.creatorreactor-integration-checks-refresh:hover,
 		.creatorreactor-integration-checks-refresh:focus-visible {
-			color: #2271b1;
+			color: var(--cr-accent, #8e2d77);
 			background: transparent !important;
 		}
 		.creatorreactor-integration-checks-refresh:focus-visible {
-			outline: 2px solid #2271b1;
+			outline: 2px solid var(--cr-accent, #8e2d77);
 			outline-offset: 2px;
 		}
 		.creatorreactor-integration-checks-refresh::after {
@@ -3748,7 +3947,7 @@ class Admin_Settings {
 		}
 		.creatorreactor-integration-checks-passed-summary {
 			cursor: pointer;
-			color: #2271b1;
+			color: var(--cr-accent, #8e2d77);
 			font-weight: 600;
 			list-style: none;
 			display: inline-flex;
@@ -3770,10 +3969,10 @@ class Admin_Settings {
 		.creatorreactor-dashboard-integration-checks-shell {
 			margin-top: 0;
 			padding: 22px;
-			border: 1px solid var(--cr-border, #dfe5ee);
+			border: 1px solid var(--cr-border, #e8e0ed);
 			border-radius: 14px;
 			background: #fff;
-			box-shadow: 0 10px 28px rgba(30, 41, 59, 0.08);
+			box-shadow: 0 10px 28px rgba(48, 25, 52, 0.08);
 		}
 		.creatorreactor-dashboard-grid {
 			display: grid;
@@ -3797,10 +3996,10 @@ class Admin_Settings {
 		}
 		.creatorreactor-modules-shell {
 			padding: 22px;
-			border: 1px solid #dfe5ee;
+			border: 1px solid var(--cr-border, #e8e0ed);
 			border-radius: 14px;
 			background: #fff;
-			box-shadow: 0 10px 28px rgba(30, 41, 59, 0.08);
+			box-shadow: 0 10px 28px rgba(48, 25, 52, 0.08);
 			min-height: 220px;
 		}
 		.creatorreactor-modules-shell .creatorreactor-dashboard-card-head + .creatorreactor-module-list {
@@ -4015,15 +4214,15 @@ class Admin_Settings {
 			}
 		}
 		.creatorreactor-btn-connect.button {
-			background: var(--cr-accent);
-			border-color: var(--cr-accent-strong);
+			background: linear-gradient(135deg, #8e2d77 0%, #d64d7f 52%, #e59885 100%);
+			border-color: var(--cr-accent-strong, #6d2459);
 			color: #fff;
-			box-shadow: 0 8px 20px rgba(79, 70, 229, 0.35);
+			box-shadow: 0 8px 20px rgba(142, 45, 119, 0.35);
 		}
 		.creatorreactor-btn-connect.button:hover,
 		.creatorreactor-btn-connect.button:focus {
-			background: var(--cr-accent-strong);
-			border-color: #3730a3;
+			background: linear-gradient(135deg, #6d2459 0%, #8e2d77 45%, #d64d7f 100%);
+			border-color: var(--cr-accent-deep, #4b1d66);
 			color: #fff;
 		}
 		.creatorreactor-btn-disconnect.button {
@@ -4245,7 +4444,7 @@ class Admin_Settings {
 			background: #f6f7f7;
 		}
 		.creatorreactor-docs-highlight {
-			background: #fef3c7;
+			background: rgba(249, 168, 145, 0.45);
 			padding: 0 4px;
 			border-radius: 4px;
 		}
@@ -4256,7 +4455,7 @@ class Admin_Settings {
 		.creatorreactor-settings-sidebar { width: 160px; flex-shrink: 0; }
 		.creatorreactor-sidebar-nav { display: flex; flex-direction: column; }
 		.creatorreactor-sidebar-link { display: block; padding: 12px 14px; border-bottom: 1px solid #eee; color: #50575e; text-decoration: none; font-weight: 500; }
-		.creatorreactor-sidebar-link.is-active { background: #f6f7f7; color: #007cba; border-left: 3px solid #007cba; }
+		.creatorreactor-sidebar-link.is-active { background: #faf3f8; color: var(--cr-accent, #8e2d77); border-left: 3px solid var(--cr-accent, #8e2d77); }
 		.creatorreactor-sidebar-link:hover:not(.is-active) { background: #f5f5f5; }
 		.creatorreactor-settings-content { flex: 1; min-width: 0; }
 		.creatorreactor-settings-content.creatorreactor-settings-subtab-sync #creatorreactor-auth-mode-root { display: none; }
@@ -4306,7 +4505,7 @@ class Admin_Settings {
 			background: transparent;
 			border: 0;
 			box-shadow: none;
-			color: #135e96;
+			color: var(--cr-link-hover, #5c2364);
 		}
 		.creatorreactor-oauth-tab-lock.button:focus:not(:focus-visible) {
 			outline: none;
@@ -4367,7 +4566,7 @@ class Admin_Settings {
 			border: none;
 			border-radius: 0;
 			box-shadow: none;
-			color: #2271b1;
+			color: var(--cr-link, #8e2d77);
 			font-size: 13px;
 			font-weight: 400;
 			line-height: 1.4;
@@ -4377,7 +4576,7 @@ class Admin_Settings {
 		}
 		.creatorreactor-advanced-toggle:hover,
 		.creatorreactor-advanced-toggle:focus {
-			color: #135e96;
+			color: var(--cr-link-hover, #5c2364);
 			background: none;
 			border: none;
 			box-shadow: none;
@@ -4434,7 +4633,7 @@ class Admin_Settings {
 				padding: 8px 12px;
 			}
 			.creatorreactor-sidebar-link.is-active {
-				border-left: 1px solid #007cba;
+				border-left: 1px solid var(--cr-accent, #8e2d77);
 			}
 		}
 		.creatorreactor-auth-mode-dynamic[aria-busy="true"] { opacity: 0.55; pointer-events: none; transition: opacity 0.15s ease; }
@@ -5414,7 +5613,7 @@ class Admin_Settings {
 			'manage_options',
 			self::PAGE_SLUG,
 			[ __CLASS__, 'render_page' ],
-			'dashicons-chart-pie',
+			self::admin_menu_icon(),
 			3
 		);
 		remove_submenu_page( self::PAGE_SLUG, self::PAGE_SLUG );
@@ -5474,13 +5673,8 @@ class Admin_Settings {
 				],
 			];
 		} elseif ( $is_settings_page ) {
-			$allowed_tabs = [ 'integration-checks', 'general', 'cloud', 'settings', 'documentation', 'debug' ];
+			$allowed_tabs = [ 'general', 'cloud', 'settings', 'documentation', 'debug' ];
 			$tab_links = [
-				'integration-checks' => [
-					'label'     => __( 'Integration Checks', 'creatorreactor' ),
-					'page_slug' => self::PAGE_SETTINGS_SLUG,
-					'args'      => [ 'tab' => 'integration-checks' ],
-				],
 				'general'    => [
 					'label'     => __( 'General', 'creatorreactor' ),
 					'page_slug' => self::PAGE_SETTINGS_SLUG,
@@ -5520,6 +5714,9 @@ class Admin_Settings {
 			];
 		}
 		$requested_tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : $default_tab;
+		if ( $is_settings_page && 'integration-checks' === $requested_tab ) {
+			$requested_tab = 'debug';
+		}
 		$active_tab = in_array( $requested_tab, $allowed_tabs, true ) ? $requested_tab : $default_tab;
 		$allowed_subtabs = [ 'oauth', 'sync' ];
 		$requested_subtab = isset( $_GET['subtab'] ) ? sanitize_key( wp_unslash( $_GET['subtab'] ) ) : $default_subtab;
@@ -5663,10 +5860,7 @@ class Admin_Settings {
 		</div>
 
 		<div class="creatorreactor-tab-panel <?php echo 'general' === $active_tab ? 'is-active' : ''; ?>" data-tab="general">
-			<?php self::render_general_tab_body( $opts ); ?>
-		</div>
-		<div class="creatorreactor-tab-panel <?php echo 'integration-checks' === $active_tab ? 'is-active' : ''; ?>" data-tab="integration-checks">
-			<?php self::render_integration_checks_tab_body( 'settings' ); ?>
+			<?php self::render_general_tab_body(); ?>
 		</div>
 		<div class="creatorreactor-tab-panel <?php echo 'cloud' === $active_tab ? 'is-active' : ''; ?>" data-tab="cloud">
 			<div class="creatorreactor-section">

@@ -1,0 +1,45 @@
+<svg width="512" height="512" viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="crBrandGradient" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#301934"/>
+      <stop offset="35%" stop-color="#8e2d77"/>
+      <stop offset="68%" stop-color="#d64d7f"/>
+      <stop offset="100%" stop-color="#f9a891"/>
+    </linearGradient>
+  </defs>
+
+  <g fill="url(#crBrandGradient)">
+    <!-- Stylized C -->
+    <path d="M256 64
+             C150 64 80 140 80 256
+             C80 372 150 448 256 448
+             C320 448 368 420 400 372
+             L352 336
+             C328 368 296 392 256 392
+             C184 392 136 336 136 256
+             C136 176 184 120 256 120
+             C296 120 328 144 352 176
+             L400 140
+             C368 92 320 64 256 64Z"/>
+
+    <!-- Stylized R -->
+    <path d="M224 176
+             L320 176
+             C368 176 400 208 400 248
+             C400 284 376 308 344 316
+             L400 384
+             L336 384
+             L288 320
+             L256 320
+             L256 384
+             L224 384
+             Z
+
+             M256 224
+             L256 280
+             L320 280
+             C336 280 352 268 352 252
+             C352 236 336 224 320 224
+             Z"/>
+  </g>
+</svg>

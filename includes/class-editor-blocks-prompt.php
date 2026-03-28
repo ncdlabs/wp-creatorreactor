@@ -60,7 +60,7 @@ class Editor_Blocks_Prompt {
 			delete_option( self::OPTION_INTEGRATION_CHECKS_PENDING );
 			return;
 		}
-		if ( Admin_Settings::PAGE_SETTINGS_SLUG === $page && 'integration-checks' === $tab ) {
+		if ( Admin_Settings::PAGE_SETTINGS_SLUG === $page && 'debug' === $tab ) {
 			delete_option( self::OPTION_INTEGRATION_CHECKS_PENDING );
 			return;
 		}
