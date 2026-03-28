@@ -57,14 +57,9 @@ add_action( 'plugins_loaded', 'creatorreactor_init' );
 
 function creatorreactor_activate() {
 	try {
-		$roles_to_create = [
-			'creatorreactor_follower'   => __( 'CreatorReactor Follower', 'creatorreactor' ),
-			'creatorreactor_subscriber' => __( 'CreatorReactor Subscriber', 'creatorreactor' ),
-		];
-		foreach ( $roles_to_create as $role_key => $role_label ) {
-			if ( ! get_role( $role_key ) ) {
-				add_role( $role_key, $role_label, [ 'read' => true ] );
-			}
+		CreatorReactor\Admin_Settings::activate_register_standard_roles();
+		if ( get_role( 'creatorreactor_null' ) ) {
+			update_option( 'default_role', 'creatorreactor_null' );
 		}
 
 		CreatorReactor\Entitlements::create_table();

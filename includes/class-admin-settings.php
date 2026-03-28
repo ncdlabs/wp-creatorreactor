@@ -42,6 +42,8 @@ class Admin_Settings {
 	const PAGE_SLUG                   = 'creatorreactor';
 	const PAGE_USERS_SLUG             = 'creatorreactor-users';
 	const PAGE_SETTINGS_SLUG          = 'creatorreactor-settings';
+	/** @var string User meta: list of ignored integration check IDs (array of string slugs). */
+	const USER_META_INTEGRATION_CHECKS_IGNORED = 'creatorreactor_integration_checks_ignored';
 
 	/** Form value authentication_mode maps to stored broker_mode (Agency = true). */
 	const AUTH_MODE_CREATOR = 'creator';
@@ -104,6 +106,8 @@ class Admin_Settings {
 		add_action( 'wp_ajax_creatorreactor_deactivate_wp_user', [ __CLASS__, 'ajax_deactivate_wp_user' ] );
 		add_action( 'wp_ajax_creatorreactor_get_entitlement_details', [ __CLASS__, 'ajax_get_entitlement_details' ] );
 		add_action( 'wp_ajax_creatorreactor_get_user_entitlement_details', [ __CLASS__, 'ajax_get_user_entitlement_details' ] );
+		add_action( 'wp_ajax_creatorreactor_integration_fix', [ __CLASS__, 'ajax_integration_fix' ] );
+		add_action( 'wp_ajax_creatorreactor_integration_check_ignore', [ __CLASS__, 'ajax_integration_check_ignore' ] );
 		add_action( 'show_user_profile', [ __CLASS__, 'render_user_profile_creatorreactor_uuid_field' ] );
 		add_action( 'edit_user_profile', [ __CLASS__, 'render_user_profile_creatorreactor_uuid_field' ] );
 		add_filter(
@@ -145,6 +149,311 @@ class Admin_Settings {
 			return $url;
 		}
 		return add_query_arg( $args, $url );
+	}
+
+	/**
+	 * Integration-check "Fix" actions: titles, explanations, and whether the browser runs AJAX or navigates away.
+	 *
+	 * @return array<string, array{type: string, title: string, message: string, redirect_url?: string}>
+	 */
+	private static function get_integration_fix_definitions() {
+		$plugins_url = admin_url( 'plugins.php' );
+		$oauth_url   = self::admin_page_url( [ 'tab' => 'settings', 'subtab' => 'oauth' ], self::PAGE_SETTINGS_SLUG );
+
+		return [
+			'membership_signup'               => [
+				'type'    => 'ajax',
+				'title'   => __( 'Enable membership registration', 'creatorreactor' ),
+				'message' => __( 'This will turn on WordPress “Anyone can register” (Settings > General > Membership). New visitors can then sign up, which CreatorReactor expects for fan sign-up flows.', 'creatorreactor' ),
+			],
+			'creatorreactor_roles_register'   => [
+				'type'    => 'ajax',
+				'title'   => __( 'Register CreatorReactor roles', 'creatorreactor' ),
+				'message' => __( 'This will create any missing WordPress roles the plugin expects: CreatorReactor Follower, CreatorReactor Subscriber, and CreatorReactor Null (same as when the plugin is activated). Existing roles are not modified.', 'creatorreactor' ),
+			],
+			'default_role_creatorreactor'     => [
+				'type'    => 'ajax',
+				'title'   => __( 'Set default role to a CreatorReactor role', 'creatorreactor' ),
+				'message' => __( 'This will set the site default new-user role to creatorreactor_null when that role exists; otherwise the first available creatorreactor_follower or creatorreactor_subscriber, or another creatorreactor_* role. Other roles are unchanged.', 'creatorreactor' ),
+			],
+			'social_login_enable_wp_login'    => [
+				'type'    => 'ajax',
+				'title'   => __( 'Enable Fanvue login on wp-login', 'creatorreactor' ),
+				'message' => __( 'Fanvue OAuth is already saved in this plugin. This will turn on “Add social login button to the WordPress login page?” in the plugin’s Settings (General tab) so the wp-login screen shows the Fanvue button.', 'creatorreactor' ),
+			],
+			'social_login_configure_oauth'    => [
+				'type'          => 'redirect',
+				'title'         => __( 'Configure Fanvue OAuth', 'creatorreactor' ),
+				'message'       => __( 'Social login on wp-login requires Fanvue Client ID and Client Secret (Creator mode). You will be taken to Settings → Fanvue → OAuth to enter them, then save. After that, run integration checks again or use Fix on the social login check to enable the wp-login button.', 'creatorreactor' ),
+				'redirect_url'  => $oauth_url,
+			],
+			'open_plugins_registration_conflict' => [
+				'type'          => 'redirect',
+				'title'         => __( 'Review registration plugins', 'creatorreactor' ),
+				'message'       => __( 'CreatorReactor expects WordPress to own registration. This cannot be changed automatically. You will be taken to the Plugins screen so you can deactivate or reconfigure plugins that take over registration (for example WooCommerce, MemberPress, or Ultimate Member).', 'creatorreactor' ),
+				'redirect_url'  => $plugins_url,
+			],
+			'open_plugins_redirect_conflict' => [
+				'type'          => 'redirect',
+				'title'         => __( 'Review redirect plugins', 'creatorreactor' ),
+				'message'       => __( 'Other plugins are hooking login_redirect or template_redirect. This cannot be fixed automatically. You will be taken to the Plugins screen to identify and adjust plugins that force redirects after login or on every request.', 'creatorreactor' ),
+				'redirect_url'  => $plugins_url,
+			],
+			'open_plugins_custom_fields'     => [
+				'type'          => 'redirect',
+				'title'         => __( 'Review custom registration field plugins', 'creatorreactor' ),
+				'message'       => __( 'Extra signup fields can block Fanvue OAuth sign-up. You will be taken to the Plugins screen to adjust or deactivate plugins that add required registration fields.', 'creatorreactor' ),
+				'redirect_url'  => $plugins_url,
+			],
+			'open_plugins_content_restriction' => [
+				'type'          => 'redirect',
+				'title'         => __( 'Review content restriction plugins', 'creatorreactor' ),
+				'message'       => __( 'Multiple membership/restriction plugins often conflict. You will be taken to the Plugins screen to leave only one restriction engine active or align their settings.', 'creatorreactor' ),
+				'redirect_url'  => $plugins_url,
+			],
+			'open_plugins_cache_security'    => [
+				'type'          => 'redirect',
+				'title'         => __( 'Review caching or security plugins', 'creatorreactor' ),
+				'message'       => __( 'Caching and some security plugins can break OAuth cookies or admin redirects. You will be taken to the Plugins screen to adjust exclusions or settings for login, admin, and OAuth callback URLs.', 'creatorreactor' ),
+				'redirect_url'  => $plugins_url,
+			],
+			'open_plugins_network_restriction' => [
+				'type'          => 'redirect',
+				'title'         => __( 'Review network-activated restriction plugins', 'creatorreactor' ),
+				'message'       => __( 'On multisite, network-activated restriction plugins affect every site. You will be taken to the Plugins screen for this site; you may need the Network Admin plugins list to change network-wide plugins.', 'creatorreactor' ),
+				'redirect_url'  => $plugins_url,
+			],
+		];
+	}
+
+	/**
+	 * @return array<string, array{type: string, title: string, message: string, redirectUrl?: string}>
+	 */
+	private static function get_integration_fix_definitions_for_localize() {
+		$defs = self::get_integration_fix_definitions();
+		$out  = [];
+		foreach ( $defs as $id => $def ) {
+			$row = [
+				'type'    => isset( $def['type'] ) ? (string) $def['type'] : 'redirect',
+				'title'   => isset( $def['title'] ) ? (string) $def['title'] : '',
+				'message' => isset( $def['message'] ) ? (string) $def['message'] : '',
+			];
+			if ( ! empty( $def['redirect_url'] ) ) {
+				$row['redirectUrl'] = (string) $def['redirect_url'];
+			}
+			$out[ $id ] = $row;
+		}
+		return $out;
+	}
+
+	/**
+	 * Apply an automated integration-check fix (AJAX).
+	 */
+	public static function ajax_integration_fix() {
+		check_ajax_referer( 'creatorreactor_integration_fix', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( [ 'message' => __( 'Forbidden.', 'creatorreactor' ) ], 403 );
+		}
+
+		$fix_id = isset( $_POST['fix_id'] ) ? sanitize_key( wp_unslash( $_POST['fix_id'] ) ) : '';
+		$allowed_ajax = [ 'membership_signup', 'creatorreactor_roles_register', 'default_role_creatorreactor', 'social_login_enable_wp_login' ];
+		if ( ! in_array( $fix_id, $allowed_ajax, true ) ) {
+			wp_send_json_error( [ 'message' => __( 'This fix cannot be run from here.', 'creatorreactor' ) ], 400 );
+		}
+
+		switch ( $fix_id ) {
+			case 'membership_signup':
+				update_option( 'users_can_register', 1 );
+				break;
+			case 'creatorreactor_roles_register':
+				$still_missing = self::register_missing_creatorreactor_roles();
+				if ( ! empty( $still_missing ) ) {
+					wp_send_json_error(
+						[
+							'message' => sprintf(
+								/* translators: %s: comma-separated role slugs */
+								__( 'Could not register all roles. Still missing: %s.', 'creatorreactor' ),
+								implode( ', ', $still_missing )
+							),
+						],
+						500
+					);
+				}
+				break;
+			case 'default_role_creatorreactor':
+				$roles = wp_roles();
+				$target = '';
+				foreach ( [ 'creatorreactor_null', 'creatorreactor_follower', 'creatorreactor_subscriber' ] as $slug ) {
+					if ( $roles->is_role( $slug ) ) {
+						$target = $slug;
+						break;
+					}
+				}
+				if ( $target === '' ) {
+					foreach ( array_keys( $roles->roles ) as $slug ) {
+						if ( strpos( (string) $slug, 'creatorreactor_' ) === 0 ) {
+							$target = (string) $slug;
+							break;
+						}
+					}
+				}
+				if ( $target === '' ) {
+					wp_send_json_error( [ 'message' => __( 'No creatorreactor_* role exists yet. Activate CreatorReactor or create the role before setting it as default.', 'creatorreactor' ) ], 400 );
+				}
+				update_option( 'default_role', $target );
+				break;
+			case 'social_login_enable_wp_login':
+				if ( ! self::is_fan_social_login_configured() ) {
+					wp_send_json_error( [ 'message' => __( 'Fanvue OAuth is not configured. Add Client ID and Secret first.', 'creatorreactor' ) ], 400 );
+				}
+				$sanitized = self::sanitize_options( [ 'replace_wp_login_with_social' => 1 ] );
+				update_option( self::OPTION_NAME, $sanitized );
+				break;
+			default:
+				wp_send_json_error( [ 'message' => __( 'Unknown fix.', 'creatorreactor' ) ], 400 );
+		}
+
+		wp_send_json_success( [ 'message' => __( 'Fix applied.', 'creatorreactor' ) ] );
+	}
+
+	/**
+	 * Role slugs and labels CreatorReactor registers on activation.
+	 *
+	 * @return array<string, string> Role slug => translated display name.
+	 */
+	private static function get_required_creatorreactor_roles() {
+		return [
+			'creatorreactor_follower'   => __( 'CreatorReactor Follower', 'creatorreactor' ),
+			'creatorreactor_subscriber' => __( 'CreatorReactor Subscriber', 'creatorreactor' ),
+			'creatorreactor_null'       => __( 'CreatorReactor Null', 'creatorreactor' ),
+		];
+	}
+
+	/**
+	 * Add any missing CreatorReactor roles (same as plugin activation).
+	 *
+	 * @return array<int, string> Slugs still missing after add_role attempts.
+	 */
+	private static function register_missing_creatorreactor_roles() {
+		foreach ( self::get_required_creatorreactor_roles() as $role_key => $role_label ) {
+			if ( ! get_role( $role_key ) ) {
+				add_role( $role_key, $role_label, [ 'read' => true ] );
+			}
+		}
+		$missing = [];
+		foreach ( array_keys( self::get_required_creatorreactor_roles() ) as $slug ) {
+			if ( ! get_role( $slug ) ) {
+				$missing[] = $slug;
+			}
+		}
+		return $missing;
+	}
+
+	/**
+	 * Register standard CreatorReactor roles on plugin activation (delegates to {@see register_missing_creatorreactor_roles()}).
+	 */
+	public static function activate_register_standard_roles() {
+		self::register_missing_creatorreactor_roles();
+	}
+
+	/**
+	 * Allowed integration check IDs for ignore / unignore (must match check_id on each row).
+	 *
+	 * @return array<int, string>
+	 */
+	private static function get_integration_check_id_whitelist() {
+		return [
+			'membership_signup',
+			'registration_source_native',
+			'login_redirect_conflicts',
+			'creatorreactor_roles_exist',
+			'default_role_creatorreactor',
+			'social_login_wp',
+			'custom_registration_fields',
+			'content_restriction_collision',
+			'cache_security_risk',
+			'multisite_network_restriction',
+		];
+	}
+
+	/**
+	 * @return array<int, string>
+	 */
+	private static function get_ignored_integration_check_ids() {
+		if ( ! is_user_logged_in() ) {
+			return [];
+		}
+		$raw = get_user_meta( get_current_user_id(), self::USER_META_INTEGRATION_CHECKS_IGNORED, true );
+		if ( ! is_array( $raw ) ) {
+			return [];
+		}
+		$allowed = array_flip( self::get_integration_check_id_whitelist() );
+		$out     = [];
+		foreach ( $raw as $id ) {
+			$id = sanitize_key( (string) $id );
+			if ( $id !== '' && isset( $allowed[ $id ] ) ) {
+				$out[] = $id;
+			}
+		}
+		return array_values( array_unique( $out ) );
+	}
+
+	/**
+	 * Persist ignored integration check IDs for the current user.
+	 *
+	 * @param array<int, string> $ids Check IDs (subset of whitelist).
+	 */
+	private static function set_ignored_integration_check_ids_for_current_user( array $ids ) {
+		if ( ! is_user_logged_in() ) {
+			return;
+		}
+		$allowed = array_flip( self::get_integration_check_id_whitelist() );
+		$clean   = [];
+		foreach ( $ids as $id ) {
+			$id = sanitize_key( (string) $id );
+			if ( $id !== '' && isset( $allowed[ $id ] ) ) {
+				$clean[] = $id;
+			}
+		}
+		$clean = array_values( array_unique( $clean ) );
+		update_user_meta( get_current_user_id(), self::USER_META_INTEGRATION_CHECKS_IGNORED, $clean );
+	}
+
+	/**
+	 * Ignore or stop ignoring a failing integration check (per-user preference).
+	 */
+	public static function ajax_integration_check_ignore() {
+		check_ajax_referer( 'creatorreactor_integration_check_ignore', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( [ 'message' => __( 'Forbidden.', 'creatorreactor' ) ], 403 );
+		}
+
+		$check_id = isset( $_POST['check_id'] ) ? sanitize_key( wp_unslash( $_POST['check_id'] ) ) : '';
+		$allowed  = array_flip( self::get_integration_check_id_whitelist() );
+		if ( $check_id === '' || ! isset( $allowed[ $check_id ] ) ) {
+			wp_send_json_error( [ 'message' => __( 'Invalid check.', 'creatorreactor' ) ], 400 );
+		}
+
+		$do_ignore = ! empty( $_POST['ignore'] ) && (string) wp_unslash( $_POST['ignore'] ) === '1';
+		$current   = self::get_ignored_integration_check_ids();
+
+		if ( $do_ignore ) {
+			if ( ! in_array( $check_id, $current, true ) ) {
+				$current[] = $check_id;
+			}
+		} else {
+			$current = array_values(
+				array_filter(
+					$current,
+					static function ( $id ) use ( $check_id ) {
+						return (string) $id !== $check_id;
+					}
+				)
+			);
+		}
+
+		self::set_ignored_integration_check_ids_for_current_user( $current );
+		wp_send_json_success( [ 'message' => __( 'Updated.', 'creatorreactor' ) ] );
 	}
 
 	/**
@@ -858,7 +1167,7 @@ class Admin_Settings {
 		}
 		$nonce = isset( $_GET['_wpnonce'] ) ? sanitize_text_field( wp_unslash( $_GET['_wpnonce'] ) ) : '';
 		if ( ! wp_verify_nonce( $nonce, 'creatorreactor_oauth_start' ) ) {
-			$msg = __( 'Connect link expired. Reload CreatorReactor settings and click Connect again.', 'creatorreactor' );
+			$msg = __( 'Connect link expired. Reload the Settings page and click Connect again.', 'creatorreactor' );
 			self::log_connection( 'error', 'OAuth Connect: invalid or expired nonce.' );
 			self::set_last_error( $msg );
 			wp_safe_redirect( self::admin_page_url( [ 'tab' => 'dashboard' ] ) );
@@ -1792,6 +2101,611 @@ class Admin_Settings {
 	}
 
 	/**
+	 * Whether a hook callback is owned by CreatorReactor (skip in redirect conflict scan).
+	 *
+	 * @param mixed $fn Hook callback as stored in $wp_filter.
+	 */
+	private static function integration_is_creatorreactor_hook_callback( $fn ): bool {
+		if ( ! is_array( $fn ) ) {
+			return false;
+		}
+		$class = '';
+		if ( is_object( $fn[0] ?? null ) ) {
+			$class = get_class( $fn[0] );
+		} elseif ( is_string( $fn[0] ?? null ) ) {
+			$class = (string) $fn[0];
+		}
+		return $class !== '' && strpos( strtolower( $class ), 'creatorreactor' ) !== false;
+	}
+
+	/**
+	 * Absolute file path for a class method hook callback, when reflection succeeds.
+	 *
+	 * @param array<int, mixed> $fn [ class or object, method name ].
+	 */
+	private static function integration_hook_array_callback_file( array $fn ): ?string {
+		$class = is_object( $fn[0] ?? null ) ? get_class( $fn[0] ) : ( is_string( $fn[0] ?? null ) ? (string) $fn[0] : '' );
+		$method = isset( $fn[1] ) && is_string( $fn[1] ) ? $fn[1] : '';
+		if ( $class === '' || $method === '' ) {
+			return null;
+		}
+		try {
+			$file = ( new \ReflectionMethod( $class, $method ) )->getFileName();
+			return is_string( $file ) && $file !== '' ? $file : null;
+		} catch ( \Throwable $e ) {
+			return null;
+		}
+	}
+
+	/**
+	 * Fallback label when callback file cannot be resolved.
+	 *
+	 * @param array<int, mixed> $fn Hook callback.
+	 */
+	private static function integration_hook_array_callback_fallback_label( array $fn ): string {
+		$class = is_object( $fn[0] ?? null ) ? get_class( $fn[0] ) : (string) ( $fn[0] ?? '' );
+		$method = is_string( $fn[1] ?? null ) ? (string) $fn[1] : '';
+		if ( $class === '' ) {
+			return __( 'Unknown PHP class callback', 'creatorreactor' );
+		}
+		return $method !== '' ? $class . '::' . $method : $class;
+	}
+
+	/**
+	 * Map a PHP file path to a human-readable source (plugin name, theme, core, etc.).
+	 *
+	 * @param string|null $file Absolute path from reflection.
+	 */
+	private static function integration_file_to_redirect_source_label( $file ): string {
+		if ( ! is_string( $file ) || $file === '' ) {
+			return __( 'Unknown source', 'creatorreactor' );
+		}
+		$file     = wp_normalize_path( $file );
+		$abspath  = wp_normalize_path( ABSPATH );
+		$wp_admin = $abspath . 'wp-admin/';
+		$wp_inc   = $abspath . 'wp-includes/';
+		if ( strpos( $file, $wp_admin ) === 0 || strpos( $file, $wp_inc ) === 0 ) {
+			return __( 'WordPress core', 'creatorreactor' );
+		}
+
+		$plugin_root = wp_normalize_path( WP_PLUGIN_DIR );
+		if ( strpos( $file, $plugin_root . '/' ) === 0 ) {
+			$relative = substr( $file, strlen( $plugin_root ) + 1 );
+			$folder   = strtok( $relative, '/' );
+			if ( ! is_string( $folder ) || $folder === '' ) {
+				return __( 'Plugin (wp-content/plugins)', 'creatorreactor' );
+			}
+			if ( ! function_exists( 'get_plugins' ) ) {
+				require_once ABSPATH . 'wp-admin/includes/plugin.php';
+			}
+			$plugins = get_plugins();
+			foreach ( $plugins as $plugin_file => $data ) {
+				$dir = dirname( $plugin_file );
+				if ( $dir === '.' || $dir === '' ) {
+					if ( $plugin_file === $folder || basename( (string) $plugin_file ) === $folder ) {
+						$name = isset( $data['Name'] ) && is_string( $data['Name'] ) ? trim( $data['Name'] ) : '';
+						return $name !== '' ? $name : (string) $plugin_file;
+					}
+					continue;
+				}
+				if ( $dir === $folder ) {
+					$name = isset( $data['Name'] ) && is_string( $data['Name'] ) ? trim( $data['Name'] ) : '';
+					return $name !== '' ? $name : (string) $plugin_file;
+				}
+			}
+			return sprintf(
+				/* translators: %s: plugin directory slug */
+				__( 'Plugin folder: %s', 'creatorreactor' ),
+				$folder
+			);
+		}
+
+		$mu_root = wp_normalize_path( defined( 'WPMU_PLUGIN_DIR' ) ? WPMU_PLUGIN_DIR : ( WP_CONTENT_DIR . '/mu-plugins' ) );
+		if ( strpos( $file, $mu_root . '/' ) === 0 || $file === $mu_root ) {
+			$base = basename( $file );
+			if ( $base !== '' && $base !== '.' && $base !== '..' ) {
+				return sprintf(
+					/* translators: %s: MU-plugin file name */
+					__( 'Must-use plugin (%s)', 'creatorreactor' ),
+					$base
+				);
+			}
+			return __( 'Must-use plugin', 'creatorreactor' );
+		}
+
+		$themes_root = wp_normalize_path( get_theme_root() );
+		if ( strpos( $file, $themes_root . '/' ) === 0 ) {
+			$relative = substr( $file, strlen( $themes_root ) + 1 );
+			$slug     = strtok( $relative, '/' );
+			if ( is_string( $slug ) && $slug !== '' ) {
+				$theme = wp_get_theme( $slug );
+				if ( $theme->exists() ) {
+					$name = $theme->get( 'Name' );
+					if ( is_string( $name ) && trim( $name ) !== '' ) {
+						return sprintf(
+							/* translators: %s: theme name */
+							__( 'Theme: %s', 'creatorreactor' ),
+							$name
+						);
+					}
+				}
+				return sprintf(
+					/* translators: %s: theme folder slug */
+					__( 'Theme folder: %s', 'creatorreactor' ),
+					$slug
+				);
+			}
+		}
+
+		$content = wp_normalize_path( WP_CONTENT_DIR );
+		if ( strpos( $file, $content . '/themes/' ) === 0 ) {
+			return __( 'Theme (wp-content/themes)', 'creatorreactor' );
+		}
+
+		return __( 'Unknown extension', 'creatorreactor' );
+	}
+
+	/**
+	 * Count non-CreatorReactor class/object hook callbacks and attribute them to plugins/themes/core.
+	 *
+	 * @param string $tag Hook name (e.g. login_redirect, template_redirect).
+	 * @return array{count: int, labels: string[]}
+	 */
+	private static function integration_collect_external_redirect_hook_report( $tag ): array {
+		global $wp_filter;
+		$count  = 0;
+		$labels = [];
+		if ( ! isset( $wp_filter[ $tag ] ) || ! is_object( $wp_filter[ $tag ] ) || ! isset( $wp_filter[ $tag ]->callbacks ) ) {
+			return [
+				'count'  => 0,
+				'labels' => [],
+			];
+		}
+		foreach ( (array) $wp_filter[ $tag ]->callbacks as $priority_callbacks ) {
+			foreach ( (array) $priority_callbacks as $cb ) {
+				$fn = isset( $cb['function'] ) ? $cb['function'] : null;
+				if ( ! is_array( $fn ) ) {
+					continue;
+				}
+				if ( self::integration_is_creatorreactor_hook_callback( $fn ) ) {
+					continue;
+				}
+				$count++;
+				$path = self::integration_hook_array_callback_file( $fn );
+				$labels[] = $path !== null
+					? self::integration_file_to_redirect_source_label( $path )
+					: self::integration_hook_array_callback_fallback_label( $fn );
+			}
+		}
+		$labels = array_values( array_unique( array_filter( array_map( 'strval', $labels ) ) ) );
+		sort( $labels );
+		return [
+			'count'  => $count,
+			'labels' => $labels,
+		];
+	}
+
+	/**
+	 * Integration checks (Settings tab and/or Dashboard).
+	 *
+	 * @param string $context 'settings' — CreatorReactor → Settings → Integration Checks; 'dashboard' — same list on Dashboard.
+	 */
+	private static function render_integration_checks_tab_body( $context = 'settings' ) {
+		$context = ( $context === 'dashboard' ) ? 'dashboard' : 'settings';
+		if ( $context === 'dashboard' ) {
+			$integration_refresh_url = self::admin_page_url(
+				[
+					'tab'     => 'dashboard',
+					'cr_ic_r' => (string) time(),
+				],
+				self::PAGE_SLUG
+			);
+		} else {
+			$integration_refresh_url = self::admin_page_url(
+				[
+					'tab'     => 'integration-checks',
+					'cr_ic_r' => (string) time(),
+				],
+				self::PAGE_SETTINGS_SLUG
+			);
+		}
+		$section_class = 'creatorreactor-section';
+		if ( $context === 'dashboard' ) {
+			$section_class .= ' creatorreactor-dashboard-integration-checks-shell creatorreactor-dashboard-card';
+		}
+		$opts                = self::get_options();
+		$anyone_can_register = (bool) get_option( 'users_can_register', false );
+		$default_role        = (string) get_option( 'default_role', 'subscriber' );
+		$social_configured   = self::is_fan_social_login_configured();
+		$social_login_on     = $social_configured && ! empty( $opts['replace_wp_login_with_social'] );
+		$active_plugins      = (array) get_option( 'active_plugins', [] );
+		$network_active      = is_multisite() ? array_keys( (array) get_site_option( 'active_sitewide_plugins', [] ) ) : [];
+		$all_active_plugins  = array_values( array_unique( array_merge( $active_plugins, $network_active ) ) );
+		$is_active           = static function ( $plugin_file ) use ( $all_active_plugins ) {
+			return in_array( (string) $plugin_file, $all_active_plugins, true );
+		};
+		$active_from_map     = static function ( array $plugin_map ) use ( $is_active ) {
+			$active = [];
+			foreach ( $plugin_map as $plugin_file => $label ) {
+				if ( $is_active( $plugin_file ) ) {
+					$active[] = (string) $label;
+				}
+			}
+			return $active;
+		};
+		$active_names_list   = static function ( array $names ) {
+			$names = array_values( array_unique( array_filter( array_map( 'strval', $names ) ) ) );
+			sort( $names );
+			return implode( ', ', $names );
+		};
+
+		$registration_owner_plugins = [
+			'woocommerce/woocommerce.php'                                      => 'WooCommerce',
+			'memberpress/memberpress.php'                                      => 'MemberPress',
+			'paid-memberships-pro/paid-memberships-pro.php'                    => 'Paid Memberships Pro',
+			'ultimate-member/ultimate-member.php'                              => 'Ultimate Member',
+			'profile-builder/index.php'                                        => 'Profile Builder',
+			'user-registration/user-registration.php'                          => 'User Registration',
+			'wp-user-manager/wp-user-manager.php'                              => 'WP User Manager',
+		];
+		$custom_fields_plugins = [
+			'ultimate-member/ultimate-member.php'                              => 'Ultimate Member',
+			'profile-builder/index.php'                                        => 'Profile Builder',
+			'user-registration/user-registration.php'                          => 'User Registration',
+			'pie-register/pie-register.php'                                    => 'Pie Register',
+			'userswp/userswp.php'                                               => 'UsersWP',
+		];
+		$content_restriction_plugins = [
+			'memberpress/memberpress.php'                                      => 'MemberPress',
+			'paid-memberships-pro/paid-memberships-pro.php'                    => 'Paid Memberships Pro',
+			'restrict-content-pro/restrict-content-pro.php'                    => 'Restrict Content Pro',
+			'paid-member-subscriptions/paid-member-subscriptions.php'          => 'Paid Member Subscriptions',
+			'woocommerce-memberships/woocommerce-memberships.php'              => 'WooCommerce Memberships',
+			's2member/s2member.php'                                             => 's2Member',
+		];
+		$caching_security_plugins = [
+			'wp-rocket/wp-rocket.php'                                          => 'WP Rocket',
+			'litespeed-cache/litespeed-cache.php'                              => 'LiteSpeed Cache',
+			'w3-total-cache/w3-total-cache.php'                                => 'W3 Total Cache',
+			'wp-super-cache/wp-cache.php'                                      => 'WP Super Cache',
+			'sg-cachepress/sg-cachepress.php'                                  => 'SiteGround Optimizer',
+			'wordfence/wordfence.php'                                           => 'Wordfence',
+			'cloudflare/cloudflare.php'                                        => 'Cloudflare',
+			'sucuri-scanner/sucuri.php'                                        => 'Sucuri Security',
+		];
+
+		$active_registration_owners = $active_from_map( $registration_owner_plugins );
+		$active_custom_fields       = $active_from_map( $custom_fields_plugins );
+		$active_restriction_engines = $active_from_map( $content_restriction_plugins );
+		$active_cache_security      = $active_from_map( $caching_security_plugins );
+		$login_redirect_report    = self::integration_collect_external_redirect_hook_report( 'login_redirect' );
+		$template_redirect_report = self::integration_collect_external_redirect_hook_report( 'template_redirect' );
+		$login_redirect_callbacks   = $login_redirect_report['count'];
+		$template_redirect_callbacks = $template_redirect_report['count'];
+		$external_redirect_callbacks = $login_redirect_callbacks + $template_redirect_callbacks;
+		$redirect_conflict_labels    = array_values(
+			array_unique(
+				array_merge( $login_redirect_report['labels'], $template_redirect_report['labels'] )
+			)
+		);
+		sort( $redirect_conflict_labels );
+		$redirect_conflict_sources_str = implode( ', ', $redirect_conflict_labels );
+		$network_restriction_plugins = [];
+		if ( is_multisite() ) {
+			foreach ( $content_restriction_plugins as $plugin_file => $plugin_label ) {
+				if ( in_array( $plugin_file, $network_active, true ) ) {
+					$network_restriction_plugins[] = (string) $plugin_label;
+				}
+			}
+		}
+
+		$social_fix_id = null;
+		if ( ! $social_login_on ) {
+			$social_fix_id = $social_configured ? 'social_login_enable_wp_login' : 'social_login_configure_oauth';
+		}
+
+		$wp_roles_for_integration = wp_roles();
+		$missing_creatorreactor_roles = [];
+		foreach ( array_keys( self::get_required_creatorreactor_roles() ) as $cr_slug ) {
+			if ( ! $wp_roles_for_integration->is_role( $cr_slug ) ) {
+				$missing_creatorreactor_roles[] = $cr_slug;
+			}
+		}
+		$creatorreactor_roles_ok  = empty( $missing_creatorreactor_roles );
+		$creatorreactor_roles_msg = $creatorreactor_roles_ok
+			? __( 'Pass: CreatorReactor roles are registered (creatorreactor_follower, creatorreactor_subscriber, creatorreactor_null).', 'creatorreactor' )
+			: sprintf(
+				/* translators: %s: comma-separated WordPress role slugs */
+				__( 'Fail: Missing WordPress role(s): %s. They are normally created when CreatorReactor is activated; use Fix to register them.', 'creatorreactor' ),
+				implode( ', ', $missing_creatorreactor_roles )
+			);
+
+		if ( $wp_roles_for_integration->is_role( 'creatorreactor_null' ) ) {
+			$default_role_cr_ok    = ( $default_role === 'creatorreactor_null' );
+			$default_role_cr_msg   = $default_role_cr_ok
+				? sprintf(
+					/* translators: %s: WordPress role slug */
+					__( 'Pass: Default role is set to %s.', 'creatorreactor' ),
+					$default_role
+				)
+				: sprintf(
+					/* translators: 1: current default role slug, 2: required role slug */
+					__( 'Fail: Default role is %1$s. Set default role to %2$s (Settings > General, or use Fix).', 'creatorreactor' ),
+					$default_role,
+					'creatorreactor_null'
+				);
+		} else {
+			$default_role_cr_ok  = ( strpos( $default_role, 'creatorreactor_' ) === 0 );
+			$default_role_cr_msg = $default_role_cr_ok
+				? sprintf(
+					/* translators: %s: WordPress role slug */
+					__( 'Pass: Default role is set to %s.', 'creatorreactor' ),
+					$default_role
+				)
+				: sprintf(
+					/* translators: %s: current WordPress default role slug */
+					__( 'Fail: Default role is %s. Use creatorreactor_null.', 'creatorreactor' ),
+					$default_role
+				);
+		}
+
+		$checks              = [
+			[
+				'check_id' => 'membership_signup',
+				'label'    => __( 'Membership signup allows new users', 'creatorreactor' ),
+				'status'   => $anyone_can_register ? 'green' : 'red',
+				'message'  => $anyone_can_register
+					? __( 'Pass: Anyone can register is enabled.', 'creatorreactor' )
+					: __( 'Fail: Anyone can register is disabled. Enable it in Settings > General.', 'creatorreactor' ),
+				'fix_id'   => 'membership_signup',
+			],
+			[
+				'check_id' => 'registration_source_native',
+				'label'    => __( 'Registration source of truth is WordPress native', 'creatorreactor' ),
+				'status'   => empty( $active_registration_owners ) ? 'green' : 'red',
+				'message'  => empty( $active_registration_owners )
+					? __( 'Pass: No known alternate registration-owner plugin is active.', 'creatorreactor' )
+					: sprintf(
+						/* translators: %s: comma-separated plugin names */
+						__( 'Fail: Detected plugin(s) that may override registration ownership: %s.', 'creatorreactor' ),
+						$active_names_list( $active_registration_owners )
+					),
+				'fix_id'   => 'open_plugins_registration_conflict',
+			],
+			[
+				'check_id' => 'login_redirect_conflicts',
+				'label'    => __( 'Login/redirect interception conflicts', 'creatorreactor' ),
+				'status'   => $external_redirect_callbacks === 0 ? 'green' : 'red',
+				'message'  => $external_redirect_callbacks === 0
+					? __( 'Pass: No external plugin class callbacks detected on login/template redirects.', 'creatorreactor' )
+					: sprintf(
+						/* translators: 1: login_redirect callback count, 2: template_redirect callback count, 3: comma-separated attributed sources (plugin names, themes, WordPress core, etc.) */
+						__( 'Fail: Detected external redirect callbacks (login_redirect: %1$d, template_redirect: %2$d). Likely sources: %3$s.', 'creatorreactor' ),
+						$login_redirect_callbacks,
+						$template_redirect_callbacks,
+						$redirect_conflict_sources_str !== ''
+							? $redirect_conflict_sources_str
+							: __( 'could not be attributed (see server debug if needed)', 'creatorreactor' )
+					),
+				'fix_id'   => 'open_plugins_redirect_conflict',
+			],
+			[
+				'check_id' => 'creatorreactor_roles_exist',
+				'label'    => __( 'CreatorReactor WordPress roles exist', 'creatorreactor' ),
+				'status'   => $creatorreactor_roles_ok ? 'green' : 'red',
+				'message'  => $creatorreactor_roles_msg,
+				'fix_id'   => 'creatorreactor_roles_register',
+			],
+			[
+				'check_id' => 'default_role_creatorreactor',
+				'label'    => __( 'Default role safety (CreatorReactor)', 'creatorreactor' ),
+				'status'   => $default_role_cr_ok ? 'green' : 'red',
+				'message'  => $default_role_cr_msg,
+				'fix_id'   => 'default_role_creatorreactor',
+			],
+			[
+				'check_id' => 'social_login_wp',
+				'label'    => __( 'Social login flow is ready on WordPress login', 'creatorreactor' ),
+				'status'   => $social_login_on ? 'green' : 'red',
+				'message'  => $social_login_on
+					? __( 'Pass: Fanvue social login is configured and enabled on wp-login.', 'creatorreactor' )
+					: __( 'Fail: Configure Fanvue OAuth and enable social login in CreatorReactor > Settings > General.', 'creatorreactor' ),
+				'fix_id'   => $social_fix_id,
+			],
+			[
+				'check_id' => 'custom_registration_fields',
+				'label'    => __( 'Custom registration fields requirement risk', 'creatorreactor' ),
+				'status'   => empty( $active_custom_fields ) ? 'green' : 'red',
+				'message'  => empty( $active_custom_fields )
+					? __( 'Pass: No known custom-registration-fields plugin detected.', 'creatorreactor' )
+					: sprintf(
+						/* translators: %s: comma-separated plugin names */
+						__( 'Fail: Detected plugin(s) that may require extra signup fields: %s.', 'creatorreactor' ),
+						$active_names_list( $active_custom_fields )
+					),
+				'fix_id'   => 'open_plugins_custom_fields',
+			],
+			[
+				'check_id' => 'content_restriction_collision',
+				'label'    => __( 'Content restriction engine collision', 'creatorreactor' ),
+				'status'   => count( $active_restriction_engines ) <= 1 ? 'green' : 'red',
+				'message'  => count( $active_restriction_engines ) <= 1
+					? __( 'Pass: Zero or one known content restriction engine is active.', 'creatorreactor' )
+					: sprintf(
+						/* translators: %s: comma-separated plugin names */
+						__( 'Fail: Multiple restriction engines detected: %s.', 'creatorreactor' ),
+						$active_names_list( $active_restriction_engines )
+					),
+				'fix_id'   => 'open_plugins_content_restriction',
+			],
+			[
+				'check_id' => 'cache_security_risk',
+				'label'    => __( 'Session/cookie compatibility risk', 'creatorreactor' ),
+				'status'   => empty( $active_cache_security ) ? 'green' : 'red',
+				'message'  => empty( $active_cache_security )
+					? __( 'Pass: No known caching/security plugin detected that commonly alters auth/query/cookie flows.', 'creatorreactor' )
+					: sprintf(
+						/* translators: %s: comma-separated plugin names */
+						__( 'Fail: Detected caching/security plugin(s) that can impact OAuth/session continuity: %s.', 'creatorreactor' ),
+						$active_names_list( $active_cache_security )
+					),
+				'fix_id'   => 'open_plugins_cache_security',
+			],
+			[
+				'check_id' => 'multisite_network_restriction',
+				'label'    => __( 'Multisite/network mode mismatch risk', 'creatorreactor' ),
+				'status'   => ! is_multisite() || empty( $network_restriction_plugins ) ? 'green' : 'red',
+				'message'  => ! is_multisite()
+					? __( 'Pass: Site is not multisite.', 'creatorreactor' )
+					: ( empty( $network_restriction_plugins )
+						? __( 'Pass: No known restriction plugin is network-activated.', 'creatorreactor' )
+						: sprintf(
+							/* translators: %s: comma-separated plugin names */
+							__( 'Fail: Network-activated restriction plugin(s) detected: %s. Verify per-site settings alignment.', 'creatorreactor' ),
+							$active_names_list( $network_restriction_plugins )
+						) ),
+				'fix_id'   => 'open_plugins_network_restriction',
+			],
+		];
+
+		$ignored_check_flip = array_fill_keys( self::get_ignored_integration_check_ids(), true );
+		$checks_merged      = [];
+		foreach ( $checks as $check ) {
+			$cid       = isset( $check['check_id'] ) ? (string) $check['check_id'] : '';
+			$raw       = isset( $check['status'] ) ? (string) $check['status'] : '';
+			$ignored   = $cid !== '' && ! empty( $ignored_check_flip[ $cid ] );
+			$display   = $raw;
+			if ( $raw === 'red' && $ignored ) {
+				$display = 'yellow';
+			}
+			$check['raw_status']                = $raw;
+			$check['status']                    = $display;
+			$check['ignored_integration_check'] = ( $raw === 'red' && $ignored );
+			$checks_merged[]                    = $check;
+		}
+		$checks = $checks_merged;
+
+		$checks_attention = [];
+		$checks_passed    = [];
+		foreach ( $checks as $check ) {
+			$st = isset( $check['status'] ) ? (string) $check['status'] : '';
+			if ( in_array( $st, [ 'red', 'yellow' ], true ) ) {
+				$checks_attention[] = $check;
+			} elseif ( $st === 'green' ) {
+				$checks_passed[] = $check;
+			} else {
+				$checks_attention[] = $check;
+			}
+		}
+		$passed_count     = count( $checks_passed );
+		$fix_definitions  = self::get_integration_fix_definitions();
+		$integration_refresh_tooltip = __( 'Reload this page and re-evaluate every check against the current site.', 'creatorreactor' );
+		?>
+		<div id="creatorreactor-integration-checks" class="<?php echo esc_attr( $section_class ); ?>">
+			<div class="creatorreactor-integration-checks-head">
+				<h2 class="creatorreactor-integration-checks-head__title"><?php esc_html_e( 'Integration Checks', 'creatorreactor' ); ?></h2>
+				<a
+					href="<?php echo esc_url( $integration_refresh_url ); ?>"
+					class="creatorreactor-integration-checks-refresh"
+					aria-label="<?php echo esc_attr( __( 'Run integration checks', 'creatorreactor' ) ); ?>"
+					aria-describedby="creatorreactor-integration-checks-refresh-tip"
+					data-creatorreactor-tooltip="<?php echo esc_attr( $integration_refresh_tooltip ); ?>"
+				>
+					<span class="dashicons dashicons-update" aria-hidden="true"></span>
+				</a>
+				<span id="creatorreactor-integration-checks-refresh-tip" class="screen-reader-text"><?php echo esc_html( $integration_refresh_tooltip ); ?></span>
+			</div>
+			<p class="creatorreactor-muted">
+				<?php esc_html_e( 'Run these checks before configuring OAuth and sync to avoid setup issues.', 'creatorreactor' ); ?>
+			</p>
+			<?php if ( empty( $checks_attention ) ) : ?>
+				<p class="creatorreactor-integration-checks-all-clear"><?php esc_html_e( 'No issues: every check passed.', 'creatorreactor' ); ?></p>
+			<?php else : ?>
+				<ul class="creatorreactor-module-list creatorreactor-integration-check-list">
+					<?php foreach ( $checks_attention as $check ) : ?>
+						<?php
+						$row_check_id = isset( $check['check_id'] ) && is_string( $check['check_id'] ) ? $check['check_id'] : '';
+						$row_fix_id   = isset( $check['fix_id'] ) && is_string( $check['fix_id'] ) ? $check['fix_id'] : '';
+						$row_has_fix  = $row_fix_id !== '' && isset( $fix_definitions[ $row_fix_id ] );
+						$row_raw_red  = isset( $check['raw_status'] ) && (string) $check['raw_status'] === 'red';
+						$row_ignored  = ! empty( $check['ignored_integration_check'] );
+						?>
+						<li class="creatorreactor-module-item">
+							<span class="creatorreactor-module-status-dot is-<?php echo esc_attr( $check['status'] ); ?>" aria-hidden="true"></span>
+							<div class="creatorreactor-module-content">
+								<span class="creatorreactor-module-label"><?php echo esc_html( $check['label'] ); ?></span>
+								<span class="creatorreactor-module-meta"><?php echo esc_html( $check['message'] ); ?></span>
+								<?php if ( $row_ignored ) : ?>
+									<span class="creatorreactor-integration-check-ignored-note creatorreactor-muted"><?php esc_html_e( 'You are ignoring this warning for your account.', 'creatorreactor' ); ?></span>
+								<?php endif; ?>
+								<?php if ( ( $row_has_fix && ! $row_ignored ) || ( $row_raw_red && ! $row_ignored ) || $row_ignored ) : ?>
+									<span class="creatorreactor-integration-check-actions">
+										<?php if ( $row_has_fix && ! $row_ignored ) : ?>
+											<a href="#" class="creatorreactor-integration-fix-link" data-fix-id="<?php echo esc_attr( $row_fix_id ); ?>"><?php esc_html_e( 'Fix', 'creatorreactor' ); ?></a>
+										<?php endif; ?>
+										<?php if ( $row_raw_red && ! $row_ignored && $row_check_id !== '' ) : ?>
+											<button type="button" class="button-link creatorreactor-integration-ignore-btn" data-check-id="<?php echo esc_attr( $row_check_id ); ?>"><?php esc_html_e( 'Ignore', 'creatorreactor' ); ?></button>
+										<?php endif; ?>
+										<?php if ( $row_ignored && $row_check_id !== '' ) : ?>
+											<button type="button" class="button-link creatorreactor-integration-unignore-btn" data-check-id="<?php echo esc_attr( $row_check_id ); ?>"><?php esc_html_e( 'Stop ignoring', 'creatorreactor' ); ?></button>
+										<?php endif; ?>
+									</span>
+								<?php endif; ?>
+							</div>
+						</li>
+					<?php endforeach; ?>
+				</ul>
+			<?php endif; ?>
+
+			<?php if ( $passed_count > 0 ) : ?>
+				<details class="creatorreactor-integration-checks-passed-details">
+					<summary class="creatorreactor-integration-checks-passed-summary">
+						<?php
+						printf(
+							/* translators: %d: number of passing checks */
+							esc_html__( 'Show successful checks (%d)', 'creatorreactor' ),
+							(int) $passed_count
+						);
+						?>
+					</summary>
+					<ul class="creatorreactor-module-list creatorreactor-integration-check-list creatorreactor-integration-check-list--passed">
+						<?php foreach ( $checks_passed as $check ) : ?>
+							<li class="creatorreactor-module-item">
+								<span class="creatorreactor-module-status-dot is-<?php echo esc_attr( $check['status'] ); ?>" aria-hidden="true"></span>
+								<div class="creatorreactor-module-content">
+									<span class="creatorreactor-module-label"><?php echo esc_html( $check['label'] ); ?></span>
+									<span class="creatorreactor-module-meta"><?php echo esc_html( $check['message'] ); ?></span>
+								</div>
+							</li>
+						<?php endforeach; ?>
+					</ul>
+				</details>
+			<?php endif; ?>
+
+			<div id="creatorreactor-integration-fix-modal" class="creatorreactor-modal" aria-hidden="true" role="presentation">
+				<div class="creatorreactor-modal-backdrop creatorreactor-integration-fix-backdrop" aria-hidden="true"></div>
+				<div class="creatorreactor-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="creatorreactor-integration-fix-title">
+					<div class="creatorreactor-modal-header">
+						<div class="creatorreactor-modal-header-title">
+							<h3 id="creatorreactor-integration-fix-title"></h3>
+						</div>
+						<button type="button" class="creatorreactor-integration-fix-close" aria-label="<?php esc_attr_e( 'Close', 'creatorreactor' ); ?>">&times;</button>
+					</div>
+					<div class="creatorreactor-modal-body">
+						<p id="creatorreactor-integration-fix-body" class="creatorreactor-integration-fix-body"></p>
+						<p class="creatorreactor-integration-fix-error" id="creatorreactor-integration-fix-error" hidden></p>
+					</div>
+					<div class="creatorreactor-modal-footer">
+						<button type="button" class="button creatorreactor-integration-fix-cancel"><?php esc_html_e( 'Cancel', 'creatorreactor' ); ?></button>
+						<button type="button" class="button button-primary creatorreactor-integration-fix-confirm"><?php esc_html_e( 'Fix', 'creatorreactor' ); ?></button>
+					</div>
+				</div>
+			</div>
+		</div>
+		<?php
+	}
+
+	/**
 	 * HTML for the Users tab list (totals, toolbar, table). Used on first paint and via AJAX refresh.
 	 *
 	 * @param array{total: int, active: int, inactive: int} $user_totals Counts.
@@ -2711,25 +3625,156 @@ class Admin_Settings {
 			border-bottom: 0;
 		}
 		.creatorreactor-dashboard-head .creatorreactor-status-badge { margin-left: auto; }
-		.creatorreactor-card-header {
+		/* In-dashboard cards: section title + separator (matches .creatorreactor-section h2) */
+		.creatorreactor-dashboard-card-head {
 			display: flex;
 			align-items: center;
 			justify-content: space-between;
 			gap: 12px;
-			margin: 0 0 18px;
+			margin: 0 0 12px;
+			padding: 0 0 10px;
+			border-bottom: 1px solid #dcdcde;
 		}
-		.creatorreactor-card-title {
+		h2.creatorreactor-dashboard-card-head__title {
 			margin: 0;
-			font-size: 24px;
-			line-height: 1.2;
-			border: 0;
+			font-size: 16px;
+			font-weight: 600;
+			line-height: 1.35;
 			padding: 0;
-			letter-spacing: -0.015em;
-			color: var(--cr-text);
-			font-weight: 700;
+			border: 0;
+			letter-spacing: 0;
+			color: var(--cr-text-strong, #1d2327);
+		}
+		.creatorreactor-integration-checks-head {
+			display: flex;
+			align-items: center;
+			justify-content: space-between;
+			gap: 12px;
+			margin: 0 0 12px;
+			padding: 0 0 10px;
+			border-bottom: 1px solid #dcdcde;
+		}
+		h2.creatorreactor-integration-checks-head__title {
+			margin: 0;
+			font-size: 16px;
+			font-weight: 600;
+			line-height: 1.35;
+			padding: 0;
+			border: 0;
+			letter-spacing: 0;
+			color: var(--cr-text-strong, #1d2327);
+			flex: 1;
+			min-width: 0;
+		}
+		#creatorreactor-integration-checks.creatorreactor-section h2.creatorreactor-integration-checks-head__title {
+			padding-bottom: 0;
+			border-bottom: 0;
+		}
+		.creatorreactor-integration-checks-refresh {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+			flex-shrink: 0;
+			min-width: 32px;
+			height: 30px;
+			padding: 4px;
+			margin: 0;
+			background: transparent !important;
+			border: 0 !important;
+			box-shadow: none !important;
+			color: #50575e;
+			text-decoration: none;
+			border-radius: 4px;
+			position: relative;
+		}
+		.creatorreactor-integration-checks-refresh:hover,
+		.creatorreactor-integration-checks-refresh:focus-visible {
+			color: #2271b1;
+			background: transparent !important;
+		}
+		.creatorreactor-integration-checks-refresh:focus-visible {
+			outline: 2px solid #2271b1;
+			outline-offset: 2px;
+		}
+		.creatorreactor-integration-checks-refresh::after {
+			content: attr(data-creatorreactor-tooltip);
+			position: absolute;
+			right: 0;
+			bottom: 100%;
+			margin-bottom: 8px;
+			padding: 8px 10px;
+			max-width: min(280px, 70vw);
+			background: #1d2327;
+			color: #fff;
+			font-size: 12px;
+			line-height: 1.45;
+			font-weight: 400;
+			border-radius: 4px;
+			box-shadow: 0 4px 14px rgba(0, 0, 0, 0.2);
+			white-space: normal;
+			text-align: left;
+			z-index: 100050;
+			opacity: 0;
+			visibility: hidden;
+			transition: opacity 0.12s ease, visibility 0.12s ease;
+			pointer-events: none;
+		}
+		.creatorreactor-integration-checks-refresh:hover::after,
+		.creatorreactor-integration-checks-refresh:focus-visible::after {
+			opacity: 1;
+			visibility: visible;
+		}
+		.creatorreactor-integration-checks-refresh .dashicons {
+			width: 20px;
+			height: 20px;
+			font-size: 20px;
+			line-height: 1;
 		}
 		.creatorreactor-dashboard-title { margin: 0; }
 		.creatorreactor-dashboard-subtitle { margin: 0; color: var(--cr-text-muted); max-width: 58ch; font-size: 14px; line-height: 1.65; }
+		.creatorreactor-integration-checks-all-clear {
+			margin: 0 0 12px;
+			padding: 10px 12px;
+			border-radius: 10px;
+			border: 1px solid #bbf7d0;
+			background: #f0fdf4;
+			color: #166534;
+			font-weight: 600;
+		}
+		.creatorreactor-integration-checks-passed-details {
+			margin: 14px 0 0;
+			padding: 12px 0 0;
+			border-top: 1px solid #e5e7eb;
+		}
+		.creatorreactor-integration-checks-passed-summary {
+			cursor: pointer;
+			color: #2271b1;
+			font-weight: 600;
+			list-style: none;
+			display: inline-flex;
+			align-items: center;
+			gap: 6px;
+		}
+		.creatorreactor-integration-checks-passed-summary::marker { content: ""; }
+		.creatorreactor-integration-checks-passed-summary::-webkit-details-marker { display: none; }
+		.creatorreactor-integration-checks-passed-details[open] .creatorreactor-integration-checks-passed-summary { margin-bottom: 10px; }
+		.creatorreactor-integration-check-list--passed { margin-top: 8px; }
+		.creatorreactor-dashboard-integration-checks-wrap { margin-top: 8px; }
+		.creatorreactor-dashboard-col--integration-checks .creatorreactor-dashboard-integration-checks-wrap {
+			margin-top: 0;
+			width: 100%;
+		}
+		.creatorreactor-dashboard-col--integration-checks .creatorreactor-dashboard-integration-checks-shell {
+			min-height: 220px;
+		}
+		.creatorreactor-dashboard-integration-checks-shell {
+			margin-top: 0;
+			padding: 22px;
+			border: 1px solid var(--cr-border, #dfe5ee);
+			border-radius: 14px;
+			background: #fff;
+			box-shadow: 0 10px 28px rgba(30, 41, 59, 0.08);
+		}
 		.creatorreactor-dashboard-grid {
 			display: grid;
 			grid-template-columns: minmax(0, 1fr) minmax(260px, 320px);
@@ -2758,8 +3803,8 @@ class Admin_Settings {
 			box-shadow: 0 10px 28px rgba(30, 41, 59, 0.08);
 			min-height: 220px;
 		}
-		.creatorreactor-modules-shell h2 {
-			margin: 0;
+		.creatorreactor-modules-shell .creatorreactor-dashboard-card-head + .creatorreactor-module-list {
+			margin-top: 0;
 		}
 		.creatorreactor-module-list {
 			margin: 14px 0 0;
@@ -2801,6 +3846,44 @@ class Admin_Settings {
 			color: var(--cr-text-muted);
 			text-transform: capitalize;
 		}
+		.creatorreactor-integration-check-actions {
+			display: flex;
+			flex-wrap: wrap;
+			align-items: center;
+			gap: 10px 14px;
+			margin-top: 4px;
+		}
+		.creatorreactor-integration-check-actions .button-link {
+			font-size: 12px;
+			font-weight: 600;
+			text-transform: none;
+			padding: 0;
+			min-height: 0;
+			line-height: 1.4;
+			vertical-align: baseline;
+		}
+		.creatorreactor-integration-fix-link {
+			font-size: 12px;
+			font-weight: 600;
+			text-transform: none;
+		}
+		.creatorreactor-integration-check-ignored-note {
+			display: block;
+			font-size: 12px;
+			margin-top: 2px;
+			text-transform: none;
+		}
+		#creatorreactor-integration-fix-modal.creatorreactor-modal { z-index: 100002; }
+		.creatorreactor-integration-fix-body { margin: 0; line-height: 1.5; }
+		.creatorreactor-integration-fix-error {
+			margin: 12px 0 0;
+			padding: 8px 10px;
+			border-radius: 4px;
+			border: 1px solid #f3c7c7;
+			background: #fff7f7;
+			color: #7a1f1f;
+			font-size: 13px;
+		}
 		.creatorreactor-module-children {
 			margin: 4px 0 0 0;
 			padding: 0;
@@ -2814,6 +3897,27 @@ class Admin_Settings {
 			align-items: center;
 			gap: 8px;
 		}
+		.creatorreactor-module-child--fanvue-actions {
+			justify-content: space-between;
+			flex-wrap: wrap;
+			gap: 8px 12px;
+		}
+		.creatorreactor-module-child-actions {
+			display: flex;
+			align-items: center;
+			gap: 12px;
+			flex-wrap: wrap;
+			margin-left: auto;
+		}
+		.creatorreactor-module-child-actions .creatorreactor-inline-oauth-form {
+			margin: 0;
+			display: inline;
+		}
+		.creatorreactor-module-child-actions .creatorreactor-inline-oauth-form .button-link {
+			vertical-align: baseline;
+		}
+		.creatorreactor-modules-shell .creatorreactor-connection-alert { margin: 0 0 12px; }
+		.creatorreactor-modules-shell .creatorreactor-dashboard-last-error { margin: 0 0 12px; }
 		.creatorreactor-module-child-label {
 			font-size: 13px;
 			color: var(--cr-text);
@@ -2887,7 +3991,6 @@ class Admin_Settings {
 			.creatorreactor-dashboard-shell { padding: 18px; border-radius: 12px; }
 			.creatorreactor-dashboard-head { flex-direction: column; gap: 12px; margin-bottom: 16px; }
 			.creatorreactor-dashboard-head .creatorreactor-status-badge { margin-left: 0; }
-			.creatorreactor-card-title { font-size: 21px; }
 			.creatorreactor-dashboard-subtitle { font-size: 14px; }
 			.creatorreactor-connection-actions { padding: 0; }
 			.creatorreactor-tab-nav {
@@ -3812,7 +4915,27 @@ class Admin_Settings {
 			}
 
 			document.addEventListener("keydown", function(event) {
-				if (event.key === "Escape" && testModal && testModal.getAttribute("aria-hidden") === "false") {
+				if (event.key !== "Escape") {
+					return;
+				}
+				var intFixModal = document.getElementById("creatorreactor-integration-fix-modal");
+				if (intFixModal && intFixModal.getAttribute("aria-hidden") === "false") {
+					intFixModal.setAttribute("aria-hidden", "true");
+					var intErr = document.getElementById("creatorreactor-integration-fix-error");
+					var intConfirm = intFixModal.querySelector(".creatorreactor-integration-fix-confirm");
+					var intCfg = window.creatorreactorIntegrationFix;
+					if (intErr) {
+						intErr.hidden = true;
+						intErr.textContent = "";
+					}
+					if (intConfirm) {
+						intConfirm.disabled = false;
+						intConfirm.textContent = (intCfg && intCfg.i18n && intCfg.i18n.fix) ? intCfg.i18n.fix : "Fix";
+					}
+					intFixModal.dataset.activeFixId = "";
+					return;
+				}
+				if (testModal && testModal.getAttribute("aria-hidden") === "false") {
 					closeTestModal();
 				}
 			});
@@ -3897,6 +5020,195 @@ class Admin_Settings {
 				var initialSubtab = urlParams.get("subtab") || (document.querySelector(".creatorreactor-settings-panel.is-active") ? document.querySelector(".creatorreactor-settings-panel.is-active").getAttribute("data-subtab") : "oauth");
 				activateSubtab(initialSubtab);
 			}
+
+			(function setupCreatorreactorIntegrationChecksUi() {
+				var cfg = window.creatorreactorIntegrationFix;
+				var checksRoot = document.getElementById("creatorreactor-integration-checks");
+				if (!cfg || !checksRoot) {
+					return;
+				}
+
+				function postIgnoreToggle(checkId, doIgnore) {
+					var body = new window.FormData();
+					body.append("action", cfg.ignoreAction);
+					body.append("nonce", cfg.ignoreNonce);
+					body.append("check_id", checkId);
+					body.append("ignore", doIgnore ? "1" : "0");
+					return window.fetch(cfg.ajaxUrl, { method: "POST", credentials: "same-origin", body: body })
+						.then(function(res) { return res.json(); });
+				}
+
+				checksRoot.addEventListener("click", function(e) {
+					var unignoreBtn = e.target.closest(".creatorreactor-integration-unignore-btn");
+					if (unignoreBtn && checksRoot.contains(unignoreBtn)) {
+						e.preventDefault();
+						var uid = unignoreBtn.getAttribute("data-check-id") || "";
+						if (!uid || !cfg.ignoreAction) {
+							return;
+						}
+						postIgnoreToggle(uid, false).then(function(data) {
+							if (data && data.success) {
+								window.location.reload();
+							} else if (window.console && console.warn) {
+								console.warn((cfg.i18n && cfg.i18n.ignoreError) ? cfg.i18n.ignoreError : "Ignore update failed.");
+							}
+						}).catch(function() {
+							if (window.console && console.warn) {
+								console.warn((cfg.i18n && cfg.i18n.ignoreError) ? cfg.i18n.ignoreError : "Ignore update failed.");
+							}
+						});
+						return;
+					}
+					var ignoreBtn = e.target.closest(".creatorreactor-integration-ignore-btn");
+					if (ignoreBtn && checksRoot.contains(ignoreBtn)) {
+						e.preventDefault();
+						var cid = ignoreBtn.getAttribute("data-check-id") || "";
+						if (!cid || !cfg.ignoreAction) {
+							return;
+						}
+						postIgnoreToggle(cid, true).then(function(data) {
+							if (data && data.success) {
+								window.location.reload();
+							} else if (window.console && console.warn) {
+								console.warn((cfg.i18n && cfg.i18n.ignoreError) ? cfg.i18n.ignoreError : "Ignore update failed.");
+							}
+						}).catch(function() {
+							if (window.console && console.warn) {
+								console.warn((cfg.i18n && cfg.i18n.ignoreError) ? cfg.i18n.ignoreError : "Ignore update failed.");
+							}
+						});
+						return;
+					}
+					var link = e.target.closest(".creatorreactor-integration-fix-link");
+					if (!link || !checksRoot.contains(link)) {
+						return;
+					}
+					e.preventDefault();
+					var fixId = link.getAttribute("data-fix-id") || "";
+					if (!fixId || !cfg.fixes || !cfg.fixes[fixId]) {
+						return;
+					}
+					var modal = document.getElementById("creatorreactor-integration-fix-modal");
+					if (!modal) {
+						return;
+					}
+					var titleEl = document.getElementById("creatorreactor-integration-fix-title");
+					var bodyEl = document.getElementById("creatorreactor-integration-fix-body");
+					var errEl = document.getElementById("creatorreactor-integration-fix-error");
+					var confirmBtn = modal.querySelector(".creatorreactor-integration-fix-confirm");
+					var fixLabel = (cfg.i18n && cfg.i18n.fix) ? cfg.i18n.fix : "Fix";
+					if (errEl) {
+						errEl.hidden = true;
+						errEl.textContent = "";
+					}
+					if (confirmBtn) {
+						confirmBtn.disabled = false;
+						confirmBtn.textContent = fixLabel;
+					}
+					modal.dataset.activeFixId = fixId;
+					var fix = cfg.fixes[fixId];
+					if (titleEl) {
+						titleEl.textContent = fix.title || "";
+					}
+					if (bodyEl) {
+						bodyEl.textContent = fix.message || "";
+					}
+					modal.setAttribute("aria-hidden", "false");
+				});
+
+				var modal = document.getElementById("creatorreactor-integration-fix-modal");
+				if (!modal || !cfg.fixes) {
+					return;
+				}
+				var errEl = document.getElementById("creatorreactor-integration-fix-error");
+				var confirmBtn = modal.querySelector(".creatorreactor-integration-fix-confirm");
+				var cancelBtn = modal.querySelector(".creatorreactor-integration-fix-cancel");
+				var closeBtn = modal.querySelector(".creatorreactor-integration-fix-close");
+				var backdrop = modal.querySelector(".creatorreactor-integration-fix-backdrop");
+				var fixLabel = (cfg.i18n && cfg.i18n.fix) ? cfg.i18n.fix : "Fix";
+				var workingLabel = (cfg.i18n && cfg.i18n.working) ? cfg.i18n.working : "Applying…";
+
+				function resetModalUi() {
+					if (errEl) {
+						errEl.hidden = true;
+						errEl.textContent = "";
+					}
+					if (confirmBtn) {
+						confirmBtn.disabled = false;
+						confirmBtn.textContent = fixLabel;
+					}
+					modal.dataset.activeFixId = "";
+				}
+
+				function closeModal() {
+					modal.setAttribute("aria-hidden", "true");
+					resetModalUi();
+				}
+
+				if (cancelBtn) {
+					cancelBtn.addEventListener("click", closeModal);
+				}
+				if (closeBtn) {
+					closeBtn.addEventListener("click", closeModal);
+				}
+				if (backdrop) {
+					backdrop.addEventListener("click", closeModal);
+				}
+
+				if (confirmBtn) {
+					confirmBtn.addEventListener("click", function() {
+						var fixId = modal.dataset.activeFixId || "";
+						var fix = fixId && cfg.fixes ? cfg.fixes[fixId] : null;
+						if (!fix) {
+							return;
+						}
+						if (fix.type === "redirect" && fix.redirectUrl) {
+							window.location.href = fix.redirectUrl;
+							return;
+						}
+						if (fix.type !== "ajax") {
+							return;
+						}
+						if (errEl) {
+							errEl.hidden = true;
+							errEl.textContent = "";
+						}
+						confirmBtn.disabled = true;
+						confirmBtn.textContent = workingLabel;
+						var body = new window.FormData();
+						body.append("action", cfg.action);
+						body.append("nonce", cfg.nonce);
+						body.append("fix_id", fixId);
+						window.fetch(cfg.ajaxUrl, { method: "POST", credentials: "same-origin", body: body })
+							.then(function(res) { return res.json(); })
+							.then(function(data) {
+								if (data && data.success) {
+									window.location.reload();
+									return;
+								}
+								var msg = (cfg.i18n && cfg.i18n.error) ? cfg.i18n.error : "Could not apply the fix.";
+								if (data && data.data && data.data.message) {
+									msg = data.data.message;
+								}
+								if (errEl) {
+									errEl.textContent = msg;
+									errEl.hidden = false;
+								}
+								confirmBtn.disabled = false;
+								confirmBtn.textContent = fixLabel;
+							})
+							.catch(function() {
+								var msg = (cfg.i18n && cfg.i18n.error) ? cfg.i18n.error : "Could not apply the fix.";
+								if (errEl) {
+									errEl.textContent = msg;
+									errEl.hidden = false;
+								}
+								confirmBtn.disabled = false;
+								confirmBtn.textContent = fixLabel;
+							});
+					});
+				}
+			})();
 			});
 		})();
 		';
@@ -3911,6 +5223,25 @@ class Admin_Settings {
 				'nonce'          => wp_create_nonce( 'creatorreactor_auth_mode' ),
 				'copyLabel'      => __( 'Copy', 'creatorreactor' ),
 				'copiedLabel'    => __( 'Copied!', 'creatorreactor' ),
+			]
+		);
+		wp_localize_script(
+			'creatorreactor-admin',
+			'creatorreactorIntegrationFix',
+			[
+				'ajaxUrl'      => admin_url( 'admin-ajax.php' ),
+				'nonce'        => wp_create_nonce( 'creatorreactor_integration_fix' ),
+				'action'       => 'creatorreactor_integration_fix',
+				'ignoreAction' => 'creatorreactor_integration_check_ignore',
+				'ignoreNonce'  => wp_create_nonce( 'creatorreactor_integration_check_ignore' ),
+				'fixes'        => self::get_integration_fix_definitions_for_localize(),
+				'i18n'         => [
+					'fix'          => __( 'Fix', 'creatorreactor' ),
+					'cancel'       => __( 'Cancel', 'creatorreactor' ),
+					'error'        => __( 'Could not apply the fix.', 'creatorreactor' ),
+					'working'      => __( 'Applying…', 'creatorreactor' ),
+					'ignoreError'  => __( 'Could not update ignore state.', 'creatorreactor' ),
+				],
 			]
 		);
 		wp_add_inline_script( 'creatorreactor-admin', $js );
@@ -4105,7 +5436,7 @@ class Admin_Settings {
 		);
 		add_submenu_page(
 			self::PAGE_SLUG,
-			__( 'CreatorReactor Settings', 'creatorreactor' ),
+			__( 'Settings', 'creatorreactor' ),
 			__( 'Settings', 'creatorreactor' ),
 			'manage_options',
 			self::PAGE_SETTINGS_SLUG,
@@ -4143,8 +5474,13 @@ class Admin_Settings {
 				],
 			];
 		} elseif ( $is_settings_page ) {
-			$allowed_tabs = [ 'general', 'cloud', 'settings', 'documentation', 'debug' ];
+			$allowed_tabs = [ 'integration-checks', 'general', 'cloud', 'settings', 'documentation', 'debug' ];
 			$tab_links = [
+				'integration-checks' => [
+					'label'     => __( 'Integration Checks', 'creatorreactor' ),
+					'page_slug' => self::PAGE_SETTINGS_SLUG,
+					'args'      => [ 'tab' => 'integration-checks' ],
+				],
 				'general'    => [
 					'label'     => __( 'General', 'creatorreactor' ),
 					'page_slug' => self::PAGE_SETTINGS_SLUG,
@@ -4201,11 +5537,6 @@ class Admin_Settings {
 				<div class="creatorreactor-settings-header-text">
 					<h1><?php esc_html_e( 'CreatorReactor Users', 'creatorreactor' ); ?></h1>
 					<p><?php esc_html_e( 'Manage synchronized entitlements and linked WordPress users.', 'creatorreactor' ); ?></p>
-				</div>
-				<?php elseif ( ! $is_settings_page ) : ?>
-				<div class="creatorreactor-settings-header-text">
-					<h1><?php esc_html_e( 'CreatorReactor Settings', 'creatorreactor' ); ?></h1>
-					<p><?php printf( esc_html__( 'Configure OAuth integration for %s.', 'creatorreactor' ), esc_html( $current_product_label ) ); ?></p>
 				</div>
 				<?php endif; ?>
 			</div>
@@ -4334,6 +5665,9 @@ class Admin_Settings {
 		<div class="creatorreactor-tab-panel <?php echo 'general' === $active_tab ? 'is-active' : ''; ?>" data-tab="general">
 			<?php self::render_general_tab_body( $opts ); ?>
 		</div>
+		<div class="creatorreactor-tab-panel <?php echo 'integration-checks' === $active_tab ? 'is-active' : ''; ?>" data-tab="integration-checks">
+			<?php self::render_integration_checks_tab_body( 'settings' ); ?>
+		</div>
 		<div class="creatorreactor-tab-panel <?php echo 'cloud' === $active_tab ? 'is-active' : ''; ?>" data-tab="cloud">
 			<div class="creatorreactor-section">
 				<div class="creatorreactor-settings-form-card">
@@ -4441,6 +5775,7 @@ class Admin_Settings {
 						'label'    => __( 'Wordpress Gateway', 'creatorreactor' ),
 						'children' => [
 							[
+								'id'    => 'fanvue_oauth',
 								'label' => __( 'Fanvue OAuth', 'creatorreactor' ),
 								'state' => $fanvue_oauth_state,
 							],
@@ -4488,14 +5823,38 @@ class Admin_Settings {
 					$modules[ $module_index ]['state'] = $module_state;
 				}
 
-				$connection_card_class = 'creatorreactor-connection-card is-' . $connection_state;
+				$connect_url = '';
+				if ( $broker_mode ) {
+					$maybe_connect = Broker_Client::get_connect_url();
+					$connect_url   = ( is_string( $maybe_connect ) && $maybe_connect !== '' ) ? $maybe_connect : '';
+				} elseif ( ! empty( $opts['creatorreactor_oauth_client_id'] ) ) {
+					$connect_url = self::admin_page_url(
+						[
+							'tab'                        => 'dashboard',
+							'creatorreactor_oauth_start' => 1,
+							'_wpnonce'                   => wp_create_nonce( 'creatorreactor_oauth_start' ),
+						]
+					);
+				}
+
 				?>
 				<div class="creatorreactor-dashboard-row">
 					<div class="creatorreactor-dashboard-col">
-						<div class="creatorreactor-modules-shell">
-							<div class="creatorreactor-card-header">
-								<h2 class="creatorreactor-card-title"><?php esc_html_e( 'CreatorReactor Modules', 'creatorreactor' ); ?></h2>
+						<div class="creatorreactor-modules-shell creatorreactor-dashboard-card">
+							<div class="creatorreactor-dashboard-card-head">
+								<h2 class="creatorreactor-dashboard-card-head__title"><?php esc_html_e( 'CreatorReactor Modules', 'creatorreactor' ); ?></h2>
 							</div>
+							<?php if ( $connection_state === 'red' && $connection_failure_message !== '' ) : ?>
+								<p class="creatorreactor-connection-alert">
+									<?php echo esc_html( $connection_failure_message ); ?>
+								</p>
+							<?php endif; ?>
+							<?php if ( $has_last_error ) : ?>
+								<p class="creatorreactor-check-result-fail creatorreactor-dashboard-last-error">
+									<strong><?php esc_html_e( 'Last Error:', 'creatorreactor' ); ?></strong>
+									<?php echo esc_html( $last_error_message ); ?>
+								</p>
+							<?php endif; ?>
 							<ul class="creatorreactor-module-list">
 								<?php foreach ( $modules as $module ) : ?>
 									<?php
@@ -4512,14 +5871,44 @@ class Admin_Settings {
 												<ul class="creatorreactor-module-children">
 													<?php foreach ( $module_children as $child ) : ?>
 														<?php
+														$child_id    = isset( $child['id'] ) ? (string) $child['id'] : '';
 														$child_label = isset( $child['label'] ) ? (string) $child['label'] : '';
 														$child_state = isset( $child['state'] ) ? (string) $child['state'] : 'gray';
 														$child_state = in_array( $child_state, [ 'green', 'yellow', 'red', 'gray' ], true ) ? $child_state : 'gray';
 														?>
-														<li class="creatorreactor-module-child">
-															<span class="creatorreactor-module-status-dot is-<?php echo esc_attr( $child_state ); ?>" aria-hidden="true"></span>
-															<span class="creatorreactor-module-child-label"><?php echo esc_html( $child_label ); ?></span>
-														</li>
+														<?php if ( $child_id === 'fanvue_oauth' ) : ?>
+															<li class="creatorreactor-module-child creatorreactor-module-child--fanvue-actions">
+																<span class="creatorreactor-module-status-dot is-<?php echo esc_attr( $child_state ); ?>" aria-hidden="true"></span>
+																<span class="creatorreactor-module-child-label"><?php echo esc_html( $child_label ); ?></span>
+																<span class="creatorreactor-module-child-actions">
+																	<?php if ( $status['connected'] ) : ?>
+																		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="creatorreactor-inline-oauth-form">
+																			<?php wp_nonce_field( 'creatorreactor_disconnect' ); ?>
+																			<input type="hidden" name="action" value="creatorreactor_disconnect" />
+																			<button type="submit" class="button-link" onclick="return confirm('<?php echo esc_js( __( 'Are you sure you want to disconnect?', 'creatorreactor' ) ); ?>');"><?php esc_html_e( 'Disconnect', 'creatorreactor' ); ?></button>
+																		</form>
+																	<?php elseif ( $connect_url ) : ?>
+																		<?php if ( $broker_mode ) : ?>
+																			<a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=creatorreactor_broker_connect' ), 'creatorreactor_broker_connect' ) ); ?>" class="button-link"><?php esc_html_e( 'Connect', 'creatorreactor' ); ?></a>
+																		<?php else : ?>
+																			<a href="<?php echo esc_url( $connect_url, [ 'https', 'http' ] ); ?>" class="button-link"><?php esc_html_e( 'Connect', 'creatorreactor' ); ?></a>
+																		<?php endif; ?>
+																	<?php endif; ?>
+																	<?php if ( 'red' === $connection_state ) : ?>
+																		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="creatorreactor-inline-oauth-form">
+																			<?php wp_nonce_field( 'creatorreactor_test_connection' ); ?>
+																			<input type="hidden" name="action" value="creatorreactor_test_connection" />
+																			<button type="submit" class="button-link"><?php esc_html_e( 'Run connection test', 'creatorreactor' ); ?></button>
+																		</form>
+																	<?php endif; ?>
+																</span>
+															</li>
+														<?php else : ?>
+															<li class="creatorreactor-module-child">
+																<span class="creatorreactor-module-status-dot is-<?php echo esc_attr( $child_state ); ?>" aria-hidden="true"></span>
+																<span class="creatorreactor-module-child-label"><?php echo esc_html( $child_label ); ?></span>
+															</li>
+														<?php endif; ?>
 													<?php endforeach; ?>
 												</ul>
 											<?php endif; ?>
@@ -4528,153 +5917,86 @@ class Admin_Settings {
 								<?php endforeach; ?>
 							</ul>
 						</div>
-					</div>
-					<div class="creatorreactor-dashboard-col">
-				<div class="creatorreactor-section creatorreactor-dashboard-shell <?php echo esc_attr( $connection_card_class ); ?>">
-					<?php
-					$connect_url = '';
-					if ( $broker_mode ) {
-						$maybe_connect = Broker_Client::get_connect_url();
-						$connect_url = ( is_string( $maybe_connect ) && $maybe_connect !== '' ) ? $maybe_connect : '';
-					} elseif ( ! empty( $opts['creatorreactor_oauth_client_id'] ) ) {
-					$connect_url = self::admin_page_url(
-						[
-							'tab'                       => 'dashboard',
-							'creatorreactor_oauth_start' => 1,
-							'_wpnonce'                  => wp_create_nonce( 'creatorreactor_oauth_start' ),
-						]
-					);
-					}
-					?>
-
-					<?php if ( $connection_state === 'red' && $connection_failure_message !== '' ) : ?>
-						<p class="creatorreactor-connection-alert">
-							<?php echo esc_html( $connection_failure_message ); ?>
-						</p>
-					<?php endif; ?>
-
-					<div class="creatorreactor-dashboard-head creatorreactor-card-header">
-						<div>
-							<h2 class="creatorreactor-dashboard-title creatorreactor-card-title"><?php printf( esc_html__( '%s Status', 'creatorreactor' ), esc_html( $current_product_label ) ); ?></h2>
-						</div>
-						<span class="creatorreactor-status-badge <?php echo 'green' === $connection_state ? 'creatorreactor-status-healthy' : ( 'red' === $connection_state ? 'creatorreactor-status-red' : 'creatorreactor-status-yellow' ); ?>">
-							<?php echo 'green' === $connection_state ? esc_html__( 'Healthy', 'creatorreactor' ) : ( 'red' === $connection_state ? esc_html__( 'Critical', 'creatorreactor' ) : ( $has_warning_error ? esc_html__( 'Warning', 'creatorreactor' ) : esc_html__( 'Pending', 'creatorreactor' ) ) ); ?>
-						</span>
-					</div>
-
-					<div class="creatorreactor-dashboard-grid">
-						<div class="creatorreactor-connection-actions">
-							<?php if ( 'red' === $connection_state ) : ?>
-								<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-									<?php wp_nonce_field( 'creatorreactor_test_connection' ); ?>
-									<input type="hidden" name="action" value="creatorreactor_test_connection" />
-									<p class="submit">
-										<input type="submit" class="button button-primary" value="<?php esc_attr_e( 'Run Test', 'creatorreactor' ); ?>" />
-									</p>
-								</form>
-							<?php endif; ?>
-							<?php if ( $status['connected'] ) : ?>
-								<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>">
-									<?php wp_nonce_field( 'creatorreactor_disconnect' ); ?>
-									<input type="hidden" name="action" value="creatorreactor_disconnect" />
-									<p class="submit">
-										<button type="submit" class="button creatorreactor-btn-disconnect button-text" title="<?php esc_attr_e( 'Disconnect', 'creatorreactor' ); ?>" aria-label="<?php esc_attr_e( 'Disconnect', 'creatorreactor' ); ?>" onclick="return confirm('<?php esc_attr_e( 'Are you sure you want to disconnect?', 'creatorreactor' ); ?>');"><?php esc_html_e( 'DISCONNECT', 'creatorreactor' ); ?></button>
-									</p>
-								</form>
-							<?php elseif ( $connect_url ) : ?>
-								<?php if ( $broker_mode ) : ?>
-									<a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=creatorreactor_broker_connect' ), 'creatorreactor_broker_connect' ) ); ?>" class="button creatorreactor-btn-connect"><?php esc_html_e( 'Connect', 'creatorreactor' ); ?></a>
-								<?php else : ?>
-									<a href="<?php echo esc_url( $connect_url, [ 'https', 'http' ] ); ?>" class="button creatorreactor-btn-connect"><?php esc_html_e( 'Connect', 'creatorreactor' ); ?></a>
-								<?php endif; ?>
-							<?php endif; ?>
-						</div>
-					</div>
-
-					<?php
-					$connection_test_checks = ! empty( $connection_test['checks'] ) && is_array( $connection_test['checks'] ) ? $connection_test['checks'] : [];
-					$failed_connection_checks = [];
-					if ( ! empty( $connection_test_checks ) ) {
-						foreach ( $connection_test_checks as $check ) {
-							if ( empty( $check['pass'] ) ) {
-								$failed_connection_checks[] = $check;
+						<?php
+						$connection_test_checks = ! empty( $connection_test['checks'] ) && is_array( $connection_test['checks'] ) ? $connection_test['checks'] : [];
+						$failed_connection_checks = [];
+						if ( ! empty( $connection_test_checks ) ) {
+							foreach ( $connection_test_checks as $check ) {
+								if ( empty( $check['pass'] ) ) {
+									$failed_connection_checks[] = $check;
+								}
 							}
 						}
-					}
-					?>
+						?>
 
-					<?php if ( ! empty( $connection_test_checks ) ) : ?>
-						<p class="creatorreactor-test-details-open">
-							<button type="button" class="button-link creatorreactor-test-modal-trigger creatorreactor-open-test-modal">
-								<?php esc_html_e( 'View test details', 'creatorreactor' ); ?>
-							</button>
-						</p>
-						<div id="creatorreactor-test-modal" class="creatorreactor-modal" aria-hidden="true" data-test-time="<?php echo esc_attr( (string) (int) ( $connection_test['time'] ?? 0 ) ); ?>">
-							<div class="creatorreactor-modal-backdrop"></div>
-							<div class="creatorreactor-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="creatorreactor-test-modal-title">
-								<div class="creatorreactor-modal-header">
-									<div class="creatorreactor-modal-header-title">
-										<?php self::render_brand_logo_img( 'creatorreactor-brand-logo--modal' ); ?>
-										<h3 id="creatorreactor-test-modal-title"><?php esc_html_e( 'Test Details', 'creatorreactor' ); ?></h3>
+						<?php if ( ! empty( $connection_test_checks ) ) : ?>
+							<p class="creatorreactor-test-details-open">
+								<button type="button" class="button-link creatorreactor-test-modal-trigger creatorreactor-open-test-modal">
+									<?php esc_html_e( 'View test details', 'creatorreactor' ); ?>
+								</button>
+							</p>
+							<div id="creatorreactor-test-modal" class="creatorreactor-modal" aria-hidden="true" data-test-time="<?php echo esc_attr( (string) (int) ( $connection_test['time'] ?? 0 ) ); ?>">
+								<div class="creatorreactor-modal-backdrop"></div>
+								<div class="creatorreactor-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="creatorreactor-test-modal-title">
+									<div class="creatorreactor-modal-header">
+										<div class="creatorreactor-modal-header-title">
+											<?php self::render_brand_logo_img( 'creatorreactor-brand-logo--modal' ); ?>
+											<h3 id="creatorreactor-test-modal-title"><?php esc_html_e( 'Test Details', 'creatorreactor' ); ?></h3>
+										</div>
+										<button type="button" class="creatorreactor-modal-close" aria-label="<?php esc_attr_e( 'Close', 'creatorreactor' ); ?>">&times;</button>
 									</div>
-									<button type="button" class="creatorreactor-modal-close" aria-label="<?php esc_attr_e( 'Close', 'creatorreactor' ); ?>">&times;</button>
-								</div>
-								<div class="creatorreactor-modal-body">
-									<ul class="creatorreactor-check-list">
-										<?php foreach ( $connection_test_checks as $check ) : ?>
-											<?php
-											$check_label = isset( $check['label'] ) ? (string) $check['label'] : '';
-											$check_message = isset( $check['message'] ) ? (string) $check['message'] : '';
-											$check_pass = ! empty( $check['pass'] );
-											?>
-											<li>
-												<strong><?php echo esc_html( $check_label ); ?>:</strong>
-												<span class="<?php echo $check_pass ? 'creatorreactor-check-result-pass' : 'creatorreactor-check-result-fail'; ?>">
-													<?php echo $check_pass ? esc_html__( 'OK', 'creatorreactor' ) : esc_html__( 'Issue', 'creatorreactor' ); ?>
-												</span>
-												<?php if ( $check_message !== '' ) : ?>
-													&mdash; <?php echo esc_html( $check_message ); ?>
-												<?php endif; ?>
-											</li>
-										<?php endforeach; ?>
-									</ul>
-								</div>
-								<div class="creatorreactor-modal-footer">
-									<button type="button" class="button button-primary creatorreactor-ack-test-modal"><?php esc_html_e( 'Acknowledge', 'creatorreactor' ); ?></button>
+									<div class="creatorreactor-modal-body">
+										<ul class="creatorreactor-check-list">
+											<?php foreach ( $connection_test_checks as $check ) : ?>
+												<?php
+												$check_label = isset( $check['label'] ) ? (string) $check['label'] : '';
+												$check_message = isset( $check['message'] ) ? (string) $check['message'] : '';
+												$check_pass = ! empty( $check['pass'] );
+												?>
+												<li>
+													<strong><?php echo esc_html( $check_label ); ?>:</strong>
+													<span class="<?php echo $check_pass ? 'creatorreactor-check-result-pass' : 'creatorreactor-check-result-fail'; ?>">
+														<?php echo $check_pass ? esc_html__( 'OK', 'creatorreactor' ) : esc_html__( 'Issue', 'creatorreactor' ); ?>
+													</span>
+													<?php if ( $check_message !== '' ) : ?>
+														&mdash; <?php echo esc_html( $check_message ); ?>
+													<?php endif; ?>
+												</li>
+											<?php endforeach; ?>
+										</ul>
+									</div>
+									<div class="creatorreactor-modal-footer">
+										<button type="button" class="button button-primary creatorreactor-ack-test-modal"><?php esc_html_e( 'Acknowledge', 'creatorreactor' ); ?></button>
+									</div>
 								</div>
 							</div>
+						<?php endif; ?>
+
+						<?php if ( ! empty( $failed_connection_checks ) ) : ?>
+							<div id="creatorreactor-test-errors" class="creatorreactor-test-errors" data-visible="false">
+								<h3><?php esc_html_e( 'Active Test Errors', 'creatorreactor' ); ?></h3>
+								<ul class="creatorreactor-check-list">
+									<?php foreach ( $failed_connection_checks as $check ) : ?>
+										<?php
+										$check_label = isset( $check['label'] ) ? (string) $check['label'] : '';
+										$check_message = isset( $check['message'] ) ? (string) $check['message'] : '';
+										?>
+										<li>
+											<strong><?php echo esc_html( $check_label ); ?>:</strong>
+											<span class="creatorreactor-check-result-fail"><?php esc_html_e( 'Issue', 'creatorreactor' ); ?></span>
+											<?php if ( $check_message !== '' ) : ?>
+												&mdash; <?php echo esc_html( $check_message ); ?>
+											<?php endif; ?>
+										</li>
+									<?php endforeach; ?>
+								</ul>
+							</div>
+						<?php endif; ?>
+					</div>
+					<div class="creatorreactor-dashboard-col creatorreactor-dashboard-col--integration-checks">
+						<div class="creatorreactor-dashboard-integration-checks-wrap">
+							<?php self::render_integration_checks_tab_body( 'dashboard' ); ?>
 						</div>
-					<?php endif; ?>
-
-					<?php if ( $has_last_error ) : ?>
-						<p class="creatorreactor-check-result-fail">
-							<strong><?php esc_html_e( 'Last Error:', 'creatorreactor' ); ?></strong>
-							<?php echo esc_html( $last_error_message ); ?>
-						</p>
-					<?php endif; ?>
-
-					<?php if ( ! empty( $failed_connection_checks ) ) : ?>
-						<div id="creatorreactor-test-errors" class="creatorreactor-test-errors" data-visible="false">
-							<h3><?php esc_html_e( 'Active Test Errors', 'creatorreactor' ); ?></h3>
-							<ul class="creatorreactor-check-list">
-								<?php foreach ( $failed_connection_checks as $check ) : ?>
-									<?php
-									$check_label = isset( $check['label'] ) ? (string) $check['label'] : '';
-									$check_message = isset( $check['message'] ) ? (string) $check['message'] : '';
-									?>
-									<li>
-										<strong><?php echo esc_html( $check_label ); ?>:</strong>
-										<span class="creatorreactor-check-result-fail"><?php esc_html_e( 'Issue', 'creatorreactor' ); ?></span>
-										<?php if ( $check_message !== '' ) : ?>
-											&mdash; <?php echo esc_html( $check_message ); ?>
-										<?php endif; ?>
-									</li>
-								<?php endforeach; ?>
-							</ul>
-						</div>
-					<?php endif; ?>
-
-				</div>
 					</div>
 				</div>
 			</div>
