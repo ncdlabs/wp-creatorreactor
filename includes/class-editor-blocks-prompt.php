@@ -16,6 +16,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 class Editor_Blocks_Prompt {
 
 	const OPTION_SCAN_PENDING = 'creatorreactor_editor_prompt_scan_pending';
+	const OPTION_INTEGRATION_CHECKS_PENDING = 'creatorreactor_integration_checks_pending';
 
 	const OPTION_HAS_ELEMENTOR = 'creatorreactor_editor_prompt_has_elementor';
 
@@ -25,16 +26,50 @@ class Editor_Blocks_Prompt {
 
 	public static function on_activation() {
 		update_option( self::OPTION_SCAN_PENDING, '1', false );
+		update_option( self::OPTION_INTEGRATION_CHECKS_PENDING, '1', false );
 		delete_option( self::OPTION_HAS_ELEMENTOR );
 		delete_option( self::OPTION_HAS_GUTENBERG );
 	}
 
 	public static function init() {
+		add_action( 'admin_init', [ __CLASS__, 'maybe_redirect_to_integration_checks' ], 4 );
 		add_action( 'admin_init', [ __CLASS__, 'run_activation_scan' ], 5 );
 		add_action( 'admin_init', [ __CLASS__, 'handle_ack_redirect' ], 6 );
 		add_action( 'admin_enqueue_scripts', [ __CLASS__, 'enqueue_modal_assets' ] );
 		add_action( 'admin_footer', [ __CLASS__, 'render_modal' ] );
 		add_action( 'wp_ajax_creatorreactor_dismiss_editor_prompt', [ __CLASS__, 'ajax_dismiss' ] );
+	}
+
+	/**
+	 * After activation, send admins to the CreatorReactor Dashboard (integration checks block).
+	 */
+	public static function maybe_redirect_to_integration_checks() {
+		if ( ! is_admin() || ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		if ( wp_doing_ajax() || ( defined( 'REST_REQUEST' ) && REST_REQUEST ) ) {
+			return;
+		}
+		if ( get_option( self::OPTION_INTEGRATION_CHECKS_PENDING, '' ) !== '1' ) {
+			return;
+		}
+
+		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : '';
+		$tab  = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : '';
+		if ( Admin_Settings::PAGE_SLUG === $page && 'dashboard' === $tab ) {
+			delete_option( self::OPTION_INTEGRATION_CHECKS_PENDING );
+			return;
+		}
+		if ( Admin_Settings::PAGE_SETTINGS_SLUG === $page && 'integration-checks' === $tab ) {
+			delete_option( self::OPTION_INTEGRATION_CHECKS_PENDING );
+			return;
+		}
+
+		delete_option( self::OPTION_INTEGRATION_CHECKS_PENDING );
+		wp_safe_redirect(
+			admin_url( 'admin.php?page=' . Admin_Settings::PAGE_SLUG . '&tab=dashboard#creatorreactor-integration-checks' )
+		);
+		exit;
 	}
 
 	/**

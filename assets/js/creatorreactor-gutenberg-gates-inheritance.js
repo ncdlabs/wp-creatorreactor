@@ -4,10 +4,16 @@
 	'use strict';
 
 	var HIDDEN_CLASS = 'creatorreactor-gutenberg-gate-hidden';
+	var PREHIDE_CLASS = 'creatorreactor-gutenberg-gate-prehide';
 	var MARKER_SELECTOR = '.creatorreactor-gutenberg-gate-marker[data-creatorreactor-gate-match]';
 	var DEBUG = window.CreatorReactorGutenbergGatesInheritanceDebug === true;
 	var lastDebugLogMs = 0;
-	var viewerState = null;
+	var viewerState = (window.CreatorReactorViewerState && typeof window.CreatorReactorViewerState === 'object')
+		? {
+			loggedIn: !!window.CreatorReactorViewerState.loggedIn,
+			roles: Array.isArray(window.CreatorReactorViewerState.roles) ? window.CreatorReactorViewerState.roles : []
+		}
+		: null;
 
 	function ensureHideCss() {
 		if (document.querySelector('style[data-creatorreactor-gutenberg-gate-hidden="1"]')) {
@@ -16,7 +22,9 @@
 
 		var style = document.createElement('style');
 		style.setAttribute('data-creatorreactor-gutenberg-gate-hidden', '1');
-		style.textContent = '.' + HIDDEN_CLASS + '{display:none !important;}';
+		style.textContent = ''
+			+ '.' + HIDDEN_CLASS + '{display:none !important;}'
+			+ '.' + PREHIDE_CLASS + '{visibility:hidden !important;pointer-events:none !important;}';
 		document.head.appendChild(style);
 	}
 
@@ -37,6 +45,27 @@
 			el = el.parentElement;
 		}
 		return null;
+	}
+
+	function hydrateViewerStateFromMarkers() {
+		if (viewerState && typeof viewerState === 'object') {
+			return;
+		}
+		var markers = Array.prototype.slice.call(document.querySelectorAll(MARKER_SELECTOR));
+		if (!markers.length) {
+			return;
+		}
+		for (var i = 0; i < markers.length; i++) {
+			var rolesAttr = markers[i].getAttribute('data-creatorreactor-user-roles') || '';
+			var roles = rolesAttr.split(',').map(function (r) { return r.trim(); }).filter(Boolean);
+			if (roles.length) {
+				viewerState = {
+					loggedIn: !!(document.body && document.body.classList && document.body.classList.contains('logged-in')),
+					roles: roles
+				};
+				return;
+			}
+		}
 	}
 
 	function resolveEffectiveMatch(marker) {
@@ -75,10 +104,10 @@
 			}
 		}
 
-		// For authenticated users, hide role-gated content until live viewer state arrives.
-		// This prevents a first-paint flash from stale cached role attributes.
+		// For authenticated users, pre-hide role-gated content until live viewer state arrives.
+		// This preserves layout space and prevents visible shifts for matching subscribers.
 		if (!viewerState && (gate === 'subscriber' || gate === 'follower')) {
-			return '0';
+			return 'pending';
 		}
 
 		// Role-driven gates must be derived from role payload, not stale match markers.
@@ -116,8 +145,11 @@
 
 	function scanAndHide() {
 		Array.prototype.slice
-			.call(document.querySelectorAll('.' + HIDDEN_CLASS))
-			.forEach(function (el) { el.classList.remove(HIDDEN_CLASS); });
+			.call(document.querySelectorAll('.' + HIDDEN_CLASS + ',.' + PREHIDE_CLASS))
+			.forEach(function (el) {
+				el.classList.remove(HIDDEN_CLASS);
+				el.classList.remove(PREHIDE_CLASS);
+			});
 
 		var markers = Array.prototype.slice.call(document.querySelectorAll(MARKER_SELECTOR));
 		if (!markers.length) {
@@ -129,15 +161,21 @@
 		var hiddenCount = 0;
 		markers.forEach(function (marker) {
 			var match = resolveEffectiveMatch(marker);
-			var shouldHide = match !== '1';
+			var shouldHide = match === '0';
+			var shouldPrehide = match === 'pending';
 			var container = findPreferredGutenbergContainer(marker);
 			if (!container) {
 				return;
 			}
 			if (shouldHide) {
+				container.classList.remove(PREHIDE_CLASS);
 				container.classList.add(HIDDEN_CLASS);
 				hiddenCount += 1;
+			} else if (shouldPrehide) {
+				container.classList.remove(HIDDEN_CLASS);
+				container.classList.add(PREHIDE_CLASS);
 			} else {
+				container.classList.remove(PREHIDE_CLASS);
 				container.classList.remove(HIDDEN_CLASS);
 			}
 		});
@@ -206,6 +244,7 @@
 	// Ensure the hide CSS exists ASAP so we don't briefly show gated containers
 	// before our first scan runs.
 	ensureHideCss();
+	hydrateViewerStateFromMarkers();
 	refreshViewerState();
 
 	// Best-effort scan immediately.

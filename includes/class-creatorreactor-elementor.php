@@ -82,6 +82,23 @@ final class Elementor_Integration {
 			$version,
 			false
 		);
+
+		$roles = [];
+		if ( is_user_logged_in() ) {
+			$user = wp_get_current_user();
+			if ( $user && ! empty( $user->roles ) && is_array( $user->roles ) ) {
+				$roles = array_values( array_map( 'sanitize_key', $user->roles ) );
+			}
+		}
+		$viewer_state_bootstrap = [
+			'loggedIn' => is_user_logged_in(),
+			'roles'    => $roles,
+		];
+		wp_add_inline_script(
+			'creatorreactor-elementor-gates-inheritance',
+			'window.CreatorReactorViewerState = window.CreatorReactorViewerState || ' . wp_json_encode( $viewer_state_bootstrap ) . ';',
+			'before'
+		);
 	}
 
 	/**
