@@ -4,15 +4,37 @@
 	'use strict';
 
 	var HIDDEN_CLASS = 'creatorreactor-elementor-gate-hidden';
+	var PREHIDE_CLASS = 'creatorreactor-elementor-gate-prehide';
 	var MARKER_SELECTOR = '.creatorreactor-elementor-gate-marker[data-creatorreactor-gate-match]';
 	var DEBUG = window.CreatorReactorElementorGatesInheritanceDebug === true;
 	var lastDebugLogMs = 0;
-	var viewerState = (window.CreatorReactorViewerState && typeof window.CreatorReactorViewerState === 'object')
-		? {
-			loggedIn: !!window.CreatorReactorViewerState.loggedIn,
-			roles: Array.isArray(window.CreatorReactorViewerState.roles) ? window.CreatorReactorViewerState.roles : []
+	function viewerStateFromBootstrap(obj) {
+		if (!obj || typeof obj !== 'object') {
+			return null;
 		}
-		: null;
+		return {
+			loggedIn: !!obj.loggedIn,
+			roles: Array.isArray(obj.roles) ? obj.roles : [],
+			skipClientGateHiding: !!obj.skipClientGateHiding,
+			adminBarShowing: !!obj.adminBarShowing,
+			canAccessWpAdmin: !!obj.canAccessWpAdmin
+		};
+	}
+
+	function viewerStateFromAjaxData(data) {
+		if (!data || typeof data !== 'object') {
+			return null;
+		}
+		return {
+			loggedIn: !!data.logged_in,
+			roles: Array.isArray(data.roles) ? data.roles : [],
+			skipClientGateHiding: !!data.skip_client_gate_hiding,
+			adminBarShowing: !!data.admin_bar_showing,
+			canAccessWpAdmin: !!data.can_access_wp_admin
+		};
+	}
+
+	var viewerState = viewerStateFromBootstrap(window.CreatorReactorViewerState);
 
 	function ensureHideCss() {
 		if (document.querySelector('style[data-creatorreactor-elementor-gate-hidden="1"]')) {
@@ -21,8 +43,50 @@
 
 		var style = document.createElement('style');
 		style.setAttribute('data-creatorreactor-elementor-gate-hidden', '1');
-		style.textContent = '.' + HIDDEN_CLASS + '{display:none !important;}';
+		style.textContent = ''
+			+ '.' + HIDDEN_CLASS + '{display:none !important;}'
+			+ '.' + PREHIDE_CLASS + '{visibility:hidden !important;pointer-events:none !important;}';
 		document.head.appendChild(style);
+	}
+
+	/**
+	 * Prefer the flex row that holds sibling widgets (heading, media, etc.), not only
+	 * the gate widget — the marker lives inside the gate widget only.
+	 */
+	function findPreferredElementorContainer(marker) {
+		var inner = marker.closest('.e-con-inner');
+		if (inner) {
+			return inner;
+		}
+		var legacy = marker.closest('.elementor-container');
+		if (legacy) {
+			return legacy;
+		}
+		return marker.closest('.elementor-element');
+	}
+
+	function hydrateViewerStateFromMarkers() {
+		if (viewerState && typeof viewerState === 'object') {
+			return;
+		}
+		var markers = Array.prototype.slice.call(document.querySelectorAll(MARKER_SELECTOR));
+		if (!markers.length) {
+			return;
+		}
+		for (var i = 0; i < markers.length; i++) {
+			var rolesAttr = markers[i].getAttribute('data-creatorreactor-user-roles') || '';
+			var roles = rolesAttr.split(',').map(function (r) { return r.trim(); }).filter(Boolean);
+			if (roles.length) {
+				viewerState = {
+					loggedIn: !!(document.body && document.body.classList && document.body.classList.contains('logged-in')),
+					roles: roles,
+					skipClientGateHiding: false,
+					adminBarShowing: false,
+					canAccessWpAdmin: false
+				};
+				return;
+			}
+		}
 	}
 
 	function resolveEffectiveMatch(marker) {
@@ -41,33 +105,21 @@
 			hasSubscriberRole = roles.indexOf('creatorreactor_subscriber') !== -1;
 		}
 
-		// Cache-safe fallback for guests: never trust stale "match=1" for authenticated gates.
+		if (viewerState && viewerState.skipClientGateHiding) {
+			return '1';
+		}
+
 		if (!isLoggedIn) {
 			if (gate === 'logged_out') {
 				return '1';
 			}
-			if (
-				gate === 'subscriber' ||
-				gate === 'follower' ||
-				gate === 'logged_in' ||
-				gate === 'logged_in_no_role' ||
-				gate === 'has_tier' ||
-				gate === 'fanvue_connected' ||
-				gate === 'fanvue_not_connected' ||
-				gate === 'onboarding_incomplete' ||
-				gate === 'onboarding_complete'
-			) {
-				return '0';
-			}
+			return '0';
 		}
 
-		// For authenticated users, pre-hide role-gated content until live viewer state arrives.
-		// This preserves layout space and prevents visible shifts for matching subscribers.
 		if (!viewerState && (gate === 'subscriber' || gate === 'follower')) {
 			return 'pending';
 		}
 
-		// Role-driven gates must be derived from role payload, not stale match markers.
 		if (gate === 'subscriber') {
 			return hasSubscriberRole ? '1' : '0';
 		}
@@ -89,10 +141,7 @@
 				if (!json || json.success !== true || !json.data) {
 					return;
 				}
-				viewerState = {
-					loggedIn: !!json.data.logged_in,
-					roles: Array.isArray(json.data.roles) ? json.data.roles : []
-				};
+				viewerState = viewerStateFromAjaxData(json.data);
 				scanAndHide();
 			})
 			.catch(function () {
@@ -101,11 +150,11 @@
 	}
 
 	function scanAndHide() {
-		// Keep state consistent for dynamic re-renders by clearing previous results.
 		Array.prototype.slice
-			.call(document.querySelectorAll('.' + HIDDEN_CLASS))
+			.call(document.querySelectorAll('.' + HIDDEN_CLASS + ',.' + PREHIDE_CLASS))
 			.forEach(function (el) {
 				el.classList.remove(HIDDEN_CLASS);
+				el.classList.remove(PREHIDE_CLASS);
 			});
 
 		var markers = Array.prototype.slice.call(document.querySelectorAll(MARKER_SELECTOR));
@@ -113,19 +162,36 @@
 			return;
 		}
 
-		// Security-first behavior: only gate-wrapped content controls output.
-		// Do not infer/hide neighboring widgets, because sibling widgets may contain
-		// protected URLs that should never be emitted in HTML for unauthorized viewers.
-		// Gate markup itself is already rendered server-side by shortcode access checks.
-		markers.forEach(function () {});
+		var hiddenCount = 0;
+		markers.forEach(function (marker) {
+			var match = resolveEffectiveMatch(marker);
+			var shouldHide = match === '0';
+			var shouldPrehide = match === 'pending';
+			var container = findPreferredElementorContainer(marker);
+			if (!container) {
+				return;
+			}
+			if (shouldHide) {
+				container.classList.remove(PREHIDE_CLASS);
+				container.classList.add(HIDDEN_CLASS);
+				hiddenCount += 1;
+			} else if (shouldPrehide) {
+				container.classList.remove(HIDDEN_CLASS);
+				container.classList.add(PREHIDE_CLASS);
+			} else {
+				container.classList.remove(PREHIDE_CLASS);
+				container.classList.remove(HIDDEN_CLASS);
+			}
+		});
 
 		if (DEBUG) {
 			var now = Date.now();
 			if ( now - lastDebugLogMs > 1000 ) {
 				lastDebugLogMs = now;
 				// eslint-disable-next-line no-console
-				console.log('[CreatorReactor] gate inheritance scan:', {
-					markers: markers.length
+				console.log('[CreatorReactor] elementor gate inheritance scan:', {
+					markers: markers.length,
+					containersHidden: hiddenCount
 				});
 
 				markers.slice(0, 10).forEach(function (marker) {
@@ -141,17 +207,7 @@
 		}
 	}
 
-	function runInitialScan() {
-		if (document.readyState === 'loading') {
-			document.addEventListener('DOMContentLoaded', scanAndHide);
-		} else {
-			scanAndHide();
-		}
-	}
-
 	function main() {
-		// Elementor may render or re-render widgets after `DOMContentLoaded`.
-		// A MutationObserver makes this resilient in editor/preview and for dynamic pages.
 		var scheduled = false;
 		var scheduleScan = function () {
 			if (scheduled) {
@@ -169,7 +225,6 @@
 		}
 
 		var observer = new MutationObserver(function (mutations) {
-			// If a gate marker appears/disappears, re-scan.
 			for (var i = 0; i < mutations.length; i++) {
 				var m = mutations[i];
 				if (m.addedNodes && m.addedNodes.length) {
@@ -195,7 +250,6 @@
 			}
 			observer.observe(document.body, { childList: true, subtree: true });
 
-			// Retry scans shortly after load so we catch Elementor's first re-render.
 			var attempts = 0;
 			var maxAttempts = 10;
 			var attemptScan = function () {
@@ -210,12 +264,9 @@
 		startObserver();
 	}
 
-	// Ensure the hide CSS exists ASAP so we don't briefly show gated containers
-	// before our first scan runs.
 	ensureHideCss();
+	hydrateViewerStateFromMarkers();
 	refreshViewerState();
-	runInitialScan();
-	// Set up MutationObserver immediately. Elementor can render/re-render widgets after
-	// `DOMContentLoaded`, and waiting to attach observers can miss those updates.
+	scanAndHide();
 	main();
 })();

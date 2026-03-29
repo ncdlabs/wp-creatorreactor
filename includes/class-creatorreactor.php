@@ -35,10 +35,12 @@ class Plugin {
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-creatorreactor-blocks.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-editor-context.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-gated-content-cache.php';
+			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-role-impersonation.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-viewer-state.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-editor-blocks-prompt.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-creatorreactor-banner.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-privacy.php';
+			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-metrics-ingest.php';
 
 			Entitlements::maybe_migrate_fanvue_product_key();
 			Entitlements::maybe_migrate_legacy_follower_tier_stored();
@@ -54,10 +56,12 @@ class Plugin {
 			Blocks::init();
 			Editor_Blocks_Prompt::init();
 			Gated_Content_Cache::init();
+			Role_Impersonation::init();
 			Viewer_State::init();
 			Elementor_Integration::init();
 			Banner::init();
 			Privacy::init();
+			Metrics_Ingest::init();
 
 			add_filter( 'admin_url', [ __CLASS__, 'filter_admin_url_normalize_path_slashes' ], 5, 3 );
 

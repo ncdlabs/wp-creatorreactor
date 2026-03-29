@@ -1,6 +1,6 @@
 <?php
 /**
- * CreatorReactor Cloud settings body.
+ * CreatorReactor Cloud — account credentials (unlocked card).
  *
  * Expected variables: $option_name, $opts, $cloud_password_mask.
  *

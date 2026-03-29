@@ -24,7 +24,8 @@ final class BannerAndPluginRegressionTest extends BaseTestCase
 
     public function testBannerInitRegistersHooks(): void
     {
-        Functions\expect('add_action')->times(4);
+        Functions\expect('add_action')->times(5);
+        Functions\expect('add_filter')->once();
         Banner::init();
         self::assertTrue(true);
     }
@@ -105,6 +106,7 @@ final class BannerAndPluginRegressionTest extends BaseTestCase
         Functions\when('esc_url')->alias(static fn ($url) => (string) $url);
         Functions\when('esc_attr')->alias(static fn ($text) => (string) $text);
         Functions\when('__')->alias(static fn ($text) => (string) $text);
+        Functions\when('wp_kses')->alias(static fn ($html, $allowed) => (string) $html);
         if (! defined('CREATORREACTOR_PLUGIN_URL')) {
             define('CREATORREACTOR_PLUGIN_URL', 'https://example.com/wp-content/plugins/creatorreactor/');
         }
@@ -114,27 +116,42 @@ final class BannerAndPluginRegressionTest extends BaseTestCase
         $out = (string) ob_get_clean();
 
         self::assertStringContainsString('creatorreactor-oauth-banner', $out);
+        self::assertStringContainsString('creatorreactor-registration-alert-wrap--global', $out);
+        self::assertStringContainsString('creatorreactor-registration-alert', $out);
         self::assertStringContainsString('Dismiss', $out);
         self::assertStringContainsString('cr-logo.png', $out);
+        self::assertStringContainsString('creatorreactor-registration-alert-fix', $out);
     }
 
     public function testEnqueueAssetsRegistersScriptAndNoncePayload(): void
     {
+        $_SESSION = [];
         if (! defined('CREATORREACTOR_VERSION')) {
             define('CREATORREACTOR_VERSION', 'test-version');
         }
+        Functions\when('is_admin')->justReturn(true);
+        Functions\when('current_user_can')->justReturn(true);
+        Functions\when('get_option')->alias(
+            static fn ($key, $default = null) => $key === 'users_can_register' ? 0 : $default
+        );
         Functions\when('plugin_dir_url')->justReturn('https://example.com/wp-content/plugins/creatorreactor/');
         Functions\when('wp_register_style')->justReturn();
         Functions\when('wp_enqueue_style')->justReturn();
         Functions\when('wp_add_inline_style')->justReturn();
         Functions\expect('wp_enqueue_script')->once();
         Functions\when('wp_create_nonce')->justReturn('nonce-123');
+        Functions\when('admin_url')->justReturn('https://example.com/wp-admin/options-general.php');
+        Functions\when('__')->alias(static fn ($text, $domain = null): string => (string) $text);
         Functions\expect('wp_localize_script')
             ->once()
             ->with(
                 'creatorreactor-oauth-banner',
                 'creatorreactor_oauth_banner',
-                ['nonce' => 'nonce-123']
+                \Mockery::on(static function ($data): bool {
+                    return isset($data['nonce'], $data['settingsGeneralUrl'], $data['fixError'])
+                        && $data['nonce'] === 'nonce-123'
+                        && $data['settingsGeneralUrl'] === 'https://example.com/wp-admin/options-general.php';
+                })
             );
 
         Banner::enqueue_assets();

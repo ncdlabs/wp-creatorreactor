@@ -60,7 +60,7 @@ class Shortcodes {
 	 * @param string|null          $content Enclosed content.
 	 */
 	public static function follower( $atts, $content = null ) {
-		if ( ! is_user_logged_in() ) {
+		if ( ! Role_Impersonation::effective_is_logged_in_for_creatorreactor_gates() ) {
 			return '';
 		}
 		$uid = get_current_user_id();
@@ -68,7 +68,7 @@ class Shortcodes {
 		// - subscriber role should not receive follower content
 		// - follower role receives follower content
 		$user  = get_userdata( $uid );
-		$roles = ( $user && isset( $user->roles ) && is_array( $user->roles ) ) ? $user->roles : [];
+		$roles = ( $user instanceof \WP_User ) ? Role_Impersonation::get_effective_role_slugs_for_user( $user ) : [];
 		$has_subscriber_role = in_array( 'creatorreactor_subscriber', $roles, true );
 		$has_follower_role   = in_array( 'creatorreactor_follower', $roles, true );
 
@@ -86,7 +86,7 @@ class Shortcodes {
 	 * @param string|null          $content Enclosed content.
 	 */
 	public static function subscriber( $atts, $content = null ) {
-		if ( ! is_user_logged_in() ) {
+		if ( ! Role_Impersonation::effective_is_logged_in_for_creatorreactor_gates() ) {
 			return '';
 		}
 		$uid = get_current_user_id();
@@ -94,7 +94,7 @@ class Shortcodes {
 		// - only creatorreactor_subscriber role receives subscriber content
 		// - follower role should not receive subscriber content
 		$user  = get_userdata( $uid );
-		$roles = ( $user && isset( $user->roles ) && is_array( $user->roles ) ) ? $user->roles : [];
+		$roles = ( $user instanceof \WP_User ) ? Role_Impersonation::get_effective_role_slugs_for_user( $user ) : [];
 		$has_subscriber_role = in_array( 'creatorreactor_subscriber', $roles, true );
 		$has_follower_role   = in_array( 'creatorreactor_follower', $roles, true );
 
@@ -112,7 +112,7 @@ class Shortcodes {
 	 * @param string|null           $content Enclosed content.
 	 */
 	public static function logged_out( $atts, $content = null ) {
-		if ( is_user_logged_in() ) {
+		if ( Role_Impersonation::effective_is_logged_in_for_creatorreactor_gates() ) {
 			return '';
 		}
 		return self::render_enclosed( $content );
@@ -123,7 +123,7 @@ class Shortcodes {
 	 * @param string|null           $content Enclosed content.
 	 */
 	public static function logged_in( $atts, $content = null ) {
-		if ( ! is_user_logged_in() ) {
+		if ( ! Role_Impersonation::effective_is_logged_in_for_creatorreactor_gates() ) {
 			return '';
 		}
 		return self::render_enclosed( $content );
@@ -134,7 +134,7 @@ class Shortcodes {
 	 * @param string|null           $content Enclosed content.
 	 */
 	public static function logged_in_no_role( $atts, $content = null ) {
-		if ( ! is_user_logged_in() ) {
+		if ( ! Role_Impersonation::effective_is_logged_in_for_creatorreactor_gates() ) {
 			return '';
 		}
 		if ( self::user_has_any_active_entitlement( get_current_user_id() ) ) {
@@ -157,7 +157,7 @@ class Shortcodes {
 	 * @param string|null           $content Enclosed content.
 	 */
 	public static function fanvue_connected( $atts, $content = null ) {
-		if ( ! is_user_logged_in() ) {
+		if ( ! Role_Impersonation::effective_is_logged_in_for_creatorreactor_gates() ) {
 			return '';
 		}
 		$linked = get_user_meta( get_current_user_id(), Onboarding::META_FANVUE_OAUTH_LINKED, true );
@@ -172,7 +172,7 @@ class Shortcodes {
 	 * @param string|null           $content Enclosed content.
 	 */
 	public static function fanvue_not_connected( $atts, $content = null ) {
-		if ( ! is_user_logged_in() ) {
+		if ( ! Role_Impersonation::effective_is_logged_in_for_creatorreactor_gates() ) {
 			return '';
 		}
 		$linked = get_user_meta( get_current_user_id(), Onboarding::META_FANVUE_OAUTH_LINKED, true );
@@ -190,7 +190,7 @@ class Shortcodes {
 			return '<p class="creatorreactor-fanvue-oauth-unavailable">' . esc_html__( 'Login with Fanvue is not available in Agency (broker) mode.', 'creatorreactor' ) . '</p>';
 		}
 
-		if ( is_user_logged_in() ) {
+		if ( Role_Impersonation::effective_is_logged_in_for_creatorreactor_gates() ) {
 			$dashboard = admin_url();
 			$home      = home_url( '/' );
 			return '<p class="creatorreactor-fanvue-oauth-wrap creatorreactor-fanvue-oauth-logged-in">'

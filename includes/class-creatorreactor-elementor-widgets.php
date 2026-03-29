@@ -72,13 +72,7 @@ abstract class Elementor_Widget_Shortcode_Wrap extends \Elementor\Widget_Base {
 		if ( $container_logic !== 'and' && $container_logic !== 'or' ) {
 			$container_logic = 'and';
 		}
-		$roles = '';
-		if ( is_user_logged_in() ) {
-			$user = wp_get_current_user();
-			if ( $user && ! empty( $user->roles ) && is_array( $user->roles ) ) {
-				$roles = implode( ',', array_map( 'sanitize_key', $user->roles ) );
-			}
-		}
+		$roles = Role_Impersonation::get_effective_roles_csv_for_logged_in_user();
 		// Determine gate-match independently from the widget's enclosed content.
 		// This ensures container inheritance works even if the widget's content is empty.
 		$probe_shortcode = '[' . $tag . ']__creatorreactor_gate_probe__[/'.$tag.']';
@@ -311,13 +305,7 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 			if ( $container_logic !== 'and' && $container_logic !== 'or' ) {
 				$container_logic = 'and';
 			}
-			$roles = '';
-			if ( is_user_logged_in() ) {
-				$user = wp_get_current_user();
-				if ( $user && ! empty( $user->roles ) && is_array( $user->roles ) ) {
-					$roles = implode( ',', array_map( 'sanitize_key', $user->roles ) );
-				}
-			}
+			$roles = Role_Impersonation::get_effective_roles_csv_for_logged_in_user();
 
 			$tag   = $this->shortcode_tag();
 			// Determine gate-match independently from the nested slot's enclosed content.
@@ -584,13 +572,7 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 			if ( $container_logic !== 'and' && $container_logic !== 'or' ) {
 				$container_logic = 'and';
 			}
-			$roles = '';
-			if ( is_user_logged_in() ) {
-				$user = wp_get_current_user();
-				if ( $user && ! empty( $user->roles ) && is_array( $user->roles ) ) {
-					$roles = implode( ',', array_map( 'sanitize_key', $user->roles ) );
-				}
-			}
+			$roles = Role_Impersonation::get_effective_roles_csv_for_logged_in_user();
 			// Determine match independently from the nested slot's enclosed content.
 			// This ensures container inheritance works even if slot content is empty.
 			$probe = Shortcodes::has_tier(
@@ -780,13 +762,7 @@ final class Elementor_Widget_Has_Tier_Legacy extends \Elementor\Widget_Base {
 		if ( $container_logic !== 'and' && $container_logic !== 'or' ) {
 			$container_logic = 'and';
 		}
-		$roles = '';
-		if ( is_user_logged_in() ) {
-			$user = wp_get_current_user();
-			if ( $user && ! empty( $user->roles ) && is_array( $user->roles ) ) {
-				$roles = implode( ',', array_map( 'sanitize_key', $user->roles ) );
-			}
-		}
+		$roles = Role_Impersonation::get_effective_roles_csv_for_logged_in_user();
 
 		// Determine match independently from the widget's enclosed content.
 		// This ensures container inheritance works even if widget content is empty.

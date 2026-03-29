@@ -464,9 +464,16 @@ class CreatorReactor_OAuth {
 
 	private static function settings_redirect_url( array $query_args = [] ) {
 		$url = admin_url( 'admin.php?page=' . Admin_Settings::PAGE_SETTINGS_SLUG );
-		if ( ! empty( $query_args ) ) {
-			$url = add_query_arg( $query_args, $url );
-		}
+		$url = add_query_arg(
+			array_merge(
+				[
+					'tab'    => 'settings',
+					'subtab' => 'oauth',
+				],
+				$query_args
+			),
+			$url
+		);
 		return $url . '#direct';
 	}
 
