@@ -40,20 +40,10 @@ class Blocks {
 			false
 		);
 
-		$roles = [];
-		if ( is_user_logged_in() ) {
-			$user = wp_get_current_user();
-			if ( $user && ! empty( $user->roles ) && is_array( $user->roles ) ) {
-				$roles = array_values( array_map( 'sanitize_key', $user->roles ) );
-			}
-		}
-		$viewer_state_bootstrap = [
-			'loggedIn' => is_user_logged_in(),
-			'roles'    => $roles,
-		];
+		$viewer_state_bootstrap = Viewer_State::bootstrap_for_inline_script();
 		wp_add_inline_script(
 			'creatorreactor-gutenberg-gates-inheritance',
-			'window.CreatorReactorViewerState = window.CreatorReactorViewerState || ' . wp_json_encode( $viewer_state_bootstrap ) . ';',
+			'window.CreatorReactorViewerState = ' . wp_json_encode( $viewer_state_bootstrap ) . ';',
 			'before'
 		);
 	}
@@ -321,13 +311,13 @@ class Blocks {
 	 */
 	public static function render_follower( $attributes, $content, $_block ) {
 		$out = '';
-		if ( is_user_logged_in() ) {
+		if ( Role_Impersonation::effective_is_logged_in_for_creatorreactor_gates() ) {
 			$uid = get_current_user_id();
 			// Strict role-only behavior:
 			// - subscriber role should not receive follower content
 			// - follower role receives follower content
 			$user  = get_userdata( $uid );
-			$roles = ( $user && isset( $user->roles ) && is_array( $user->roles ) ) ? $user->roles : [];
+			$roles = ( $user instanceof \WP_User ) ? Role_Impersonation::get_effective_role_slugs_for_user( $user ) : [];
 			$has_subscriber_role = in_array( 'creatorreactor_subscriber', $roles, true );
 			$has_follower_role   = in_array( 'creatorreactor_follower', $roles, true );
 
@@ -347,13 +337,13 @@ class Blocks {
 	 */
 	public static function render_subscriber( $attributes, $content, $_block ) {
 		$out = '';
-		if ( is_user_logged_in() ) {
+		if ( Role_Impersonation::effective_is_logged_in_for_creatorreactor_gates() ) {
 			$uid = get_current_user_id();
 			// Strict role-only behavior:
 			// - subscriber role receives subscriber content
 			// - follower role should not receive subscriber content
 			$user  = get_userdata( $uid );
-			$roles = ( $user && isset( $user->roles ) && is_array( $user->roles ) ) ? $user->roles : [];
+			$roles = ( $user instanceof \WP_User ) ? Role_Impersonation::get_effective_role_slugs_for_user( $user ) : [];
 			$has_subscriber_role = in_array( 'creatorreactor_subscriber', $roles, true );
 
 			if ( $has_subscriber_role ) {
@@ -372,7 +362,7 @@ class Blocks {
 	 */
 	public static function render_logged_in_no_role( $attributes, $content, $_block ) {
 		$out = '';
-		if ( is_user_logged_in() ) {
+		if ( Role_Impersonation::effective_is_logged_in_for_creatorreactor_gates() ) {
 			if ( ! self::user_has_any_active_entitlement( get_current_user_id() ) ) {
 				$out = self::render_inner_content( $content );
 			}
@@ -389,7 +379,7 @@ class Blocks {
 	 */
 	public static function render_logged_out( $attributes, $content, $_block ) {
 		$out = '';
-		if ( ! is_user_logged_in() ) {
+		if ( ! Role_Impersonation::effective_is_logged_in_for_creatorreactor_gates() ) {
 			$out = self::render_inner_content( $content );
 		}
 		$matched = trim( (string) $out ) !== '';
@@ -404,7 +394,7 @@ class Blocks {
 	 */
 	public static function render_logged_in( $attributes, $content, $_block ) {
 		$out = '';
-		if ( is_user_logged_in() ) {
+		if ( Role_Impersonation::effective_is_logged_in_for_creatorreactor_gates() ) {
 			$out = self::render_inner_content( $content );
 		}
 		$matched = trim( (string) $out ) !== '';
@@ -446,7 +436,7 @@ class Blocks {
 	 */
 	public static function render_onboarding_complete( $attributes, $content, $_block ) {
 		$out = '';
-		if ( is_user_logged_in() ) {
+		if ( Role_Impersonation::effective_is_logged_in_for_creatorreactor_gates() ) {
 			// Onboarding visibility gates are disabled; treat logged-in users as complete.
 			$out = self::render_inner_content( $content );
 		}
@@ -462,7 +452,7 @@ class Blocks {
 	 */
 	public static function render_fanvue_connected( $attributes, $content, $_block ) {
 		$out = '';
-		if ( is_user_logged_in() ) {
+		if ( Role_Impersonation::effective_is_logged_in_for_creatorreactor_gates() ) {
 			$linked = get_user_meta( get_current_user_id(), Onboarding::META_FANVUE_OAUTH_LINKED, true );
 			if ( $linked === '1' || $linked === 1 || $linked === true ) {
 				$out = self::render_inner_content( $content );
@@ -480,7 +470,7 @@ class Blocks {
 	 */
 	public static function render_fanvue_not_connected( $attributes, $content, $_block ) {
 		$out = '';
-		if ( is_user_logged_in() ) {
+		if ( Role_Impersonation::effective_is_logged_in_for_creatorreactor_gates() ) {
 			$linked = get_user_meta( get_current_user_id(), Onboarding::META_FANVUE_OAUTH_LINKED, true );
 			if ( $linked !== '1' && $linked !== 1 && $linked !== true ) {
 				$out = self::render_inner_content( $content );
@@ -545,13 +535,7 @@ class Blocks {
 		$match_str = $matched ? '1' : '0';
 		$logic     = $logic === 'or' ? 'or' : 'and';
 
-		$roles = '';
-		if ( is_user_logged_in() ) {
-			$user = wp_get_current_user();
-			if ( $user && ! empty( $user->roles ) && is_array( $user->roles ) ) {
-				$roles = implode( ',', array_map( 'sanitize_key', $user->roles ) );
-			}
-		}
+		$roles = Role_Impersonation::get_effective_roles_csv_for_logged_in_user();
 
 		return '<span class="creatorreactor-gutenberg-gate-marker"'
 			. ' data-creatorreactor-gate="' . esc_attr( $gate ) . '"'

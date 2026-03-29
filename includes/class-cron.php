@@ -145,6 +145,8 @@ class Cron {
 	}
 
 	public static function run_sync() {
+		$sync_start = microtime( true );
+		$ok           = false;
 		try {
 			$ok = self::sync_entitlements_now();
 			if ( $ok ) {
@@ -157,6 +159,17 @@ class Cron {
 			}
 			Admin_Settings::set_last_error( 'Sync failed: ' . $e->getMessage() );
 			update_option( Admin_Settings::OPTION_LAST_SYNC, [ 'time' => time(), 'success' => false ] );
+			$ok = false;
 		}
+
+		$duration_ms = (int) round( ( microtime( true ) - $sync_start ) * 1000 );
+		do_action(
+			'creatorreactor_after_scheduled_sync',
+			[
+				'success'      => $ok,
+				'duration_ms'  => $duration_ms,
+				'completed_at' => time(),
+			]
+		);
 	}
 }

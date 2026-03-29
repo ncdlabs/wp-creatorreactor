@@ -36,7 +36,23 @@ class Admin_Settings {
 	const LOG_TYPE_ERROR              = 'error';
 	const OPTION_TIERS               = 'creatorreactor_tiers';
 	const OPTION_SUBSCRIPTION_TIERS  = 'creatorreactor_subscription_tiers';
-	const ENCRYPTED_FIELDS            = [ 'creatorreactor_oauth_client_id', 'creatorreactor_oauth_client_secret', 'creatorreactor_cloud_password' ];
+	const ENCRYPTED_FIELDS            = [ 'creatorreactor_oauth_client_id', 'creatorreactor_oauth_client_secret', 'creatorreactor_cloud_password', 'creatorreactor_metrics_ingest_token' ];
+	/** Default Schema Service base URL (local compose publishes the API on host port 18080). */
+	const DEFAULT_SCHEMA_SERVICE_URL = 'http://localhost:18080';
+	/**
+	 * Env var: override base URL for server-side HTTP to the schema service (e.g. WordPress in Docker must use http://schema-service:8080, not localhost:18080).
+	 */
+	const ENV_SCHEMA_SERVICE_URL = 'CREATORREACTOR_SCHEMA_SERVICE_URL';
+	/** Default metrics ingest base URL (empty = disabled unless env provides a URL). */
+	const DEFAULT_METRICS_INGEST_URL = '';
+	/**
+	 * Env var: override base URL for server-side HTTP to the metrics edge (e.g. http://data-ingestion:8080 in Compose).
+	 */
+	const ENV_METRICS_INGEST_URL = 'CREATORREACTOR_METRICS_INGEST_URL';
+	/**
+	 * Env var: bearer token for metrics ingest (optional; otherwise use saved encrypted token in settings).
+	 */
+	const ENV_METRICS_INGEST_TOKEN = 'CREATORREACTOR_METRICS_INGEST_TOKEN';
 	/** @var string Mirrors {@see CreatorReactor_OAuth::DEFAULT_SCOPES} (Fanvue quick start; add read:fan in Advanced if your app allows it). */
 	const DEFAULT_CREATORREACTOR_SCOPES = CreatorReactor_OAuth::DEFAULT_SCOPES;
 	const PAGE_SLUG                   = 'creatorreactor';
@@ -44,6 +60,11 @@ class Admin_Settings {
 	const PAGE_SETTINGS_SLUG          = 'creatorreactor-settings';
 	/** @var string User meta: list of ignored integration check IDs (array of string slugs). */
 	const USER_META_INTEGRATION_CHECKS_IGNORED = 'creatorreactor_integration_checks_ignored';
+	/**
+	 * When set to "1", role registration was deferred until integration onboarding is acknowledged
+	 * (see {@see Admin_Settings::run_deferred_activation_roles_only()}).
+	 */
+	const OPTION_DEFERRED_ACTIVATION_PENDING = 'creatorreactor_deferred_activation_pending';
 
 	/** Form value authentication_mode maps to stored broker_mode (Agency = true). */
 	const AUTH_MODE_CREATOR = 'creator';
@@ -132,6 +153,9 @@ class Admin_Settings {
 		add_action( 'wp_ajax_creatorreactor_get_user_entitlement_details', [ __CLASS__, 'ajax_get_user_entitlement_details' ] );
 		add_action( 'wp_ajax_creatorreactor_integration_fix', [ __CLASS__, 'ajax_integration_fix' ] );
 		add_action( 'wp_ajax_creatorreactor_integration_check_ignore', [ __CLASS__, 'ajax_integration_check_ignore' ] );
+		add_action( 'wp_ajax_creatorreactor_onboarding_apply_fixes', [ __CLASS__, 'ajax_onboarding_apply_fixes' ] );
+		add_action( 'wp_ajax_creatorreactor_onboarding_ignore_checks', [ __CLASS__, 'ajax_onboarding_ignore_failing_checks' ] );
+		add_action( 'wp_ajax_creatorreactor_debug_schema_manifest', [ __CLASS__, 'ajax_debug_schema_manifest' ] );
 		add_action( 'show_user_profile', [ __CLASS__, 'render_user_profile_creatorreactor_uuid_field' ] );
 		add_action( 'edit_user_profile', [ __CLASS__, 'render_user_profile_creatorreactor_uuid_field' ] );
 		add_action( 'admin_init', [ __CLASS__, 'maybe_redirect_creatorreactor_users_from_wp_admin' ], 1 );
@@ -273,39 +297,29 @@ class Admin_Settings {
 	}
 
 	/**
-	 * Apply an automated integration-check fix (AJAX).
+	 * Run a single AJAX integration fix (same IDs as {@see ajax_integration_fix()}).
+	 *
+	 * @param string $fix_id membership_signup|creatorreactor_roles_register|default_role_creatorreactor|social_login_enable_wp_login
+	 * @return true|\WP_Error
 	 */
-	public static function ajax_integration_fix() {
-		check_ajax_referer( 'creatorreactor_integration_fix', 'nonce' );
-		if ( ! current_user_can( 'manage_options' ) ) {
-			wp_send_json_error( [ 'message' => __( 'Forbidden.', 'creatorreactor' ) ], 403 );
-		}
-
-		$fix_id = isset( $_POST['fix_id'] ) ? sanitize_key( wp_unslash( $_POST['fix_id'] ) ) : '';
-		$allowed_ajax = [ 'membership_signup', 'creatorreactor_roles_register', 'default_role_creatorreactor', 'social_login_enable_wp_login' ];
-		if ( ! in_array( $fix_id, $allowed_ajax, true ) ) {
-			wp_send_json_error( [ 'message' => __( 'This fix cannot be run from here.', 'creatorreactor' ) ], 400 );
-		}
-
+	private static function run_integration_ajax_fix( $fix_id ) {
 		switch ( $fix_id ) {
 			case 'membership_signup':
 				update_option( 'users_can_register', 1 );
-				break;
+				return true;
 			case 'creatorreactor_roles_register':
 				$still_missing = self::register_missing_creatorreactor_roles();
 				if ( ! empty( $still_missing ) ) {
-					wp_send_json_error(
-						[
-							'message' => sprintf(
-								/* translators: %s: comma-separated role slugs */
-								__( 'Could not register all roles. Still missing: %s.', 'creatorreactor' ),
-								implode( ', ', $still_missing )
-							),
-						],
-						500
+					return new \WP_Error(
+						'roles',
+						sprintf(
+							/* translators: %s: comma-separated role slugs */
+							__( 'Could not register all roles. Still missing: %s.', 'creatorreactor' ),
+							implode( ', ', $still_missing )
+						)
 					);
 				}
-				break;
+				return true;
 			case 'default_role_creatorreactor':
 				$roles = wp_roles();
 				$target = '';
@@ -324,22 +338,197 @@ class Admin_Settings {
 					}
 				}
 				if ( $target === '' ) {
-					wp_send_json_error( [ 'message' => __( 'No creatorreactor_* role exists yet. Activate CreatorReactor or create the role before setting it as default.', 'creatorreactor' ) ], 400 );
+					return new \WP_Error(
+						'no_role',
+						__( 'No creatorreactor_* role exists yet. Activate CreatorReactor or create the role before setting it as default.', 'creatorreactor' )
+					);
 				}
 				update_option( 'default_role', $target );
-				break;
+				return true;
 			case 'social_login_enable_wp_login':
 				if ( ! self::is_fan_social_login_configured() ) {
-					wp_send_json_error( [ 'message' => __( 'Fanvue OAuth is not configured. Add Client ID and Secret first.', 'creatorreactor' ) ], 400 );
+					return new \WP_Error(
+						'oauth',
+						__( 'Fanvue OAuth is not configured. Add Client ID and Secret first.', 'creatorreactor' )
+					);
 				}
 				$sanitized = self::sanitize_options( [ 'replace_wp_login_with_social' => 1 ] );
 				update_option( self::OPTION_NAME, $sanitized );
-				break;
+				return true;
 			default:
-				wp_send_json_error( [ 'message' => __( 'Unknown fix.', 'creatorreactor' ) ], 400 );
+				return new \WP_Error( 'unknown', __( 'Unknown fix.', 'creatorreactor' ) );
+		}
+	}
+
+	/**
+	 * Apply an automated integration-check fix (AJAX).
+	 */
+	public static function ajax_integration_fix() {
+		check_ajax_referer( 'creatorreactor_integration_fix', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( [ 'message' => __( 'Forbidden.', 'creatorreactor' ) ], 403 );
+		}
+
+		$fix_id = isset( $_POST['fix_id'] ) ? sanitize_key( wp_unslash( $_POST['fix_id'] ) ) : '';
+		$allowed_ajax = self::get_integration_ajax_remediable_fix_ids_ordered();
+		if ( ! in_array( $fix_id, $allowed_ajax, true ) ) {
+			wp_send_json_error( [ 'message' => __( 'This fix cannot be run from here.', 'creatorreactor' ) ], 400 );
+		}
+
+		$result = self::run_integration_ajax_fix( $fix_id );
+		if ( is_wp_error( $result ) ) {
+			$code = $result->get_error_code();
+			$status = ( $code === 'roles' ) ? 500 : 400;
+			wp_send_json_error( [ 'message' => $result->get_error_message() ], $status );
 		}
 
 		wp_send_json_success( [ 'message' => __( 'Fix applied.', 'creatorreactor' ) ] );
+	}
+
+	/**
+	 * Integration fix IDs that {@see ajax_onboarding_apply_fixes()} can run (order preserved).
+	 *
+	 * @return array<int, string>
+	 */
+	private static function get_integration_ajax_remediable_fix_ids_ordered() {
+		return [ 'membership_signup', 'creatorreactor_roles_register', 'default_role_creatorreactor', 'social_login_enable_wp_login' ];
+	}
+
+	/**
+	 * Data for the post-activation integration onboarding modal (remediable rows + other failing count).
+	 *
+	 * @return array{remediable_rows: array<int, array{check_id: string, fix_id: string, label: string, message: string}>, other_red_count: int}
+	 */
+	public static function get_integration_onboarding_modal_data() {
+		$order = self::get_integration_ajax_remediable_fix_ids_ordered();
+		$flip  = array_fill_keys( $order, true );
+		$state = self::compute_integration_checks_lists();
+		$by_fix = [];
+		$other_red = 0;
+		foreach ( $state['checks'] as $check ) {
+			if ( ( $check['raw_status'] ?? '' ) !== 'red' ) {
+				continue;
+			}
+			$fid = isset( $check['fix_id'] ) ? (string) $check['fix_id'] : '';
+			if ( $fid !== '' && isset( $flip[ $fid ] ) ) {
+				$by_fix[ $fid ] = [
+					'check_id' => isset( $check['check_id'] ) ? (string) $check['check_id'] : '',
+					'fix_id'   => $fid,
+					'label'    => isset( $check['label'] ) ? (string) $check['label'] : '',
+					'message'  => isset( $check['message'] ) ? (string) $check['message'] : '',
+				];
+			} else {
+				++$other_red;
+			}
+		}
+		$remediable = [];
+		foreach ( $order as $fid ) {
+			if ( isset( $by_fix[ $fid ] ) ) {
+				$remediable[] = $by_fix[ $fid ];
+			}
+		}
+		return [
+			'remediable_rows' => $remediable,
+			'other_red_count' => $other_red,
+		];
+	}
+
+	/**
+	 * Post-activation onboarding: apply every applicable AJAX integration fix for currently failing checks.
+	 */
+	public static function ajax_onboarding_apply_fixes() {
+		check_ajax_referer( 'creatorreactor_onboarding_integration', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( [ 'message' => __( 'Forbidden.', 'creatorreactor' ) ], 403 );
+		}
+		// Explicit intent only (ignore / other flows must not POST this flag).
+		if ( ! isset( $_POST['apply_integration_fixes'] ) || (string) wp_unslash( $_POST['apply_integration_fixes'] ) !== '1' ) {
+			wp_send_json_error( [ 'message' => __( 'Invalid request.', 'creatorreactor' ) ], 400 );
+		}
+
+		self::run_deferred_activation_roles_only();
+
+		$order = self::get_integration_ajax_remediable_fix_ids_ordered();
+		$state = self::compute_integration_checks_lists();
+		$needed = [];
+		foreach ( $state['checks'] as $check ) {
+			if ( ( $check['raw_status'] ?? '' ) !== 'red' ) {
+				continue;
+			}
+			$fid = isset( $check['fix_id'] ) ? (string) $check['fix_id'] : '';
+			if ( $fid !== '' && in_array( $fid, $order, true ) ) {
+				$needed[ $fid ] = true;
+			}
+		}
+
+		$applied   = [];
+		$warnings  = [];
+		foreach ( $order as $fid ) {
+			if ( empty( $needed[ $fid ] ) ) {
+				continue;
+			}
+			$r = self::run_integration_ajax_fix( $fid );
+			if ( is_wp_error( $r ) ) {
+				$warnings[] = $r->get_error_message();
+			} else {
+				$applied[] = $fid;
+			}
+		}
+
+		wp_send_json_success(
+			[
+				'applied'    => $applied,
+				'warnings' => $warnings,
+			]
+		);
+	}
+
+	/**
+	 * Post-activation onboarding: mark all currently failing checks as ignored for this admin.
+	 */
+	public static function ajax_onboarding_ignore_failing_checks() {
+		check_ajax_referer( 'creatorreactor_onboarding_integration', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( [ 'message' => __( 'Forbidden.', 'creatorreactor' ) ], 403 );
+		}
+
+		self::run_deferred_activation_roles_only();
+
+		$state   = self::compute_integration_checks_lists();
+		$allowed = array_flip( self::get_integration_check_id_whitelist() );
+		$current = self::get_ignored_integration_check_ids();
+		foreach ( $state['checks'] as $check ) {
+			if ( ( $check['raw_status'] ?? '' ) !== 'red' ) {
+				continue;
+			}
+			$cid = isset( $check['check_id'] ) ? sanitize_key( (string) $check['check_id'] ) : '';
+			if ( $cid !== '' && isset( $allowed[ $cid ] ) ) {
+				$current[] = $cid;
+			}
+		}
+		self::set_ignored_integration_check_ids_for_current_user( array_values( array_unique( $current ) ) );
+		wp_send_json_success();
+	}
+
+	/**
+	 * Failing integration checks (raw red) for the activation onboarding modal.
+	 *
+	 * @return array<int, array{check_id: string, label: string, message: string}>
+	 */
+	public static function get_integration_onboarding_failing_rows() {
+		$state = self::compute_integration_checks_lists();
+		$out   = [];
+		foreach ( $state['checks'] as $check ) {
+			if ( ( $check['raw_status'] ?? '' ) !== 'red' ) {
+				continue;
+			}
+			$out[] = [
+				'check_id' => isset( $check['check_id'] ) ? (string) $check['check_id'] : '',
+				'label'    => isset( $check['label'] ) ? (string) $check['label'] : '',
+				'message'  => isset( $check['message'] ) ? (string) $check['message'] : '',
+			];
+		}
+		return $out;
 	}
 
 	/**
@@ -380,6 +569,29 @@ class Admin_Settings {
 	 */
 	public static function activate_register_standard_roles() {
 		self::register_missing_creatorreactor_roles();
+	}
+
+	/**
+	 * Enable “Anyone can register” (same as the membership Integration Check fix). Not run on plugin
+	 * activation; use the onboarding “Next” fixes or apply the check from Integration Checks.
+	 */
+	public static function activate_apply_integration_defaults() {
+		update_option( 'users_can_register', 1 );
+	}
+
+	/**
+	 * Register CreatorReactor roles once deferred activation is allowed (after integration onboarding
+	 * is acknowledged or the admin reaches the integration-checks experience). Idempotent.
+	 *
+	 * Does not enable membership registration or change default role; those are only applied via
+	 * Integration Checks fixes / onboarding “Next”, not on plugin activation.
+	 */
+	public static function run_deferred_activation_roles_only() {
+		if ( get_option( self::OPTION_DEFERRED_ACTIVATION_PENDING, '' ) !== '1' ) {
+			return;
+		}
+		self::activate_register_standard_roles();
+		delete_option( self::OPTION_DEFERRED_ACTIVATION_PENDING );
 	}
 
 	/**
@@ -483,6 +695,250 @@ class Admin_Settings {
 	}
 
 	/**
+	 * Read an environment variable as seen by PHP (Docker/Apache often populate $_SERVER but not getenv()).
+	 *
+	 * @param string $name Variable name.
+	 * @return string Trimmed value or empty string.
+	 */
+	private static function read_process_env( $name ) {
+		$name = (string) $name;
+		if ( $name === '' ) {
+			return '';
+		}
+		$v = getenv( $name );
+		if ( is_string( $v ) ) {
+			$v = trim( $v );
+			if ( $v !== '' ) {
+				return $v;
+			}
+		}
+		if ( isset( $_SERVER[ $name ] ) && is_string( $_SERVER[ $name ] ) ) {
+			$v = trim( (string) $_SERVER[ $name ] );
+			if ( $v !== '' ) {
+				return $v;
+			}
+		}
+		if ( isset( $_ENV[ $name ] ) && is_string( $_ENV[ $name ] ) ) {
+			$v = trim( (string) $_ENV[ $name ] );
+			if ( $v !== '' ) {
+				return $v;
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * True when the stack looks like official Compose (wordpress + db service): host DB is `db` or `db:port`.
+	 *
+	 * @return bool
+	 */
+	private static function is_likely_compose_wordpress_container() {
+		$db_host = self::read_process_env( 'WORDPRESS_DB_HOST' );
+		return $db_host !== '' && (bool) preg_match( '/^db(?::\d+)?$/', $db_host );
+	}
+
+	/**
+	 * True when the saved schema base URL points at the host-only port from inside a Compose WP container.
+	 *
+	 * @param string $base Sanitized URL.
+	 * @return bool
+	 */
+	private static function should_rewrite_localhost_schema_port_to_internal( $base ) {
+		if ( ! self::is_likely_compose_wordpress_container() ) {
+			return false;
+		}
+		$parts = wp_parse_url( $base );
+		if ( ! is_array( $parts ) || empty( $parts['host'] ) ) {
+			return false;
+		}
+		$host = strtolower( (string) $parts['host'] );
+		if ( $host !== 'localhost' && $host !== '127.0.0.1' ) {
+			return false;
+		}
+		$port = isset( $parts['port'] ) ? (int) $parts['port'] : 0;
+		return $port === 18080;
+	}
+
+	/**
+	 * Base URL for server-side requests to the schema service (wp_remote_get, etc.).
+	 *
+	 * When {@see Admin_Settings::ENV_SCHEMA_SERVICE_URL} is set (typical: Docker/Podman Compose), it wins over
+	 * the saved option so PHP inside the WordPress container can reach `http://schema-service:8080` instead of
+	 * `localhost:18080` (host port is not visible as localhost from another container).
+	 *
+	 * If the env var is missing (Apache often does not pass Compose env to getenv()), we still rewrite the
+	 * default host URL when {@see Admin_Settings::is_likely_compose_wordpress_container()} is true.
+	 *
+	 * @return string Untrailingslashit URL.
+	 */
+	public static function get_schema_service_url_for_requests() {
+		$from_env = self::read_process_env( self::ENV_SCHEMA_SERVICE_URL );
+		if ( $from_env !== '' ) {
+			return untrailingslashit( esc_url_raw( $from_env ) );
+		}
+
+		$opts = get_option( self::OPTION_NAME, [] );
+		$base = isset( $opts['creatorreactor_schema_service_url'] ) ? trim( (string) $opts['creatorreactor_schema_service_url'] ) : '';
+		if ( $base === '' ) {
+			$base = self::DEFAULT_SCHEMA_SERVICE_URL;
+		}
+		$base = esc_url_raw( $base );
+
+		if ( self::should_rewrite_localhost_schema_port_to_internal( $base ) ) {
+			return untrailingslashit( esc_url_raw( 'http://schema-service:8080' ) );
+		}
+
+		return untrailingslashit( $base );
+	}
+
+	/**
+	 * True when the saved metrics ingest URL points at the host-only port from inside a Compose WP container.
+	 *
+	 * @param string $base Sanitized URL.
+	 * @return bool
+	 */
+	private static function should_rewrite_localhost_metrics_port_to_internal( $base ) {
+		if ( ! self::is_likely_compose_wordpress_container() ) {
+			return false;
+		}
+		$parts = wp_parse_url( $base );
+		if ( ! is_array( $parts ) || empty( $parts['host'] ) ) {
+			return false;
+		}
+		$host = strtolower( (string) $parts['host'] );
+		if ( $host !== 'localhost' && $host !== '127.0.0.1' ) {
+			return false;
+		}
+		$port = isset( $parts['port'] ) ? (int) $parts['port'] : 0;
+		return $port === 18081;
+	}
+
+	/**
+	 * Base URL for metrics ingest HTTP requests (wp_remote_post to the edge service).
+	 *
+	 * When {@see Admin_Settings::ENV_METRICS_INGEST_URL} is set, it wins over the saved option.
+	 *
+	 * @return string Untrailingslashit URL or empty string when not configured.
+	 */
+	public static function get_metrics_ingest_url_for_requests() {
+		$from_env = self::read_process_env( self::ENV_METRICS_INGEST_URL );
+		if ( $from_env !== '' ) {
+			return untrailingslashit( esc_url_raw( $from_env ) );
+		}
+
+		$opts = get_option( self::OPTION_NAME, [] );
+		$base = isset( $opts['creatorreactor_metrics_ingest_url'] ) ? trim( (string) $opts['creatorreactor_metrics_ingest_url'] ) : '';
+		if ( $base === '' ) {
+			return '';
+		}
+		$base = esc_url_raw( $base );
+
+		if ( self::should_rewrite_localhost_metrics_port_to_internal( $base ) ) {
+			return untrailingslashit( esc_url_raw( 'http://data-ingestion:8080' ) );
+		}
+
+		return untrailingslashit( $base );
+	}
+
+	/**
+	 * Bearer token for metrics ingest (env overrides saved option).
+	 *
+	 * @return string
+	 */
+	public static function get_metrics_ingest_token_for_requests() {
+		$from_env = self::read_process_env( self::ENV_METRICS_INGEST_TOKEN );
+		if ( $from_env !== '' ) {
+			return $from_env;
+		}
+		$opts = self::get_options();
+		return isset( $opts['creatorreactor_metrics_ingest_token'] ) ? trim( (string) $opts['creatorreactor_metrics_ingest_token'] ) : '';
+	}
+
+	/**
+	 * GET /v1/schema from the configured schema service (CreatorReactor Cloud).
+	 *
+	 * @param bool $cache_bust When true, append a cache-busting query argument for refresh requests.
+	 * @return array{ok:bool,http_code:int,spec_version:string,body:string,error:string}
+	 */
+	private static function fetch_schema_service_manifest( $cache_bust = false ) {
+		$base = self::get_schema_service_url_for_requests();
+		$url  = $base . '/v1/schema';
+		if ( $cache_bust ) {
+			$url = add_query_arg( '_cr', (string) time(), $url );
+		}
+
+		$response = wp_remote_get(
+			$url,
+			[
+				'timeout' => 20,
+				'headers' => [
+					'Accept'          => 'application/json',
+					'Cache-Control'   => 'no-cache',
+				],
+			]
+		);
+
+		if ( is_wp_error( $response ) ) {
+			return [
+				'ok'           => false,
+				'http_code'    => 0,
+				'spec_version' => '',
+				'body'         => '',
+				'error'        => $response->get_error_message(),
+			];
+		}
+
+		$code = (int) wp_remote_retrieve_response_code( $response );
+		$spec = (string) wp_remote_retrieve_header( $response, 'x-cr-spec-version' );
+		$body = (string) wp_remote_retrieve_body( $response );
+
+		if ( $code !== 200 ) {
+			$err_msg = $body;
+			$decoded = json_decode( $body, true );
+			if ( is_array( $decoded ) && isset( $decoded['error']['message'] ) ) {
+				$err_msg = (string) $decoded['error']['message'];
+			}
+			if ( $err_msg === '' ) {
+				$err_msg = __( 'Request failed.', 'creatorreactor' );
+			}
+			return [
+				'ok'           => false,
+				'http_code'    => $code,
+				'spec_version' => $spec,
+				'body'         => $body,
+				'error'        => $err_msg,
+			];
+		}
+
+		$pretty = $body;
+		$data   = json_decode( $body, true );
+		if ( JSON_ERROR_NONE === json_last_error() && is_array( $data ) ) {
+			$pretty = (string) wp_json_encode( $data, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES );
+		}
+
+		return [
+			'ok'           => true,
+			'http_code'    => $code,
+			'spec_version' => $spec,
+			'body'         => $pretty,
+			'error'        => '',
+		];
+	}
+
+	/**
+	 * AJAX: fetch schema manifest JSON from the configured schema service (same as Debug tab initial load).
+	 */
+	public static function ajax_debug_schema_manifest() {
+		check_ajax_referer( 'creatorreactor_debug_schema', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( [ 'message' => __( 'Forbidden.', 'creatorreactor' ) ], 403 );
+		}
+
+		$result = self::fetch_schema_service_manifest( true );
+		wp_send_json_success( $result );
+	}
+
+	/**
 	 * Copy options from pre-rename keys into creatorreactor_* keys once.
 	 */
 	private static function migrate_prefixed_options_from_before_rename() {
@@ -553,6 +1009,7 @@ class Admin_Settings {
 			'creatorreactor_cloud_active' => false,
 			'creatorreactor_cloud_id' => '',
 			'creatorreactor_cloud_password' => '',
+			'creatorreactor_schema_service_url' => self::DEFAULT_SCHEMA_SERVICE_URL,
 			'cron_interval_minutes' => 15,
 			'entitlement_cache_ttl_seconds' => 900,
 			'replace_wp_login_with_social' => false,
@@ -723,6 +1180,11 @@ class Admin_Settings {
 		$opts['display_timezone'] = self::sanitize_display_timezone( $opts['display_timezone'] ?? 'system' );
 		$opts['restrict_creatorreactor_users_wp_admin']       = self::stored_bool_default_true( $opts, 'restrict_creatorreactor_users_wp_admin' );
 		$opts['hide_admin_bar_for_creatorreactor_users']      = self::stored_bool_default_true( $opts, 'hide_admin_bar_for_creatorreactor_users' );
+		$schema_url = isset( $opts['creatorreactor_schema_service_url'] ) ? trim( (string) $opts['creatorreactor_schema_service_url'] ) : '';
+		$opts['creatorreactor_schema_service_url'] = $schema_url === '' ? self::DEFAULT_SCHEMA_SERVICE_URL : esc_url_raw( $schema_url );
+		$opts['metrics_ingest_enabled'] = ! empty( $opts['metrics_ingest_enabled'] );
+		$metrics_url = isset( $opts['creatorreactor_metrics_ingest_url'] ) ? trim( (string) $opts['creatorreactor_metrics_ingest_url'] ) : '';
+		$opts['creatorreactor_metrics_ingest_url'] = $metrics_url === '' ? '' : esc_url_raw( $metrics_url );
 		return $opts;
 	}
 
@@ -1077,6 +1539,45 @@ class Admin_Settings {
 			$opts['creatorreactor_cloud_id'] = isset( $raw_opts['creatorreactor_cloud_id'] ) ? sanitize_text_field( (string) $raw_opts['creatorreactor_cloud_id'] ) : '';
 		}
 
+		if ( isset( $input['creatorreactor_schema_service_url'] ) ) {
+			$schema_in = trim( (string) wp_unslash( $input['creatorreactor_schema_service_url'] ) );
+			$opts['creatorreactor_schema_service_url'] = $schema_in === '' ? self::DEFAULT_SCHEMA_SERVICE_URL : esc_url_raw( $schema_in );
+		} else {
+			$prev_schema = isset( $raw_opts['creatorreactor_schema_service_url'] ) ? trim( (string) $raw_opts['creatorreactor_schema_service_url'] ) : '';
+			$opts['creatorreactor_schema_service_url'] = $prev_schema === '' ? self::DEFAULT_SCHEMA_SERVICE_URL : esc_url_raw( $prev_schema );
+		}
+
+		if ( array_key_exists( 'metrics_ingest_enabled', $input ) ) {
+			$opts['metrics_ingest_enabled'] = ! empty( $input['metrics_ingest_enabled'] );
+		} else {
+			$opts['metrics_ingest_enabled'] = ! empty( $raw_opts['metrics_ingest_enabled'] );
+		}
+
+		if ( isset( $input['creatorreactor_metrics_ingest_url'] ) ) {
+			$metrics_in = trim( (string) wp_unslash( $input['creatorreactor_metrics_ingest_url'] ) );
+			$opts['creatorreactor_metrics_ingest_url'] = $metrics_in === '' ? '' : esc_url_raw( $metrics_in );
+		} else {
+			$prev_metrics = isset( $raw_opts['creatorreactor_metrics_ingest_url'] ) ? trim( (string) $raw_opts['creatorreactor_metrics_ingest_url'] ) : '';
+			$opts['creatorreactor_metrics_ingest_url'] = $prev_metrics === '' ? '' : esc_url_raw( $prev_metrics );
+		}
+
+		$metrics_token = isset( $input['creatorreactor_metrics_ingest_token'] ) ? (string) wp_unslash( $input['creatorreactor_metrics_ingest_token'] ) : '';
+		if ( $metrics_token === '********' || $metrics_token === '' ) {
+			$opts['creatorreactor_metrics_ingest_token'] = isset( $raw_opts['creatorreactor_metrics_ingest_token'] ) ? $raw_opts['creatorreactor_metrics_ingest_token'] : '';
+		} else {
+			$enc_metrics = self::encrypt_value( $metrics_token );
+			if ( $enc_metrics === '' ) {
+				add_settings_error(
+					self::OPTION_NAME,
+					'creatorreactor_metrics_ingest_token_encrypt_failed',
+					__( 'Could not encrypt Metrics ingest token (OpenSSL unavailable or encryption failed). The previous token was kept.', 'creatorreactor' )
+				);
+				$opts['creatorreactor_metrics_ingest_token'] = isset( $raw_opts['creatorreactor_metrics_ingest_token'] ) ? $raw_opts['creatorreactor_metrics_ingest_token'] : '';
+			} else {
+				$opts['creatorreactor_metrics_ingest_token'] = $enc_metrics;
+			}
+		}
+
 		if ( array_key_exists( 'creatorreactor_cloud_active', $input ) ) {
 			$opts['creatorreactor_cloud_active'] = ! empty( $input['creatorreactor_cloud_active'] );
 		} else {
@@ -1423,6 +1924,9 @@ class Admin_Settings {
 		}
 		if ( ! isset( $opts['privacy_profile_snapshot_retention_days'] ) ) {
 			$opts['privacy_profile_snapshot_retention_days'] = 90;
+		}
+		if ( ! isset( $opts['metrics_ingest_enabled'] ) ) {
+			$opts['metrics_ingest_enabled'] = false;
 		}
 
 		update_option( self::OPTION_NAME, $opts );
@@ -1991,9 +2495,9 @@ class Admin_Settings {
 						<p><?php esc_html_e( 'CreatorReactor Cloud settings control whether cloud integration is considered installed and provide cloud credentials used by cloud-dependent flows.', 'creatorreactor' ); ?></p>
 						<h4><?php esc_html_e( 'Fields', 'creatorreactor' ); ?></h4>
 						<ul>
-							<li><?php esc_html_e( 'Active: when checked, cloud module is installed/enabled; when unchecked, treated as uninstalled.', 'creatorreactor' ); ?></li>
-							<li><?php esc_html_e( 'Your CreatorReactor ID: account identifier for cloud services.', 'creatorreactor' ); ?></li>
-							<li><?php esc_html_e( 'CreatorReactor Password: encrypted at rest; leave masked value to keep existing secret.', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'Cloud account: Active, Your CreatorReactor ID, and CreatorReactor Password (encrypted at rest; leave masked value to keep existing secret).', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'Schema service: Schema Service URL (base URL of the API; unlock the card to edit).', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'Metrics ingest: optional URL and bearer token to send non-PII operational events (e.g. scheduled sync) to the CreatorReactor metrics edge.', 'creatorreactor' ); ?></li>
 						</ul>
 						<p><?php esc_html_e( 'Production tip: rotate cloud credentials through a planned maintenance window and verify module status returns to green immediately after update.', 'creatorreactor' ); ?></p>
 					</section>
@@ -2463,29 +2967,12 @@ class Admin_Settings {
 	 *
 	 * @param string $context 'settings' — CreatorReactor → Settings → Debug; 'dashboard' — same list on Dashboard.
 	 */
-	private static function render_integration_checks_tab_body( $context = 'settings' ) {
-		$context = ( $context === 'dashboard' ) ? 'dashboard' : 'settings';
-		if ( $context === 'dashboard' ) {
-			$integration_refresh_url = self::admin_page_url(
-				[
-					'tab'     => 'dashboard',
-					'cr_ic_r' => (string) time(),
-				],
-				self::PAGE_SLUG
-			);
-		} else {
-			$integration_refresh_url = self::admin_page_url(
-				[
-					'tab'     => 'debug',
-					'cr_ic_r' => (string) time(),
-				],
-				self::PAGE_SETTINGS_SLUG
-			);
-		}
-		$section_class = 'creatorreactor-section';
-		if ( $context === 'dashboard' ) {
-			$section_class .= ' creatorreactor-dashboard-integration-checks-shell creatorreactor-dashboard-card';
-		}
+	/**
+	 * Build integration check rows for UI and onboarding (shared).
+	 *
+	 * @return array{checks: array, checks_attention: array, checks_passed: array, passed_count: int}
+	 */
+	private static function compute_integration_checks_lists() {
 		$opts                = self::get_options();
 		$anyone_can_register = (bool) get_option( 'users_can_register', false );
 		$default_role        = (string) get_option( 'default_role', 'subscriber' );
@@ -2771,6 +3258,42 @@ class Admin_Settings {
 			}
 		}
 		$passed_count     = count( $checks_passed );
+		return [
+			'checks' => $checks,
+			'checks_attention' => $checks_attention,
+			'checks_passed' => $checks_passed,
+			'passed_count' => $passed_count,
+		];
+	}
+
+	private static function render_integration_checks_tab_body( $context = 'settings' ) {
+		$context = ( $context === 'dashboard' ) ? 'dashboard' : 'settings';
+		if ( $context === 'dashboard' ) {
+			$integration_refresh_url = self::admin_page_url(
+				[
+					'tab'     => 'dashboard',
+					'cr_ic_r' => (string) time(),
+				],
+				self::PAGE_SLUG
+			);
+		} else {
+			$integration_refresh_url = self::admin_page_url(
+				[
+					'tab'     => 'debug',
+					'cr_ic_r' => (string) time(),
+				],
+				self::PAGE_SETTINGS_SLUG
+			);
+		}
+		$section_class = 'creatorreactor-section';
+		if ( $context === 'dashboard' ) {
+			$section_class .= ' creatorreactor-dashboard-integration-checks-shell creatorreactor-dashboard-card';
+		}
+		$computed            = self::compute_integration_checks_lists();
+		$checks              = $computed['checks'];
+		$checks_attention    = $computed['checks_attention'];
+		$checks_passed       = $computed['checks_passed'];
+		$passed_count        = $computed['passed_count'];
 		$fix_definitions  = self::get_integration_fix_definitions();
 		$integration_refresh_tooltip = __( 'Reload this page and re-evaluate every check against the current site.', 'creatorreactor' );
 		?>
@@ -3200,6 +3723,176 @@ class Admin_Settings {
 			})();
 		</script>
 		<?php
+		$schema_manifest = self::fetch_schema_service_manifest( false );
+		$schema_meta     = '';
+		if ( $schema_manifest['spec_version'] !== '' || $schema_manifest['http_code'] > 0 ) {
+			$schema_meta = sprintf(
+				/* translators: 1: spec version or em dash, 2: HTTP status code */
+				__( 'Spec version: %1$s · HTTP %2$s', 'creatorreactor' ),
+				$schema_manifest['spec_version'] !== '' ? $schema_manifest['spec_version'] : '—',
+				(string) (int) $schema_manifest['http_code']
+			);
+		}
+		$schema_pre_text = '';
+		if ( $schema_manifest['ok'] ) {
+			$schema_pre_text = $schema_manifest['body'];
+		} elseif ( $schema_manifest['error'] !== '' ) {
+			$schema_pre_text = $schema_manifest['error'];
+			if ( $schema_manifest['body'] !== '' && $schema_manifest['body'] !== $schema_manifest['error'] ) {
+				$schema_pre_text .= "\n\n" . $schema_manifest['body'];
+			}
+		}
+		?>
+		<div id="creatorreactor-debug-schema-card" class="creatorreactor-section creatorreactor-debug-schema-card">
+			<div class="creatorreactor-debug-schema-head">
+				<h2 class="creatorreactor-debug-schema-head__title"><?php esc_html_e( 'Schema', 'creatorreactor' ); ?></h2>
+				<button
+					type="button"
+					id="creatorreactor-debug-schema-refresh"
+					class="creatorreactor-debug-schema-refresh"
+					aria-label="<?php echo esc_attr( __( 'Refresh schema from schema service', 'creatorreactor' ) ); ?>"
+				>
+					<span class="dashicons dashicons-update" aria-hidden="true"></span>
+				</button>
+			</div>
+			<p class="description"><?php esc_html_e( 'Manifest from GET /v1/schema on the schema service URL configured under CreatorReactor Cloud → Schema service.', 'creatorreactor' ); ?></p>
+			<p id="creatorreactor-debug-schema-meta" class="creatorreactor-muted creatorreactor-debug-schema-meta"><?php echo esc_html( $schema_meta ); ?></p>
+			<pre id="creatorreactor-debug-schema-body" class="creatorreactor-debug-schema-body"><?php echo esc_html( $schema_pre_text ); ?></pre>
+		</div>
+		<style>
+			.creatorreactor-debug-schema-card {
+				margin-top: 28px;
+				padding-top: 24px;
+				border-top: 1px solid #dcdcde;
+			}
+			.creatorreactor-debug-schema-head {
+				display: flex;
+				align-items: center;
+				justify-content: space-between;
+				gap: 12px;
+				flex-wrap: wrap;
+			}
+			h2.creatorreactor-debug-schema-head__title {
+				margin: 0;
+				padding: 0;
+				border: 0;
+				font-size: 16px;
+				color: var(--cr-brand-deep, #301934);
+			}
+			.creatorreactor-debug-schema-meta:empty {
+				display: none;
+			}
+			.creatorreactor-debug-schema-refresh {
+				display: inline-flex;
+				align-items: center;
+				justify-content: center;
+				width: 36px;
+				height: 36px;
+				padding: 0;
+				border: 1px solid #c3c4c7;
+				border-radius: 4px;
+				background: #f6f7f7;
+				cursor: pointer;
+				color: #50575e;
+			}
+			.creatorreactor-debug-schema-refresh:hover,
+			.creatorreactor-debug-schema-refresh:focus-visible {
+				background: #fff;
+				border-color: #8e2d77;
+				color: #8e2d77;
+			}
+			.creatorreactor-debug-schema-refresh:disabled {
+				opacity: 0.55;
+				cursor: not-allowed;
+			}
+			.creatorreactor-debug-schema-refresh .dashicons {
+				width: 20px;
+				height: 20px;
+				font-size: 20px;
+			}
+			.creatorreactor-debug-schema-refresh.is-spinning .dashicons {
+				animation: creatorreactor-debug-schema-spin 0.85s linear infinite;
+			}
+			@keyframes creatorreactor-debug-schema-spin {
+				from { transform: rotate(0deg); }
+				to { transform: rotate(360deg); }
+			}
+			.creatorreactor-debug-schema-body {
+				margin: 12px 0 0;
+				max-height: 420px;
+				overflow: auto;
+				padding: 12px 14px;
+				background: #f6f7f7;
+				border: 1px solid #dcdcde;
+				border-radius: 4px;
+				font-size: 12px;
+				line-height: 1.45;
+				white-space: pre-wrap;
+				word-break: break-word;
+			}
+		</style>
+		<script>
+			(function() {
+				var btn = document.getElementById("creatorreactor-debug-schema-refresh");
+				var meta = document.getElementById("creatorreactor-debug-schema-meta");
+				var bodyEl = document.getElementById("creatorreactor-debug-schema-body");
+				var cfg = window.creatorreactorDebugSchema;
+				if (!btn || !bodyEl || !cfg || !cfg.ajaxUrl || !cfg.nonce) {
+					return;
+				}
+				function setLoading(on) {
+					btn.disabled = !!on;
+					btn.classList.toggle("is-spinning", !!on);
+				}
+				function runRefresh() {
+					setLoading(true);
+					var fd = new window.FormData();
+					fd.append("action", cfg.action);
+					fd.append("nonce", cfg.nonce);
+					window.fetch(cfg.ajaxUrl, { method: "POST", credentials: "same-origin", body: fd })
+						.then(function(res) { return res.json(); })
+						.then(function(data) {
+							if (!data || !data.success || !data.data) {
+								var err = (cfg.i18n && cfg.i18n.loadError) ? cfg.i18n.loadError : "Could not load schema.";
+								bodyEl.textContent = err;
+								return;
+							}
+							var d = data.data;
+							if (meta) {
+								if (d.spec_version !== undefined && d.http_code !== undefined) {
+									var spec = d.spec_version ? String(d.spec_version) : "\u2014";
+									var codeStr = String(parseInt(d.http_code, 10) || 0);
+									meta.textContent = (cfg.i18n && cfg.i18n.metaLine)
+										? cfg.i18n.metaLine.replace("%1$s", spec).replace("%2$s", codeStr)
+										: ("Spec version: " + spec + " \u00b7 HTTP " + codeStr);
+								} else {
+									meta.textContent = "";
+								}
+							}
+							if (d.ok) {
+								bodyEl.textContent = d.body || "";
+							} else {
+								var errText = d.error || "";
+								if (d.body && d.body !== errText) {
+									errText = errText ? (errText + "\n\n" + d.body) : d.body;
+								}
+								bodyEl.textContent = errText || ((cfg.i18n && cfg.i18n.loadError) ? cfg.i18n.loadError : "Could not load schema.");
+							}
+						})
+						.catch(function() {
+							bodyEl.textContent = (cfg.i18n && cfg.i18n.loadError) ? cfg.i18n.loadError : "Could not load schema.";
+						})
+						.finally(function() {
+							setLoading(false);
+						});
+				}
+				btn.addEventListener("click", function(e) {
+					e.preventDefault();
+					runRefresh();
+				});
+			})();
+		</script>
+		<?php
 	}
 
 	/**
@@ -3504,9 +4197,25 @@ class Admin_Settings {
 	 * @param array  $opts                Options from {@see self::get_options()}.
 	 * @param string $cloud_password_mask Mask for cloud password field.
 	 */
-	private static function render_cloud_dynamic_fields( $opts, $cloud_password_mask ) {
+	private static function render_cloud_credentials_fields( $opts, $cloud_password_mask ) {
 		$option_name = self::OPTION_NAME;
-		include CREATORREACTOR_PLUGIN_DIR . 'includes/partials/cloud-auth-mode-fields.php';
+		include CREATORREACTOR_PLUGIN_DIR . 'includes/partials/cloud-credentials-fields.php';
+	}
+
+	/**
+	 * @param array $opts Options from {@see self::get_options()}.
+	 */
+	private static function render_cloud_schema_fields( $opts ) {
+		$option_name = self::OPTION_NAME;
+		include CREATORREACTOR_PLUGIN_DIR . 'includes/partials/cloud-schema-fields.php';
+	}
+
+	/**
+	 * @param array $opts Options from {@see self::get_options()}.
+	 */
+	private static function render_cloud_metrics_ingest_fields( $opts ) {
+		$option_name = self::OPTION_NAME;
+		include CREATORREACTOR_PLUGIN_DIR . 'includes/partials/cloud-metrics-ingest-fields.php';
 	}
 
 	public static function enqueue_assets( $hook_suffix ) {
@@ -4492,7 +5201,8 @@ class Admin_Settings {
 			background: transparent;
 			flex: 1;
 		}
-		.creatorreactor-oauth-tab-lock.button {
+		.creatorreactor-oauth-tab-lock.button,
+		.creatorreactor-cloud-tab-lock.button {
 			border: 0;
 			background: transparent;
 			box-shadow: none;
@@ -4501,25 +5211,35 @@ class Admin_Settings {
 			line-height: 1;
 		}
 		.creatorreactor-oauth-tab-lock.button:hover,
-		.creatorreactor-oauth-tab-lock.button:focus {
+		.creatorreactor-oauth-tab-lock.button:focus,
+		.creatorreactor-cloud-tab-lock.button:hover,
+		.creatorreactor-cloud-tab-lock.button:focus {
 			background: transparent;
 			border: 0;
 			box-shadow: none;
 			color: var(--cr-link-hover, #5c2364);
 		}
-		.creatorreactor-oauth-tab-lock.button:focus:not(:focus-visible) {
+		.creatorreactor-oauth-tab-lock.button:focus:not(:focus-visible),
+		.creatorreactor-cloud-tab-lock.button:focus:not(:focus-visible) {
 			outline: none;
 		}
-		.creatorreactor-oauth-tab-lock.button:focus-visible {
+		.creatorreactor-oauth-tab-lock.button:focus-visible,
+		.creatorreactor-cloud-tab-lock.button:focus-visible {
 			outline: 2px solid currentColor;
 			outline-offset: 2px;
 		}
-		.creatorreactor-oauth-tab-lock .dashicons { width: 18px; height: 18px; font-size: 18px; line-height: 1; }
-		.creatorreactor-oauth-tab-lock[aria-pressed="true"] .creatorreactor-oauth-tab-lock-icon-off { display: none; }
-		.creatorreactor-oauth-tab-lock[aria-pressed="true"] .creatorreactor-oauth-tab-lock-icon-on { display: inline-block; }
-		.creatorreactor-oauth-tab-lock[aria-pressed="false"] .creatorreactor-oauth-tab-lock-icon-on { display: none; }
-		.creatorreactor-oauth-tab-lock[aria-pressed="false"] .creatorreactor-oauth-tab-lock-icon-off { display: inline-block; }
-		.creatorreactor-oauth-configuration.is-oauth-config-locked { opacity: 0.92; }
+		.creatorreactor-oauth-tab-lock .dashicons,
+		.creatorreactor-cloud-tab-lock .dashicons { width: 18px; height: 18px; font-size: 18px; line-height: 1; }
+		.creatorreactor-oauth-tab-lock[aria-pressed="true"] .creatorreactor-oauth-tab-lock-icon-off,
+		.creatorreactor-cloud-tab-lock[aria-pressed="true"] .creatorreactor-cloud-tab-lock-icon-off { display: none; }
+		.creatorreactor-oauth-tab-lock[aria-pressed="true"] .creatorreactor-oauth-tab-lock-icon-on,
+		.creatorreactor-cloud-tab-lock[aria-pressed="true"] .creatorreactor-cloud-tab-lock-icon-on { display: inline-block; }
+		.creatorreactor-oauth-tab-lock[aria-pressed="false"] .creatorreactor-oauth-tab-lock-icon-on,
+		.creatorreactor-cloud-tab-lock[aria-pressed="false"] .creatorreactor-cloud-tab-lock-icon-on { display: none; }
+		.creatorreactor-oauth-tab-lock[aria-pressed="false"] .creatorreactor-oauth-tab-lock-icon-off,
+		.creatorreactor-cloud-tab-lock[aria-pressed="false"] .creatorreactor-cloud-tab-lock-icon-off { display: inline-block; }
+		.creatorreactor-oauth-configuration.is-oauth-config-locked,
+		.creatorreactor-cloud-configuration.is-cloud-config-locked { opacity: 0.92; }
 		.creatorreactor-settings-block {
 			padding: 20px;
 			border-top: 1px solid #dcdcde;
@@ -4792,6 +5512,22 @@ class Admin_Settings {
 				applyOAuthTabLockState();
 			}
 
+			function applyCloudTabLockState() {
+				var lockBtn = document.querySelector(".creatorreactor-cloud-tab-lock");
+				var container = document.querySelector(".creatorreactor-cloud-configuration");
+				if (!lockBtn || !container) {
+					return;
+				}
+				var locked = lockBtn.getAttribute("aria-pressed") !== "false";
+				var lk = lockBtn.getAttribute("data-label-locked") || "";
+				var uk = lockBtn.getAttribute("data-label-unlocked") || "";
+				lockBtn.setAttribute("aria-label", locked ? lk : uk);
+				container.querySelectorAll("input, select, textarea, button").forEach(function(el) {
+					el.disabled = locked;
+				});
+				container.classList.toggle("is-cloud-config-locked", locked);
+			}
+
 			function applyOAuthTabLockState() {
 				var lockBtn = document.querySelector(".creatorreactor-oauth-tab-lock");
 				var container = document.querySelector(".creatorreactor-oauth-configuration");
@@ -4971,8 +5707,9 @@ class Admin_Settings {
 					});
 
 					if (tabName === "settings" && updateUrl) {
-						var sidebarLinks = document.querySelectorAll(".creatorreactor-sidebar-link");
-						var sidebarPanels = document.querySelectorAll(".creatorreactor-settings-panel");
+						var settingsShell = document.querySelector(".creatorreactor-settings-container");
+						var sidebarLinks = settingsShell ? settingsShell.querySelectorAll(".creatorreactor-sidebar-link") : [];
+						var sidebarPanels = settingsShell ? settingsShell.querySelectorAll(".creatorreactor-settings-panel") : [];
 						sidebarLinks.forEach(function(link) {
 							link.classList.toggle("is-active", link.getAttribute("data-subtab") === "oauth");
 						});
@@ -5028,6 +5765,7 @@ class Admin_Settings {
 
 			setupCreatorreactorAdvancedDelegation(oauthDynamic);
 			applyOAuthTabLockState();
+			applyCloudTabLockState();
 
 			var oauthTabLockBtn = document.querySelector(".creatorreactor-oauth-tab-lock");
 			if (oauthTabLockBtn) {
@@ -5036,6 +5774,16 @@ class Admin_Settings {
 					var pressed = oauthTabLockBtn.getAttribute("aria-pressed") === "true";
 					oauthTabLockBtn.setAttribute("aria-pressed", pressed ? "false" : "true");
 					applyOAuthTabLockState();
+				});
+			}
+
+			var cloudTabLockBtn = document.querySelector(".creatorreactor-cloud-tab-lock");
+			if (cloudTabLockBtn) {
+				cloudTabLockBtn.addEventListener("click", function(e) {
+					e.preventDefault();
+					var pressed = cloudTabLockBtn.getAttribute("aria-pressed") === "true";
+					cloudTabLockBtn.setAttribute("aria-pressed", pressed ? "false" : "true");
+					applyCloudTabLockState();
 				});
 			}
 
@@ -5200,8 +5948,9 @@ class Admin_Settings {
 				}
 			}
 
-			var sidebarLinks = document.querySelectorAll(".creatorreactor-sidebar-link");
-			var sidebarPanels = document.querySelectorAll(".creatorreactor-settings-panel");
+			var settingsShell = document.querySelector(".creatorreactor-settings-container");
+			var sidebarLinks = settingsShell ? settingsShell.querySelectorAll(".creatorreactor-sidebar-link") : [];
+			var sidebarPanels = settingsShell ? settingsShell.querySelectorAll(".creatorreactor-settings-panel") : [];
 			if (sidebarLinks.length && sidebarPanels.length) {
 				sidebarLinks.forEach(function(link) {
 					link.addEventListener("click", function(event) {
@@ -5216,7 +5965,8 @@ class Admin_Settings {
 				});
 
 				var urlParams = new URLSearchParams(window.location.search);
-				var initialSubtab = urlParams.get("subtab") || (document.querySelector(".creatorreactor-settings-panel.is-active") ? document.querySelector(".creatorreactor-settings-panel.is-active").getAttribute("data-subtab") : "oauth");
+				var fanvueActivePanel = settingsShell ? settingsShell.querySelector(".creatorreactor-settings-panel.is-active") : null;
+				var initialSubtab = urlParams.get("subtab") || (fanvueActivePanel ? fanvueActivePanel.getAttribute("data-subtab") : "oauth");
 				activateSubtab(initialSubtab);
 			}
 
@@ -5440,6 +6190,20 @@ class Admin_Settings {
 					'error'        => __( 'Could not apply the fix.', 'creatorreactor' ),
 					'working'      => __( 'Applying…', 'creatorreactor' ),
 					'ignoreError'  => __( 'Could not update ignore state.', 'creatorreactor' ),
+				],
+			]
+		);
+		wp_localize_script(
+			'creatorreactor-admin',
+			'creatorreactorDebugSchema',
+			[
+				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
+				'nonce'   => wp_create_nonce( 'creatorreactor_debug_schema' ),
+				'action'  => 'creatorreactor_debug_schema_manifest',
+				'i18n'    => [
+					/* translators: 1: spec version or em dash, 2: HTTP status code */
+					'metaLine'  => __( 'Spec version: %1$s · HTTP %2$s', 'creatorreactor' ),
+					'loadError' => __( 'Could not load schema manifest from the schema service.', 'creatorreactor' ),
 				],
 			]
 		);
@@ -5864,18 +6628,42 @@ class Admin_Settings {
 		</div>
 		<div class="creatorreactor-tab-panel <?php echo 'cloud' === $active_tab ? 'is-active' : ''; ?>" data-tab="cloud">
 			<div class="creatorreactor-section">
-				<div class="creatorreactor-settings-form-card">
-					<div class="creatorreactor-settings-panel is-active" data-subtab="cloud">
-						<h2><?php esc_html_e( 'CreatorReactor Cloud', 'creatorreactor' ); ?></h2>
-						<div id="creatorreactor-cloud-dynamic" class="creatorreactor-auth-mode-dynamic" tabindex="-1">
-							<?php self::render_cloud_dynamic_fields( $opts, $cloud_password_mask ); ?>
+				<form method="post" action="<?php echo esc_url( admin_url( 'options.php' ) ); ?>">
+					<?php settings_fields( self::OPTION_NAME ); ?>
+					<div class="creatorreactor-settings-form-card">
+						<div class="creatorreactor-settings-panel is-active" data-subtab="cloud-credentials">
+							<h2><?php esc_html_e( 'Cloud account', 'creatorreactor' ); ?></h2>
+							<?php self::render_cloud_credentials_fields( $opts, $cloud_password_mask ); ?>
+						</div>
+					</div>
+					<div class="creatorreactor-settings-form-card">
+						<div class="creatorreactor-settings-panel is-active" data-subtab="cloud-schema">
+							<div class="creatorreactor-settings-panel-header creatorreactor-cloud-panel-header">
+								<h2><?php esc_html_e( 'Schema service', 'creatorreactor' ); ?></h2>
+								<button type="button" class="button creatorreactor-cloud-tab-lock" aria-pressed="true"
+									data-label-locked="<?php echo esc_attr( __( 'Schema service URL locked — click to unlock editing', 'creatorreactor' ) ); ?>"
+									data-label-unlocked="<?php echo esc_attr( __( 'Schema service URL unlocked — click to lock', 'creatorreactor' ) ); ?>"
+									aria-label="<?php echo esc_attr( __( 'Schema service URL locked — click to unlock editing', 'creatorreactor' ) ); ?>">
+									<span class="dashicons dashicons-lock creatorreactor-cloud-tab-lock-icon-on" aria-hidden="true"></span>
+									<span class="dashicons dashicons-unlock creatorreactor-cloud-tab-lock-icon-off" aria-hidden="true"></span>
+								</button>
+							</div>
+							<div id="creatorreactor-cloud-schema-dynamic" class="creatorreactor-auth-mode-dynamic" tabindex="-1">
+								<?php self::render_cloud_schema_fields( $opts ); ?>
+							</div>
+						</div>
+					</div>
+					<div class="creatorreactor-settings-form-card">
+						<div class="creatorreactor-settings-panel is-active" data-subtab="cloud-metrics">
+							<h2><?php esc_html_e( 'Metrics ingest', 'creatorreactor' ); ?></h2>
+							<?php self::render_cloud_metrics_ingest_fields( $opts ); ?>
 						</div>
 					</div>
 					<div class="creatorreactor-settings-actions">
 						<a class="button" href="<?php echo esc_url( self::admin_page_url( [ 'tab' => 'cloud' ], self::PAGE_SETTINGS_SLUG ) ); ?>"><?php esc_html_e( 'Cancel', 'creatorreactor' ); ?></a>
 						<?php submit_button( __( 'Save Settings', 'creatorreactor' ) ); ?>
 					</div>
-				</div>
+				</form>
 			</div>
 		</div>
 		<div class="creatorreactor-tab-panel <?php echo 'debug' === $active_tab ? 'is-active' : ''; ?>" data-tab="debug">

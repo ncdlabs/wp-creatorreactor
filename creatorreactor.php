@@ -3,7 +3,7 @@
  * Plugin Name: CreatorReactor
  * Plugin URI: https://github.com/ncdlabs/creatorreactor
  * Description: OAuth integration, sync, and entitlements for creator products (CreatorReactor, with support for additional products such as OnlyFans).
- * Version: 2.0.41
+ * Version: 2.0.51
  * Author: ncdLabs
  * Author URI: https://ncdlabs.com
  * License: GPL v2 or later
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'CREATORREACTOR_VERSION', '2.0.41' );
+define( 'CREATORREACTOR_VERSION', '2.0.51' );
 define( 'CREATORREACTOR_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CREATORREACTOR_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'CREATORREACTOR_TABLE_ENTITLEMENTS', 'creatorreactor_entitlements' );
@@ -57,10 +57,9 @@ add_action( 'plugins_loaded', 'creatorreactor_init' );
 
 function creatorreactor_activate() {
 	try {
-		CreatorReactor\Admin_Settings::activate_register_standard_roles();
-		if ( get_role( 'creatorreactor_null' ) ) {
-			update_option( 'default_role', 'creatorreactor_null' );
-		}
+		// Roles, membership signup, and default-role changes are deferred until integration onboarding
+		// is acknowledged (modal, onboarding AJAX, or Integration Checks admin experience).
+		update_option( CreatorReactor\Admin_Settings::OPTION_DEFERRED_ACTIVATION_PENDING, '1', false );
 
 		CreatorReactor\Entitlements::create_table();
 		CreatorReactor\Admin_Settings::set_defaults();

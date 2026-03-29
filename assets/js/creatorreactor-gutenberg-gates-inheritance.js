@@ -8,12 +8,33 @@
 	var MARKER_SELECTOR = '.creatorreactor-gutenberg-gate-marker[data-creatorreactor-gate-match]';
 	var DEBUG = window.CreatorReactorGutenbergGatesInheritanceDebug === true;
 	var lastDebugLogMs = 0;
-	var viewerState = (window.CreatorReactorViewerState && typeof window.CreatorReactorViewerState === 'object')
-		? {
-			loggedIn: !!window.CreatorReactorViewerState.loggedIn,
-			roles: Array.isArray(window.CreatorReactorViewerState.roles) ? window.CreatorReactorViewerState.roles : []
+	function viewerStateFromBootstrap(obj) {
+		if (!obj || typeof obj !== 'object') {
+			return null;
 		}
-		: null;
+		return {
+			loggedIn: !!obj.loggedIn,
+			roles: Array.isArray(obj.roles) ? obj.roles : [],
+			skipClientGateHiding: !!obj.skipClientGateHiding,
+			adminBarShowing: !!obj.adminBarShowing,
+			canAccessWpAdmin: !!obj.canAccessWpAdmin
+		};
+	}
+
+	function viewerStateFromAjaxData(data) {
+		if (!data || typeof data !== 'object') {
+			return null;
+		}
+		return {
+			loggedIn: !!data.logged_in,
+			roles: Array.isArray(data.roles) ? data.roles : [],
+			skipClientGateHiding: !!data.skip_client_gate_hiding,
+			adminBarShowing: !!data.admin_bar_showing,
+			canAccessWpAdmin: !!data.can_access_wp_admin
+		};
+	}
+
+	var viewerState = viewerStateFromBootstrap(window.CreatorReactorViewerState);
 
 	function ensureHideCss() {
 		if (document.querySelector('style[data-creatorreactor-gutenberg-gate-hidden="1"]')) {
@@ -61,7 +82,10 @@
 			if (roles.length) {
 				viewerState = {
 					loggedIn: !!(document.body && document.body.classList && document.body.classList.contains('logged-in')),
-					roles: roles
+					roles: roles,
+					skipClientGateHiding: false,
+					adminBarShowing: false,
+					canAccessWpAdmin: false
 				};
 				return;
 			}
@@ -84,24 +108,16 @@
 			hasSubscriberRole = roles.indexOf('creatorreactor_subscriber') !== -1;
 		}
 
-		// Cache-safe fallback for guests: never trust stale "match=1" for authenticated gates.
+		if (viewerState && viewerState.skipClientGateHiding) {
+			return '1';
+		}
+
+		// Cache-safe: when not logged in for gates, never trust SSR match attrs (stale cache can ship match=1).
 		if (!isLoggedIn) {
 			if (gate === 'logged_out') {
 				return '1';
 			}
-			if (
-				gate === 'subscriber' ||
-				gate === 'follower' ||
-				gate === 'logged_in' ||
-				gate === 'logged_in_no_role' ||
-				gate === 'has_tier' ||
-				gate === 'fanvue_connected' ||
-				gate === 'fanvue_not_connected' ||
-				gate === 'onboarding_incomplete' ||
-				gate === 'onboarding_complete'
-			) {
-				return '0';
-			}
+			return '0';
 		}
 
 		// For authenticated users, pre-hide role-gated content until live viewer state arrives.
@@ -132,10 +148,7 @@
 				if (!json || json.success !== true || !json.data) {
 					return;
 				}
-				viewerState = {
-					loggedIn: !!json.data.logged_in,
-					roles: Array.isArray(json.data.roles) ? json.data.roles : []
-				};
+				viewerState = viewerStateFromAjaxData(json.data);
 				scanAndHide();
 			})
 			.catch(function () {

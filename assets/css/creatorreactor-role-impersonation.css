@@ -1,0 +1,128 @@
+/* CreatorReactor — admin role preview panel (compact, front end only) */
+#creatorreactor-role-impersonation-panel {
+	position: fixed;
+	z-index: 999999;
+	width: 200px;
+	max-width: calc(100vw - 16px);
+	font-family: system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+	font-size: 11px;
+	line-height: 1.3;
+	color: #2c3338;
+	background: #fff;
+	border: 1px solid #d0d1d7;
+	border-radius: 4px;
+	box-shadow: 0 1px 4px rgba(0, 0, 0, 0.08);
+	user-select: none;
+	opacity: 0.96;
+}
+
+#creatorreactor-role-impersonation-panel:hover {
+	opacity: 1;
+}
+
+#creatorreactor-role-impersonation-panel.creatorreactor-imp--impersonating {
+	border-color: #c9b77a;
+	box-shadow: 0 1px 5px rgba(180, 150, 40, 0.12);
+}
+
+.creatorreactor-imp__titlebar {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+	padding: 4px 8px;
+	background: #f0f0f1;
+	border-radius: 3px 3px 0 0;
+	border-bottom: 1px solid #e0e0e0;
+	cursor: grab;
+	font-weight: 600;
+}
+
+#creatorreactor-role-impersonation-panel.creatorreactor-imp--impersonating .creatorreactor-imp__titlebar {
+	background: #f5f2e8;
+	border-bottom-color: #e5dcc4;
+}
+
+.creatorreactor-imp__titlebar:active {
+	cursor: grabbing;
+}
+
+.creatorreactor-imp__title {
+	flex: 1;
+	margin: 0;
+	padding-right: 4px;
+	font-size: 11px;
+	font-weight: 600;
+	letter-spacing: 0.01em;
+}
+
+.creatorreactor-imp__body {
+	padding: 6px 8px 8px;
+	display: flex;
+	flex-direction: column;
+	gap: 5px;
+}
+
+.creatorreactor-imp__select {
+	width: 100%;
+	max-width: 100%;
+	padding: 3px 5px;
+	border: 1px solid #a7aaad;
+	border-radius: 3px;
+	font-size: 11px;
+	box-sizing: border-box;
+	line-height: 1.25;
+}
+
+.creatorreactor-imp__btn {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	width: 100%;
+	padding: 4px 8px;
+	border: 1px solid #2271b1;
+	border-radius: 3px;
+	background: #2271b1;
+	color: #fff;
+	font-size: 11px;
+	font-weight: 600;
+	cursor: pointer;
+	box-sizing: border-box;
+	line-height: 1.25;
+}
+
+.creatorreactor-imp__btn:hover {
+	background: #135e96;
+	border-color: #135e96;
+}
+
+.creatorreactor-imp__btn:disabled {
+	opacity: 0.55;
+	cursor: not-allowed;
+}
+
+.creatorreactor-imp__btn--stop {
+	background: #b32d2e;
+	border-color: #b32d2e;
+}
+
+.creatorreactor-imp__btn--stop:hover {
+	background: #8a2424;
+	border-color: #8a2424;
+}
+
+.creatorreactor-imp__hint {
+	margin: 0;
+	font-size: 10px;
+	color: #646970;
+	user-select: text;
+	line-height: 1.3;
+	word-break: break-word;
+}
+
+.creatorreactor-imp__msg {
+	margin: 0;
+	font-size: 10px;
+	color: #b32d2e;
+	user-select: text;
+	line-height: 1.3;
+}

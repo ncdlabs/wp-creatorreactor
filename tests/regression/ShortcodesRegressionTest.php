@@ -68,6 +68,8 @@ final class ShortcodesRegressionTest extends BaseTestCase
                 return $default;
             }
         );
+        Functions\when('get_current_user_id')->justReturn(1);
+        Functions\when('get_userdata')->justReturn(false);
     }
 
     private function mockWpdb(array $results = [], $row = null): void
