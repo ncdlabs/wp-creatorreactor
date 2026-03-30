@@ -44,6 +44,11 @@ final class ShortcodesWpdbStub
     {
         return addcslashes((string) $text, '_%\\');
     }
+
+    public function get_blog_prefix(): string
+    {
+        return $this->prefix;
+    }
 }
 
 final class ShortcodesRegressionTest extends BaseTestCase
@@ -283,13 +288,14 @@ final class ShortcodesRegressionTest extends BaseTestCase
         Functions\when('is_user_logged_in')->justReturn(true);
         Functions\when('get_current_user_id')->justReturn(101);
         Functions\when('get_user_meta')->alias(
-            static fn ($userId, $key, $single) => $key === 'creatorreactor_onboarding_complete' ? '1' : ''
+            static fn ($userId, $key, $single) => $key === 'creatorreactor_onboarding_complete' ? '1' : []
         );
         Functions\when('get_userdata')->alias(
-			static fn ($userId) => (object) [
-				'user_email' => 'fan@example.com',
-				'roles'      => [ 'creatorreactor_follower' ],
-			]
+			static function ($userId) {
+				$u = new \WP_User();
+				$u->roles = [ 'creatorreactor_follower' ];
+				return $u;
+			}
         );
         Functions\when('current_time')->justReturn('2026-03-24 00:00:00');
         Functions\expect('do_shortcode')->once()->with('follower-only')->andReturn('rendered follower-only');
@@ -325,18 +331,47 @@ final class ShortcodesRegressionTest extends BaseTestCase
         Functions\when('is_user_logged_in')->justReturn(true);
         Functions\when('get_current_user_id')->justReturn(103);
         Functions\when('get_user_meta')->alias(
-            static fn ($userId, $key, $single) => $key === 'creatorreactor_onboarding_complete' ? '1' : ''
+            static fn ($userId, $key, $single) => $key === 'creatorreactor_onboarding_complete' ? '1' : []
         );
         Functions\when('get_userdata')->alias(
-			static fn ($userId) => (object) [
-				'user_email' => 'sub@example.com',
-				'roles'      => [ 'creatorreactor_subscriber' ],
-			]
+			static function ($userId) {
+				$u = new \WP_User();
+				$u->roles = [ 'creatorreactor_subscriber' ];
+				return $u;
+			}
         );
         Functions\when('current_time')->justReturn('2026-03-24 00:00:00');
         Functions\expect('do_shortcode')->once()->with('subscriber-only')->andReturn('rendered subscriber-only');
 
         self::assertSame('rendered subscriber-only', Shortcodes::subscriber([], 'subscriber-only'));
+    }
+
+    public function testApplyEnclosingGateUsesInnerContentOnlyEvenWithClosingBrackets(): void
+    {
+        $this->mockWpdb([]);
+
+        $inner = 'subscriber-only ] with extra json ] end';
+
+        Functions\when('is_user_logged_in')->justReturn(true);
+        Functions\when('get_current_user_id')->justReturn(104);
+        Functions\when('get_user_meta')->alias(
+            static fn ($userId, $key, $single) => $key === 'creatorreactor_onboarding_complete' ? '1' : []
+        );
+        Functions\when('get_userdata')->alias(
+            static function ($userId) {
+                $u = new \WP_User();
+                $u->roles = [ 'creatorreactor_subscriber' ];
+                return $u;
+            }
+        );
+
+        Functions\when('current_time')->justReturn('2026-03-24 00:00:00');
+        Functions\expect('do_shortcode')->once()->with($inner)->andReturn('rendered subscriber-content');
+
+        self::assertSame(
+            'rendered subscriber-content',
+            Shortcodes::apply_enclosing_gate('subscriber', $inner)
+        );
     }
 
     public function testSubscriberReturnsEmptyWhenOnboardingCompleteButNoSubscriberEntitlement(): void
