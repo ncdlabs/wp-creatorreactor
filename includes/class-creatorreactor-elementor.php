@@ -22,18 +22,10 @@ final class Elementor_Integration {
 	 * Whether gated-content widgets can use nested containers (Elementor Nested Elements + Container).
 	 */
 	public static function nested_gate_widgets_supported(): bool {
-		if ( ! class_exists( '\Elementor\Plugin' ) ) {
-			return false;
-		}
-		$plugin = \Elementor\Plugin::$instance;
-		if ( ! $plugin || ! isset( $plugin->experiments ) ) {
-			return false;
-		}
-		$experiments = $plugin->experiments;
-
-		return class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
-			&& $experiments->is_feature_active( 'nested-elements' )
-			&& $experiments->is_feature_active( 'container' );
+		// The nested gate widgets should be registered whenever Elementor's NestedElements
+		// base widget exists. Relying on experiment flags can differ between editor and
+		// front-end and prevents Elementor from instantiating saved nested widget types.
+		return class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' );
 	}
 
 	public static function init() {
