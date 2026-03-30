@@ -28,6 +28,7 @@ class Plugin {
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-cron.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-broker-client.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-creatorreactor-fan-oauth.php';
+			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-google-oauth.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-ofauth.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-creatorreactor-onboarding.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-creatorreactor-shortcodes.php';
@@ -49,6 +50,7 @@ class Plugin {
 
 			CreatorReactor_OAuth::init();
 			Fan_OAuth::init();
+			Google_OAuth::init();
 			OFAuth::init();
 			Onboarding::init();
 			Cron::init();

@@ -42,8 +42,8 @@
 		var rect = panel.getBoundingClientRect();
 		var maxL = Math.max(8, window.innerWidth - rect.width - 8);
 		var maxT = Math.max(8, window.innerHeight - rect.height - 8);
-		var l = parseFloat(panel.style.left, 10) || 0;
-		var t = parseFloat(panel.style.top, 10) || 0;
+		var l = parseFloat(panel.style.left) || 0;
+		var t = parseFloat(panel.style.top) || 0;
 		panel.style.left = Math.min(Math.max(8, l), maxL) + 'px';
 		panel.style.top = Math.min(Math.max(8, t), maxT) + 'px';
 	}
@@ -60,8 +60,8 @@
 		if (!panel) {
 			return;
 		}
-		var l = parseFloat(panel.style.left, 10);
-		var t = parseFloat(panel.style.top, 10);
+		var l = parseFloat(panel.style.left);
+		var t = parseFloat(panel.style.top);
 		window.localStorage.setItem(STORAGE_POS, JSON.stringify({ left: l, top: t }));
 	}
 
