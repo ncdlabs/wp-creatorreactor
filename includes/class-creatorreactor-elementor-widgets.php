@@ -75,8 +75,7 @@ abstract class Elementor_Widget_Shortcode_Wrap extends \Elementor\Widget_Base {
 		$roles = Role_Impersonation::get_effective_roles_csv_for_logged_in_user();
 		// Determine gate-match independently from the widget's enclosed content.
 		// This ensures container inheritance works even if the widget's content is empty.
-		$probe_shortcode = '[' . $tag . ']__creatorreactor_gate_probe__[/'.$tag.']';
-		$probe            = do_shortcode( $probe_shortcode );
+		$probe   = Shortcodes::apply_enclosing_gate( $tag, '__creatorreactor_gate_probe__' );
 		$matched          = trim( (string) $probe ) !== '';
 		$match_str        = $matched ? '1' : '0';
 
@@ -88,7 +87,7 @@ abstract class Elementor_Widget_Shortcode_Wrap extends \Elementor\Widget_Base {
 			. ' style="display:none" aria-hidden="true"></span>';
 
 		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- shortcode/HTML output (same as post content).
-		echo do_shortcode( '[' . $tag . ']' . $inner . '[/' . $tag . ']' );
+		echo Shortcodes::apply_enclosing_gate( $tag, $inner );
 	}
 }
 
@@ -310,8 +309,7 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 			$tag   = $this->shortcode_tag();
 			// Determine gate-match independently from the nested slot's enclosed content.
 			// This ensures container inheritance works even if nested slot content is empty.
-			$probe_shortcode = '[' . $tag . ']__creatorreactor_gate_probe__[/'.$tag.']';
-			$probe            = do_shortcode( $probe_shortcode );
+			$probe   = Shortcodes::apply_enclosing_gate( $tag, '__creatorreactor_gate_probe__' );
 			$matched          = trim( (string) $probe ) !== '';
 			$match_str        = $matched ? '1' : '0';
 
@@ -324,7 +322,7 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 
 			$inner = $this->render_inner_html();
 			// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- shortcode/HTML output (same as post content).
-			echo do_shortcode( '[' . $tag . ']' . $inner . '[/' . $tag . ']' );
+			echo Shortcodes::apply_enclosing_gate( $tag, $inner );
 		}
 	}
 

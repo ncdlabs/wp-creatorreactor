@@ -25,6 +25,39 @@ class Shortcodes {
 		add_action( 'init', [ __CLASS__, 'register' ], 20 );
 	}
 
+	/**
+	 * Run enclosing gate logic on HTML without building a shortcode string.
+	 *
+	 * Elementor (and other) markup often contains `]` in attributes/JSON; {@see do_shortcode()} on
+	 * `[tag]…[/tag]` then mis-pairs delimiters and drops or corrupts output for every role.
+	 *
+	 * @param string      $tag     Registered shortcode tag.
+	 * @param string|null $content Inner HTML.
+	 * @return string
+	 */
+	public static function apply_enclosing_gate( $tag, $content = null ) {
+		$tag = sanitize_key( (string) $tag );
+		$inner = ( $content === null || $content === '' ) ? '' : (string) $content;
+		switch ( $tag ) {
+			case 'follower':
+				return self::follower( [], $inner );
+			case 'subscriber':
+				return self::subscriber( [], $inner );
+			case 'logged_out':
+				return self::logged_out( [], $inner );
+			case 'logged_in':
+				return self::logged_in( [], $inner );
+			case 'logged_in_no_role':
+				return self::logged_in_no_role( [], $inner );
+			case 'fanvue_connected':
+				return self::fanvue_connected( [], $inner );
+			case 'fanvue_not_connected':
+				return self::fanvue_not_connected( [], $inner );
+			default:
+				return $inner;
+		}
+	}
+
 	public static function register() {
 		add_shortcode( 'follower', [ __CLASS__, 'follower' ] );
 		add_shortcode( 'subscriber', [ __CLASS__, 'subscriber' ] );

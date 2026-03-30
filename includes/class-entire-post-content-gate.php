@@ -306,7 +306,7 @@ final class Entire_Post_Content_Gate {
 		self::$in_filter = true;
 		try {
 			// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- same as post content after shortcodes.
-			return do_shortcode( '[' . $tag . ']' . $content . '[/' . $tag . ']' );
+			return Shortcodes::apply_enclosing_gate( $tag, $content );
 		} finally {
 			self::$in_filter = false;
 		}
