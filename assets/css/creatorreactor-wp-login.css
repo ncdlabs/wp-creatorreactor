@@ -1,0 +1,203 @@
+/**
+ * CreatorReactor branded wp-login.php (scoped via body.creatorreactor-login).
+ *
+ * Brand: deep purple #4B1D5F, magenta #C23B79, peach #F89B86.
+ *
+ * @package CreatorReactor
+ */
+
+body.login.creatorreactor-login {
+	--cr-purple: #4b1d5f;
+	--cr-magenta: #c23b79;
+	--cr-peach: #f89b86;
+	--cr-gradient: linear-gradient(90deg, var(--cr-purple) 0%, var(--cr-magenta) 52%, var(--cr-peach) 100%);
+	--cr-surface: #ffffff;
+	--cr-muted: #5c4a66;
+	background:
+		radial-gradient(120% 80% at 15% 10%, rgba(75, 29, 95, 0.07) 0%, transparent 55%),
+		radial-gradient(90% 70% at 90% 85%, rgba(248, 155, 134, 0.12) 0%, transparent 50%),
+		linear-gradient(165deg, #f9f6fc 0%, #ffffff 45%, #fff8f5 100%);
+	min-height: 100vh;
+	font-family: system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+}
+
+body.login.creatorreactor-login #login {
+	width: 100%;
+	max-width: 400px;
+	padding: 32px 20px 40px;
+}
+
+body.login.creatorreactor-login #login h1 {
+	margin: 0 auto 28px;
+}
+
+/* WordPress uses a single link as the logo; --cr-logo-url is set inline from PHP. */
+body.login.creatorreactor-login #login h1 a {
+	width: min(100%, 320px);
+	height: 72px;
+	margin: 0 auto;
+	background-size: contain;
+	background-repeat: no-repeat;
+	background-position: center center;
+	background-image: var(--cr-logo-url);
+	box-shadow: none;
+	outline: none;
+}
+
+body.login.creatorreactor-login #login h1 a:focus {
+	box-shadow: 0 0 0 3px rgba(194, 59, 121, 0.35);
+	border-radius: 12px;
+}
+
+body.login.creatorreactor-login #loginform,
+body.login.creatorreactor-login #lostpasswordform,
+body.login.creatorreactor-login #registerform,
+body.login.creatorreactor-login #resetpassform {
+	background: var(--cr-surface);
+	border: 1px solid rgba(75, 29, 95, 0.1);
+	border-radius: 16px;
+	box-shadow:
+		0 16px 48px rgba(75, 29, 95, 0.08),
+		0 2px 12px rgba(0, 0, 0, 0.04);
+	padding: 28px 28px 22px;
+	margin-bottom: 16px;
+}
+
+body.login.creatorreactor-login .login form .input,
+body.login.creatorreactor-login .login input[type="text"],
+body.login.creatorreactor-login .login input[type="password"],
+body.login.creatorreactor-login .login input[type="email"] {
+	border-radius: 10px;
+	border: 1px solid rgba(75, 29, 95, 0.18);
+	font-size: 16px;
+	padding: 10px 14px;
+	box-shadow: none;
+	transition:
+		border-color 0.15s ease,
+		box-shadow 0.15s ease;
+}
+
+body.login.creatorreactor-login .login form .input:focus,
+body.login.creatorreactor-login .login input[type="text"]:focus,
+body.login.creatorreactor-login .login input[type="password"]:focus,
+body.login.creatorreactor-login .login input[type="email"]:focus {
+	border-color: var(--cr-magenta);
+	box-shadow: 0 0 0 3px rgba(194, 59, 121, 0.2);
+	outline: none;
+}
+
+body.login.creatorreactor-login .login label {
+	color: var(--cr-muted);
+	font-weight: 600;
+	font-size: 13px;
+}
+
+body.login.creatorreactor-login #login form p.submit {
+	margin-top: 20px;
+}
+
+body.login.creatorreactor-login .wp-core-ui .button-primary {
+	background: var(--cr-gradient) !important;
+	border: none !important;
+	border-radius: 10px !important;
+	box-shadow: 0 6px 20px rgba(75, 29, 95, 0.28) !important;
+	text-shadow: none !important;
+	font-weight: 600;
+	padding: 0 20px;
+	min-height: 40px;
+	transition:
+		filter 0.15s ease,
+		box-shadow 0.15s ease;
+}
+
+body.login.creatorreactor-login .wp-core-ui .button-primary:hover,
+body.login.creatorreactor-login .wp-core-ui .button-primary:focus {
+	filter: brightness(1.06);
+	box-shadow: 0 8px 24px rgba(75, 29, 95, 0.35) !important;
+}
+
+body.login.creatorreactor-login .wp-core-ui .button-primary:focus {
+	outline: 2px solid var(--cr-peach);
+	outline-offset: 2px;
+}
+
+body.login.creatorreactor-login .button.wp-hide-pw {
+	color: var(--cr-magenta);
+	border-radius: 8px;
+}
+
+body.login.creatorreactor-login .button.wp-hide-pw:focus {
+	border-color: var(--cr-magenta);
+	box-shadow: 0 0 0 1px var(--cr-magenta);
+}
+
+body.login.creatorreactor-login #login #nav a,
+body.login.creatorreactor-login #login #backtoblog a,
+body.login.creatorreactor-login .privacy-policy-page-link a {
+	color: var(--cr-magenta) !important;
+	font-weight: 500;
+	text-decoration: none;
+	transition: color 0.15s ease;
+}
+
+body.login.creatorreactor-login #login #nav a:hover,
+body.login.creatorreactor-login #login #nav a:focus,
+body.login.creatorreactor-login #login #backtoblog a:hover,
+body.login.creatorreactor-login #login #backtoblog a:focus,
+body.login.creatorreactor-login .privacy-policy-page-link a:hover,
+body.login.creatorreactor-login .privacy-policy-page-link a:focus {
+	color: var(--cr-purple) !important;
+	text-decoration: underline;
+	text-underline-offset: 3px;
+}
+
+body.login.creatorreactor-login .login .message,
+body.login.creatorreactor-login .login #login_error {
+	border-radius: 12px;
+	border-left-width: 4px;
+}
+
+body.login.creatorreactor-login .login .message {
+	border-left-color: var(--cr-magenta);
+	background: rgba(248, 155, 134, 0.12);
+}
+
+body.login.creatorreactor-login .login #login_error {
+	border-left-color: #d63638;
+}
+
+body.login.creatorreactor-login .creatorreactor-fanvue-login-notice {
+	padding: 12px;
+	margin: 0 0 16px;
+	border-radius: 12px !important;
+	border-left: 4px solid var(--cr-magenta) !important;
+	background: rgba(248, 155, 134, 0.14) !important;
+}
+
+body.login.creatorreactor-login .language-switcher {
+	margin-top: 12px;
+}
+
+body.login.creatorreactor-login .language-switcher select {
+	border-radius: 8px;
+	border-color: rgba(75, 29, 95, 0.2);
+}
+
+/* Social split layout: align Fanvue column with brand accent */
+body.login.creatorreactor-login .creatorreactor-wp-login-split-social .creatorreactor-fanvue-oauth-link {
+	color: var(--cr-magenta);
+}
+
+body.login.creatorreactor-login .creatorreactor-wp-login-split {
+	gap: 32px;
+}
+
+body.login.creatorreactor-login #login:has(.creatorreactor-wp-login-split) {
+	max-width: 760px;
+}
+
+@media (max-width: 600px) {
+	body.login.creatorreactor-login .creatorreactor-wp-login-split {
+		flex-direction: column;
+	}
+}
