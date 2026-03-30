@@ -254,7 +254,7 @@ class CreatorReactor_Client {
 	 * Short hint when Fanvue returns 403 insufficient scopes for list APIs (read:fan).
 	 */
 	public static function get_insufficient_scopes_hint_text() {
-		return __( 'Add read:fan under Advanced → Scopes (if missing), save, then disconnect OAuth and connect again—existing tokens do not pick up new scopes. Subscriber and follower lists require read:fan on both the Fanvue app and this field.', 'creatorreactor' );
+		return __( 'Add read:fan to OAuth Scopes in Settings → Fanvue → OAuth if missing, save, then disconnect OAuth and connect again—existing tokens do not pick up new scopes. Subscriber and follower lists require read:fan on both the Fanvue app and this field.', 'creatorreactor' );
 	}
 
 	/**

@@ -5,6 +5,9 @@ wp-creatorreactor-*.zip
 # Composer (if added later)
 /vendor/
 
+# Deploy (local paths / credentials; not for the repo)
+deploy-hostinger.sh
+
 # Environment & secrets
 .env
 .env.*

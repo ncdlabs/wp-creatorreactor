@@ -36,7 +36,7 @@ class Admin_Settings {
 	const LOG_TYPE_ERROR              = 'error';
 	const OPTION_TIERS               = 'creatorreactor_tiers';
 	const OPTION_SUBSCRIPTION_TIERS  = 'creatorreactor_subscription_tiers';
-	const ENCRYPTED_FIELDS            = [ 'creatorreactor_oauth_client_id', 'creatorreactor_oauth_client_secret', 'creatorreactor_cloud_password', 'creatorreactor_metrics_ingest_token' ];
+	const ENCRYPTED_FIELDS            = [ 'creatorreactor_oauth_client_id', 'creatorreactor_oauth_client_secret', 'creatorreactor_cloud_password', 'creatorreactor_metrics_ingest_token', 'creatorreactor_ofauth_api_key', 'creatorreactor_ofauth_webhook_secret' ];
 	/** Default Schema Service base URL (local compose publishes the API on host port 18080). */
 	const DEFAULT_SCHEMA_SERVICE_URL = 'http://localhost:18080';
 	/**
@@ -53,7 +53,7 @@ class Admin_Settings {
 	 * Env var: bearer token for metrics ingest (optional; otherwise use saved encrypted token in settings).
 	 */
 	const ENV_METRICS_INGEST_TOKEN = 'CREATORREACTOR_METRICS_INGEST_TOKEN';
-	/** @var string Mirrors {@see CreatorReactor_OAuth::DEFAULT_SCOPES} (Fanvue quick start; add read:fan in Advanced if your app allows it). */
+	/** @var string Mirrors {@see CreatorReactor_OAuth::DEFAULT_SCOPES} (Fanvue quick start; add read:fan in OAuth Scopes if your app allows it). */
 	const DEFAULT_CREATORREACTOR_SCOPES = CreatorReactor_OAuth::DEFAULT_SCOPES;
 	const PAGE_SLUG                   = 'creatorreactor';
 	const PAGE_USERS_SLUG             = 'creatorreactor-users';
@@ -1283,6 +1283,28 @@ class Admin_Settings {
 		return $url;
 	}
 
+	/**
+	 * Optional redirect URLs for OFAuth hosted mode (http or https).
+	 *
+	 * @param mixed $value Raw value.
+	 * @return string
+	 */
+	private static function sanitize_ofauth_redirect_url( $value ) {
+		$url = esc_url_raw( trim( (string) $value ) );
+		if ( $url === '' ) {
+			return '';
+		}
+		$parts = wp_parse_url( $url );
+		if ( ! is_array( $parts ) || empty( $parts['scheme'] ) ) {
+			return '';
+		}
+		$scheme = strtolower( (string) $parts['scheme'] );
+		if ( ! in_array( $scheme, [ 'http', 'https' ], true ) ) {
+			return '';
+		}
+		return $url;
+	}
+
 	private static function sanitize_display_timezone( $value ) {
 		$value = is_string( $value ) ? sanitize_text_field( $value ) : '';
 		if ( $value === '' || $value === 'system' ) {
@@ -1588,6 +1610,64 @@ class Admin_Settings {
 			} else {
 				$opts['creatorreactor_cloud_password'] = $encrypted_cloud_password;
 			}
+		}
+
+		if ( isset( $input['creatorreactor_ofauth_api_key'] ) ) {
+			$ofauth_key = sanitize_text_field( wp_unslash( $input['creatorreactor_ofauth_api_key'] ) );
+			if ( $ofauth_key === '********' ) {
+				$opts['creatorreactor_ofauth_api_key'] = isset( $raw_opts['creatorreactor_ofauth_api_key'] ) ? $raw_opts['creatorreactor_ofauth_api_key'] : '';
+			} elseif ( $ofauth_key === '' ) {
+				$opts['creatorreactor_ofauth_api_key'] = '';
+			} else {
+				$enc_key = self::encrypt_value( $ofauth_key );
+				if ( $enc_key === '' ) {
+					add_settings_error(
+						self::OPTION_NAME,
+						'creatorreactor_ofauth_api_key_encrypt_failed',
+						__( 'Could not encrypt OFAuth API key (OpenSSL unavailable or encryption failed). The previous key was kept.', 'creatorreactor' )
+					);
+					$opts['creatorreactor_ofauth_api_key'] = isset( $raw_opts['creatorreactor_ofauth_api_key'] ) ? $raw_opts['creatorreactor_ofauth_api_key'] : '';
+				} else {
+					$opts['creatorreactor_ofauth_api_key'] = $enc_key;
+				}
+			}
+		} else {
+			$opts['creatorreactor_ofauth_api_key'] = isset( $raw_opts['creatorreactor_ofauth_api_key'] ) ? $raw_opts['creatorreactor_ofauth_api_key'] : '';
+		}
+
+		$ofauth_wh_secret = isset( $input['creatorreactor_ofauth_webhook_secret'] ) ? (string) wp_unslash( $input['creatorreactor_ofauth_webhook_secret'] ) : '';
+		if ( $ofauth_wh_secret === '********' || $ofauth_wh_secret === '' ) {
+			if ( isset( $input['creatorreactor_ofauth_webhook_secret'] ) && $ofauth_wh_secret === '' ) {
+				$opts['creatorreactor_ofauth_webhook_secret'] = '';
+			} else {
+				$opts['creatorreactor_ofauth_webhook_secret'] = isset( $raw_opts['creatorreactor_ofauth_webhook_secret'] ) ? $raw_opts['creatorreactor_ofauth_webhook_secret'] : '';
+			}
+		} else {
+			$enc_wh = self::encrypt_value( $ofauth_wh_secret );
+			if ( $enc_wh === '' ) {
+				add_settings_error(
+					self::OPTION_NAME,
+					'creatorreactor_ofauth_webhook_secret_encrypt_failed',
+					__( 'Could not encrypt OFAuth webhook secret (OpenSSL unavailable or encryption failed). The previous secret was kept.', 'creatorreactor' )
+				);
+				$opts['creatorreactor_ofauth_webhook_secret'] = isset( $raw_opts['creatorreactor_ofauth_webhook_secret'] ) ? $raw_opts['creatorreactor_ofauth_webhook_secret'] : '';
+			} else {
+				$opts['creatorreactor_ofauth_webhook_secret'] = $enc_wh;
+			}
+		}
+
+		if ( isset( $input['creatorreactor_ofauth_success_url'] ) ) {
+			$opts['creatorreactor_ofauth_success_url'] = self::sanitize_ofauth_redirect_url( wp_unslash( $input['creatorreactor_ofauth_success_url'] ) );
+		} else {
+			$prev_s = isset( $raw_opts['creatorreactor_ofauth_success_url'] ) ? (string) $raw_opts['creatorreactor_ofauth_success_url'] : '';
+			$opts['creatorreactor_ofauth_success_url'] = $prev_s !== '' ? self::sanitize_ofauth_redirect_url( $prev_s ) : '';
+		}
+
+		if ( isset( $input['creatorreactor_ofauth_cancel_url'] ) ) {
+			$opts['creatorreactor_ofauth_cancel_url'] = self::sanitize_ofauth_redirect_url( wp_unslash( $input['creatorreactor_ofauth_cancel_url'] ) );
+		} else {
+			$prev_c = isset( $raw_opts['creatorreactor_ofauth_cancel_url'] ) ? (string) $raw_opts['creatorreactor_ofauth_cancel_url'] : '';
+			$opts['creatorreactor_ofauth_cancel_url'] = $prev_c !== '' ? self::sanitize_ofauth_redirect_url( $prev_c ) : '';
 		}
 
 		if ( $opts['creatorreactor_oauth_redirect_uri'] === '' ) {
@@ -2420,6 +2500,7 @@ class Admin_Settings {
 						<li><a href="#cr-docs-dashboard"><?php esc_html_e( 'Dashboard & Module Status', 'creatorreactor' ); ?></a></li>
 						<li><a href="#cr-docs-general"><?php esc_html_e( 'General', 'creatorreactor' ); ?></a></li>
 						<li><a href="#cr-docs-fanvue"><?php esc_html_e( 'Fanvue', 'creatorreactor' ); ?></a></li>
+						<li><a href="#cr-docs-onlyfans"><?php esc_html_e( 'OnlyFans (OFAuth)', 'creatorreactor' ); ?></a></li>
 						<li><a href="#cr-docs-cloud"><?php esc_html_e( 'CreatorReactor Cloud', 'creatorreactor' ); ?></a></li>
 						<li><a href="#cr-docs-sync"><?php esc_html_e( 'Sync', 'creatorreactor' ); ?></a></li>
 						<li><a href="#cr-docs-shortcodes"><?php esc_html_e( 'Shortcodes', 'creatorreactor' ); ?></a></li>
@@ -2474,6 +2555,20 @@ class Admin_Settings {
 							<li><?php esc_html_e( 'Run a connection test and confirm green status.', 'creatorreactor' ); ?></li>
 						</ol>
 						<p><?php esc_html_e( 'If connection fails, validate credentials, redirect URI accuracy, HTTPS, and provider-side app status before retrying.', 'creatorreactor' ); ?></p>
+					</section>
+					<section id="cr-docs-onlyfans" class="creatorreactor-doc-section">
+						<h3><?php esc_html_e( 'OnlyFans (OFAuth)', 'creatorreactor' ); ?></h3>
+						<p><?php esc_html_e( 'The OnlyFans tab configures OFAuth Account Linking: API key, webhook secret, optional hosted redirect URLs, and the webhook URL to register in the OFAuth dashboard.', 'creatorreactor' ); ?></p>
+						<p>
+							<a href="https://docs.ofauth.com/guide/OnlyFans-authentication/Integrating" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'OFAuth integration guide', 'creatorreactor' ); ?></a>
+						</p>
+						<h4><?php esc_html_e( 'Configuration steps', 'creatorreactor' ); ?></h4>
+						<ol>
+							<li><?php esc_html_e( 'Generate an OFAuth access key with Account Linking permissions.', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'Copy the webhook URL from this plugin into your OFAuth webhook settings.', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'Paste the API key and webhook secret, then save.', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'Implement hosted or embedded link flows using OFAuth’s client session API (POST /v2/link/init) from your application code; session data is delivered to the webhook URL on success.', 'creatorreactor' ); ?></li>
+						</ol>
 					</section>
 					<section id="cr-docs-cloud" class="creatorreactor-doc-section">
 						<h3><?php esc_html_e( 'CreatorReactor Cloud', 'creatorreactor' ); ?></h3>
@@ -4204,6 +4299,26 @@ class Admin_Settings {
 		include CREATORREACTOR_PLUGIN_DIR . 'includes/partials/cloud-metrics-ingest-fields.php';
 	}
 
+	/**
+	 * OnlyFans / OFAuth settings (Settings → OnlyFans tab).
+	 *
+	 * @param array  $opts                Options from {@see self::get_options()}.
+	 * @param string $api_key_mask        Mask or empty for API key field.
+	 * @param string $webhook_secret_mask Mask or empty for webhook secret field.
+	 */
+	private static function render_onlyfans_settings_fields( array $opts, $api_key_mask, $webhook_secret_mask, $onlyfans_active_subtab = 'oauth' ) {
+		$option_name         = self::OPTION_NAME;
+		$webhook_url         = OFAuth::get_webhook_url();
+		$settings_cancel_url = self::admin_page_url(
+			[
+				'tab'    => 'onlyfans',
+				'subtab' => in_array( $onlyfans_active_subtab, [ 'oauth', 'sync' ], true ) ? $onlyfans_active_subtab : 'oauth',
+			],
+			self::PAGE_SETTINGS_SLUG
+		);
+		include CREATORREACTOR_PLUGIN_DIR . 'includes/partials/onlyfans-settings-fields.php';
+	}
+
 	public static function enqueue_assets( $hook_suffix ) {
 		$hook_suffix = is_string( $hook_suffix ) ? $hook_suffix : '';
 		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : '';
@@ -4239,7 +4354,7 @@ class Admin_Settings {
 				margin-top: 10px;
 				padding-top: 10px;
 				border-top: 1px solid #dcdcde;
-				color: #1d2327;
+				color: #414a4c;
 				font-weight: 700;
 			}
 			#creatorreactor-user-details-modal .creatorreactor-modal-body dd.creatorreactor-details-section-spacer { display: none; }
@@ -4288,6 +4403,8 @@ class Admin_Settings {
 		.creatorreactor-wrap {
 			margin-top: 20px;
 			max-width: 1100px;
+			color: #414a4c;
+			--cr-text-body: #414a4c;
 			--cr-brand-deep: #301934;
 			--cr-brand-magenta: #8e2d77;
 			--cr-brand-pink: #d64d7f;
@@ -4297,6 +4414,75 @@ class Admin_Settings {
 			--cr-accent-deep: #4b1d66;
 			--cr-link: var(--cr-brand-magenta);
 			--cr-link-hover: #5c2364;
+			--cr-card-radius: 12px;
+			--cr-card-shadow: 0 8px 28px rgba(48, 25, 52, 0.11), 0 2px 8px rgba(0, 0, 0, 0.05);
+			--cr-card-shadow-elevated: 0 18px 44px rgba(48, 25, 52, 0.12), 0 4px 14px rgba(0, 0, 0, 0.04);
+		}
+		/* Primary actions: solid brand magenta (no gradient). Note: .wp-core-ui is on body, not inside .creatorreactor-wrap. */
+		body.wp-core-ui .creatorreactor-wrap .button-primary,
+		body.wp-core-ui .creatorreactor-wrap .button.button-primary,
+		body.wp-core-ui .creatorreactor-wrap input.button-primary,
+		body.wp-core-ui .creatorreactor-wrap a.button.button-primary {
+			background: var(--cr-brand-magenta) !important;
+			border: 1px solid var(--cr-accent-strong) !important;
+			border-radius: 4px;
+			box-shadow: 0 2px 6px rgba(48, 25, 52, 0.18) !important;
+			color: #fff !important;
+			text-shadow: none !important;
+			transition: background 0.15s ease, border-color 0.15s ease, box-shadow 0.15s ease;
+		}
+		body.wp-core-ui .creatorreactor-wrap .button-primary:hover,
+		body.wp-core-ui .creatorreactor-wrap .button-primary:focus,
+		body.wp-core-ui .creatorreactor-wrap .button.button-primary:hover,
+		body.wp-core-ui .creatorreactor-wrap .button.button-primary:focus,
+		body.wp-core-ui .creatorreactor-wrap input.button-primary:hover,
+		body.wp-core-ui .creatorreactor-wrap input.button-primary:focus,
+		body.wp-core-ui .creatorreactor-wrap a.button.button-primary:hover,
+		body.wp-core-ui .creatorreactor-wrap a.button.button-primary:focus {
+			background: var(--cr-accent-strong) !important;
+			border-color: var(--cr-accent-deep) !important;
+			box-shadow: 0 4px 12px rgba(48, 25, 52, 0.26) !important;
+			color: #fff !important;
+		}
+		body.wp-core-ui .creatorreactor-wrap .button-primary:focus,
+		body.wp-core-ui .creatorreactor-wrap .button.button-primary:focus,
+		body.wp-core-ui .creatorreactor-wrap input.button-primary:focus,
+		body.wp-core-ui .creatorreactor-wrap a.button.button-primary:focus {
+			outline: 2px solid var(--cr-brand-coral);
+			outline-offset: 2px;
+		}
+		body.wp-core-ui .creatorreactor-wrap .button-primary:disabled,
+		body.wp-core-ui .creatorreactor-wrap .button-primary.disabled,
+		body.wp-core-ui .creatorreactor-wrap .button.button-primary:disabled,
+		body.wp-core-ui .creatorreactor-wrap .button.button-primary.disabled,
+		body.wp-core-ui .creatorreactor-wrap input.button-primary:disabled {
+			filter: none !important;
+			opacity: 0.55;
+			cursor: not-allowed;
+			box-shadow: none !important;
+		}
+		/* Outline / secondary buttons (Cancel, Clear logs, plain .button): purple border instead of core blue. */
+		body.wp-core-ui .creatorreactor-wrap .button.button-secondary,
+		body.wp-core-ui .creatorreactor-wrap a.button:not(.button-primary),
+		body.wp-core-ui .creatorreactor-wrap input.button.button-secondary,
+		body.wp-core-ui .creatorreactor-wrap button.button:not(.button-primary):not(.button-link):not(.creatorreactor-btn-connect):not(.creatorreactor-btn-disconnect):not(.creatorreactor-oauth-tab-lock):not(.creatorreactor-cloud-tab-lock) {
+			color: var(--cr-brand-deep, #301934) !important;
+			background: #f6f7f7 !important;
+			border-color: var(--cr-brand-magenta, #8e2d77) !important;
+			box-shadow: 0 1px 0 rgba(48, 25, 52, 0.06) !important;
+		}
+		body.wp-core-ui .creatorreactor-wrap .button.button-secondary:hover,
+		body.wp-core-ui .creatorreactor-wrap .button.button-secondary:focus,
+		body.wp-core-ui .creatorreactor-wrap a.button:not(.button-primary):hover,
+		body.wp-core-ui .creatorreactor-wrap a.button:not(.button-primary):focus,
+		body.wp-core-ui .creatorreactor-wrap input.button.button-secondary:hover,
+		body.wp-core-ui .creatorreactor-wrap input.button.button-secondary:focus,
+		body.wp-core-ui .creatorreactor-wrap button.button:not(.button-primary):not(.button-link):not(.creatorreactor-btn-connect):not(.creatorreactor-btn-disconnect):not(.creatorreactor-oauth-tab-lock):not(.creatorreactor-cloud-tab-lock):hover,
+		body.wp-core-ui .creatorreactor-wrap button.button:not(.button-primary):not(.button-link):not(.creatorreactor-btn-connect):not(.creatorreactor-btn-disconnect):not(.creatorreactor-oauth-tab-lock):not(.creatorreactor-cloud-tab-lock):focus {
+			color: var(--cr-accent-strong, #6d2459) !important;
+			background: #fcf9fb !important;
+			border-color: var(--cr-accent-strong, #6d2459) !important;
+			box-shadow: 0 1px 0 rgba(48, 25, 52, 0.1) !important;
 		}
 		.creatorreactor-settings-header {
 			display: flex;
@@ -4310,7 +4496,14 @@ class Admin_Settings {
 		.creatorreactor-settings-header-text { flex: 1; min-width: 200px; }
 		.creatorreactor-settings-header h1 { margin-bottom: 5px; color: var(--cr-brand-deep, #301934); }
 		.creatorreactor-settings-header p { color: #6b5a74; margin-top: 0; }
-		.creatorreactor-section { background: #fff; border: 1px solid #dcdcde; border-radius: 4px; padding: 20px; margin-bottom: 20px; }
+		.creatorreactor-section {
+			background: #fff;
+			border: 1px solid #dcdcde;
+			border-radius: var(--cr-card-radius);
+			box-shadow: var(--cr-card-shadow);
+			padding: 20px;
+			margin-bottom: 20px;
+		}
 		.creatorreactor-section h2 { margin-top: 0; padding-bottom: 10px; border-bottom: 1px solid #dcdcde; font-size: 16px; color: var(--cr-brand-deep, #301934); }
 		.creatorreactor-section h3 { margin-top: 0; font-size: 14px; }
 		details.creatorreactor-shortcodes-guide-details { padding: 0; }
@@ -4368,7 +4561,8 @@ class Admin_Settings {
 		.creatorreactor-settings-auth-card {
 			background: #fff;
 			border: 1px solid #dcdcde;
-			border-radius: 4px;
+			border-radius: var(--cr-card-radius);
+			box-shadow: var(--cr-card-shadow);
 			overflow: hidden;
 			margin-bottom: 20px;
 		}
@@ -4380,7 +4574,7 @@ class Admin_Settings {
 			background: #f6f7f7;
 		}
 		.creatorreactor-settings-auth-card .creatorreactor-settings-block { padding: 20px; border-top: none; }
-		.creatorreactor-auth-mode-intro { margin: 0 0 12px; color: #1d2327; font-size: 14px; }
+		.creatorreactor-auth-mode-intro { margin: 0 0 12px; color: #414a4c; font-size: 14px; }
 		.creatorreactor-auth-mode-segmented {
 			display: inline-flex;
 			border: 1px solid #c3c4c7;
@@ -4399,7 +4593,7 @@ class Admin_Settings {
 			cursor: pointer;
 			font-weight: 600;
 			font-size: 14px;
-			color: #2c3338;
+			color: #414a4c;
 			border-right: 1px solid #c3c4c7;
 			user-select: none;
 		}
@@ -4439,6 +4633,39 @@ class Admin_Settings {
 		.form-table input[type="url"],
 		.form-table input[type="password"],
 		.form-table textarea { width: 100%; max-width: 400px; }
+		/* Slightly oversized fields vs default wp-admin (comfort / readability). */
+		.creatorreactor-wrap .form-table input[type="text"],
+		.creatorreactor-wrap .form-table input[type="url"],
+		.creatorreactor-wrap .form-table input[type="password"],
+		.creatorreactor-wrap .form-table input[type="email"],
+		.creatorreactor-wrap .form-table input[type="search"],
+		.creatorreactor-wrap .form-table input[type="number"],
+		.creatorreactor-wrap .form-table textarea,
+		.creatorreactor-wrap .form-table select {
+			font-size: 14px;
+			line-height: 1.45;
+			padding: 9px 12px;
+			min-height: 40px;
+			border-radius: 6px;
+			box-sizing: border-box;
+		}
+		.creatorreactor-wrap .form-table textarea {
+			min-height: 110px;
+			padding: 10px 12px;
+		}
+		.creatorreactor-wrap .form-table select {
+			min-height: 40px;
+			padding-top: 8px;
+			padding-bottom: 8px;
+		}
+		.creatorreactor-wrap #creatorreactor-docs-search.regular-text {
+			font-size: 14px;
+			line-height: 1.45;
+			padding: 9px 12px;
+			min-height: 40px;
+			border-radius: 6px;
+			box-sizing: border-box;
+		}
 		input.creatorreactor-oauth-client-secret { -webkit-text-security: disc; font-family: Consolas, Monaco, monospace; }
 		.form-table .description { color: #646970; font-size: 13px; }
 		.creatorreactor-general-login-error.description { color: #d63638; margin-top: 8px; }
@@ -4463,21 +4690,59 @@ class Admin_Settings {
 			color: #b91c1c;
 			border: 1px solid #fecaca;
 		}
-		.creatorreactor-tab-nav {
+		body.wp-core-ui .creatorreactor-wrap .creatorreactor-tab-nav.nav-tab-wrapper {
 			margin: 0 0 16px;
+			padding: 0;
+			border-bottom: 1px solid var(--cr-brand-magenta);
 			display: flex;
-			flex-wrap: nowrap;
+			flex-wrap: wrap;
 			align-items: flex-end;
+			gap: 0;
+			width: 100%;
+			box-sizing: border-box;
 		}
-		.creatorreactor-tab-nav .nav-tab {
+		body.wp-core-ui .creatorreactor-wrap .creatorreactor-tab-nav .nav-tab {
+			float: none !important;
 			white-space: nowrap;
+			margin: 0 4px -1px 0 !important;
+			padding: 9px 16px !important;
+			font-size: 14px;
+			font-weight: 600;
+			line-height: 1.35;
+			border-radius: 6px 6px 0 0;
+			border: 1px solid rgba(142, 45, 119, 0.45) !important;
+			border-bottom: none !important;
+			background: #f3e9f1 !important;
+			color: var(--cr-brand-deep) !important;
+			text-decoration: none !important;
+			box-shadow: none !important;
+			transition: background 0.15s ease, color 0.15s ease, border-color 0.15s ease;
 		}
-		.creatorreactor-wrap .creatorreactor-tab-nav .nav-tab:hover {
-			color: var(--cr-accent, #8e2d77);
+		body.wp-core-ui .creatorreactor-wrap .creatorreactor-tab-nav .nav-tab:hover,
+		body.wp-core-ui .creatorreactor-wrap .creatorreactor-tab-nav .nav-tab:focus {
+			color: var(--cr-accent-strong) !important;
+			background: #faf3f8 !important;
+			border-color: var(--cr-brand-magenta) !important;
 		}
-		.creatorreactor-wrap .creatorreactor-tab-nav .nav-tab.nav-tab-active {
-			border-bottom-color: var(--cr-accent, #8e2d77);
-			color: var(--cr-brand-deep, #301934);
+		body.wp-core-ui .creatorreactor-wrap .creatorreactor-tab-nav .nav-tab.nav-tab-active {
+			background: #fff !important;
+			color: var(--cr-brand-deep) !important;
+			border-color: var(--cr-brand-magenta) !important;
+			border-bottom: 1px solid #fff !important;
+			margin-bottom: -1px !important;
+			position: relative;
+			z-index: 1;
+		}
+		body.wp-core-ui .creatorreactor-wrap .creatorreactor-tab-nav .nav-tab.nav-tab-active:hover,
+		body.wp-core-ui .creatorreactor-wrap .creatorreactor-tab-nav .nav-tab.nav-tab-active:focus {
+			background: #fff !important;
+			color: var(--cr-accent-strong) !important;
+			border-color: var(--cr-accent-strong) !important;
+			border-bottom-color: #fff !important;
+		}
+		body.wp-core-ui .creatorreactor-wrap .creatorreactor-tab-nav .nav-tab:focus-visible {
+			outline: 2px solid var(--cr-brand-coral);
+			outline-offset: 2px;
 		}
 		.creatorreactor-tab-panel { display: none; }
 		.creatorreactor-tab-panel.is-active { display: block; }
@@ -4505,7 +4770,7 @@ class Admin_Settings {
 			border: 1px solid var(--cr-border);
 			border-radius: 16px;
 			padding: 28px;
-			box-shadow: 0 18px 44px rgba(48, 25, 52, 0.12);
+			box-shadow: var(--cr-card-shadow-elevated);
 			width: 100%;
 			box-sizing: border-box;
 		}
@@ -4537,7 +4802,7 @@ class Admin_Settings {
 			padding: 0;
 			border: 0;
 			letter-spacing: 0;
-			color: var(--cr-text-strong, #1d2327);
+			color: var(--cr-text-strong, #414a4c);
 		}
 		.creatorreactor-integration-checks-head {
 			display: flex;
@@ -4556,7 +4821,7 @@ class Admin_Settings {
 			padding: 0;
 			border: 0;
 			letter-spacing: 0;
-			color: var(--cr-text-strong, #1d2327);
+			color: var(--cr-text-strong, #414a4c);
 			flex: 1;
 			min-width: 0;
 		}
@@ -4598,7 +4863,7 @@ class Admin_Settings {
 			margin-bottom: 8px;
 			padding: 8px 10px;
 			max-width: min(280px, 70vw);
-			background: #1d2327;
+			background: #414a4c;
 			color: #fff;
 			font-size: 12px;
 			line-height: 1.45;
@@ -4665,9 +4930,9 @@ class Admin_Settings {
 			margin-top: 0;
 			padding: 22px;
 			border: 1px solid var(--cr-border, #e8e0ed);
-			border-radius: 14px;
+			border-radius: var(--cr-card-radius);
 			background: #fff;
-			box-shadow: 0 10px 28px rgba(48, 25, 52, 0.08);
+			box-shadow: var(--cr-card-shadow);
 		}
 		.creatorreactor-dashboard-grid {
 			display: grid;
@@ -4692,9 +4957,9 @@ class Admin_Settings {
 		.creatorreactor-modules-shell {
 			padding: 22px;
 			border: 1px solid var(--cr-border, #e8e0ed);
-			border-radius: 14px;
+			border-radius: var(--cr-card-radius);
 			background: #fff;
-			box-shadow: 0 10px 28px rgba(48, 25, 52, 0.08);
+			box-shadow: var(--cr-card-shadow);
 			min-height: 220px;
 		}
 		.creatorreactor-modules-shell .creatorreactor-dashboard-card-head + .creatorreactor-module-list {
@@ -4864,7 +5129,11 @@ class Admin_Settings {
 		.creatorreactor-modal-footer { padding: 12px 18px 16px; border-top: 1px solid #dcdcde; text-align: right; }
 		.creatorreactor-modal-close { border: 0; background: transparent; color: #50575e; cursor: pointer; font-size: 22px; line-height: 1; }
 		.creatorreactor-inline-status { margin-left: 8px; }
-		.creatorreactor-connection-card { border-width: 1px; }
+		.creatorreactor-connection-card {
+			border: 1px solid #dcdcde;
+			border-radius: var(--cr-card-radius);
+			box-shadow: var(--cr-card-shadow);
+		}
 		.creatorreactor-connection-card.is-red { border-color: #fecaca; }
 		.creatorreactor-connection-card.is-yellow { border-color: #fde68a; }
 		.creatorreactor-connection-card.is-green { border-color: #bbf7d0; }
@@ -4887,14 +5156,10 @@ class Admin_Settings {
 			.creatorreactor-dashboard-head .creatorreactor-status-badge { margin-left: 0; }
 			.creatorreactor-dashboard-subtitle { font-size: 14px; }
 			.creatorreactor-connection-actions { padding: 0; }
-			.creatorreactor-tab-nav {
-				display: flex;
-				flex-wrap: wrap;
-				gap: 6px;
-				border-bottom: 0;
-			}
-			.creatorreactor-tab-nav .nav-tab {
-				margin: 0;
+			body.wp-core-ui .creatorreactor-wrap .creatorreactor-tab-nav .nav-tab {
+				padding: 8px 12px !important;
+				font-size: 13px;
+				border-radius: 6px 6px 0 0;
 			}
 			.form-table th {
 				width: auto;
@@ -4909,14 +5174,14 @@ class Admin_Settings {
 			}
 		}
 		.creatorreactor-btn-connect.button {
-			background: linear-gradient(135deg, #8e2d77 0%, #d64d7f 52%, #e59885 100%);
+			background: var(--cr-brand-magenta, #8e2d77);
 			border-color: var(--cr-accent-strong, #6d2459);
 			color: #fff;
-			box-shadow: 0 8px 20px rgba(142, 45, 119, 0.35);
+			box-shadow: 0 4px 14px rgba(142, 45, 119, 0.28);
 		}
 		.creatorreactor-btn-connect.button:hover,
 		.creatorreactor-btn-connect.button:focus {
-			background: linear-gradient(135deg, #6d2459 0%, #8e2d77 45%, #d64d7f 100%);
+			background: var(--cr-accent-strong, #6d2459);
 			border-color: var(--cr-accent-deep, #4b1d66);
 			color: #fff;
 		}
@@ -4961,7 +5226,7 @@ class Admin_Settings {
 			font-size: 13px;
 			font-weight: 700;
 			letter-spacing: 0.01em;
-			color: #1d2327;
+			color: #414a4c;
 			display: inline-flex;
 			align-items: center;
 			gap: 8px;
@@ -5042,7 +5307,7 @@ class Admin_Settings {
 			margin-top: 10px;
 			padding-top: 10px;
 			border-top: 1px solid #dcdcde;
-			color: #1d2327;
+			color: #414a4c;
 			font-weight: 700;
 		}
 		#creatorreactor-user-details-modal .creatorreactor-modal-body dd.creatorreactor-details-section-spacer { display: none; }
@@ -5085,8 +5350,13 @@ class Admin_Settings {
 		.creatorreactor-danger-zone.expanded .creatorreactor-danger-zone-content {
 			max-height: 200px;
 		}
-		.creatorreactor-tab-nav .creatorreactor-tab-link-right { margin-left: auto; }
-		.creatorreactor-tab-nav .creatorreactor-tab-link-right + .creatorreactor-tab-link-right { margin-left: 0; }
+		/* Push Documentation + Debug to the far right (must beat .nav-tab { margin: ... !important }). */
+		body.wp-core-ui .creatorreactor-wrap .creatorreactor-tab-nav .nav-tab.creatorreactor-tab-link-right {
+			margin: 0 4px -1px auto !important;
+		}
+		body.wp-core-ui .creatorreactor-wrap .creatorreactor-tab-nav .nav-tab.creatorreactor-tab-link-right ~ .nav-tab.creatorreactor-tab-link-right {
+			margin: 0 4px -1px 0 !important;
+		}
 		.creatorreactor-docs-shell { max-width: none; }
 		.creatorreactor-docs-header {
 			display: flex;
@@ -5154,11 +5424,14 @@ class Admin_Settings {
 		.creatorreactor-sidebar-link:hover:not(.is-active) { background: #f5f5f5; }
 		.creatorreactor-settings-content { flex: 1; min-width: 0; }
 		.creatorreactor-settings-content.creatorreactor-settings-subtab-sync #creatorreactor-auth-mode-root { display: none; }
+		.creatorreactor-settings-content.creatorreactor-settings-subtab-sync .creatorreactor-onlyfans-auth-mode-root { display: none; }
 		.creatorreactor-settings-form-card {
 			background: #fff;
 			border: 1px solid #dcdcde;
-			border-radius: 4px;
+			border-radius: var(--cr-card-radius);
+			box-shadow: var(--cr-card-shadow);
 			overflow: hidden;
+			margin-bottom: 20px;
 		}
 		.creatorreactor-settings-form-card > .creatorreactor-settings-panel { display: none; }
 		.creatorreactor-settings-form-card > .creatorreactor-settings-panel.is-active { display: block; }
@@ -5317,7 +5590,7 @@ class Admin_Settings {
 		.creatorreactor-advanced-hint { margin: 0 0 12px; max-width: 52em; }
 		input.creatorreactor-advanced-endpoint-input[readonly] {
 			background: #f0f0f1;
-			color: #2c3338;
+			color: #414a4c;
 			cursor: not-allowed;
 		}
 		input.creatorreactor-advanced-endpoint-input:not([readonly]) { cursor: text; }
@@ -5346,7 +5619,7 @@ class Admin_Settings {
 
 		';
 
-		wp_register_style( 'creatorreactor-admin', false, [], CREATORREACTOR_VERSION );
+		wp_register_style( 'creatorreactor-admin', false, [ 'wp-admin' ], CREATORREACTOR_VERSION );
 		wp_enqueue_style( 'creatorreactor-admin' );
 		wp_add_inline_style( 'creatorreactor-admin', $css );
 
@@ -5530,6 +5803,11 @@ class Admin_Settings {
 				});
 				container.querySelectorAll("input, select, textarea, button").forEach(function(el) {
 					if (el.classList.contains("creatorreactor-copy-redirect-uri")) {
+						return;
+					}
+					if (el.classList.contains("creatorreactor-oauth-scopes-readonly") || el.classList.contains("creatorreactor-oauth-redirect-uri-readonly")) {
+						el.readOnly = true;
+						el.disabled = false;
 						return;
 					}
 					if (el.closest(".creatorreactor-advanced")) {
@@ -5921,23 +6199,24 @@ class Admin_Settings {
 				window.history.replaceState({}, "", cleanUrl.toString());
 			}
 
-			function activateSubtab(subtab) {
-				sidebarLinks.forEach(function(link) {
-					link.classList.toggle("is-active", link.getAttribute("data-subtab") === subtab);
-				});
-				sidebarPanels.forEach(function(panel) {
-					panel.classList.toggle("is-active", panel.getAttribute("data-subtab") === subtab);
-				});
-				var settingsContent = document.querySelector(".creatorreactor-settings-content");
-				if (settingsContent) {
-					settingsContent.classList.toggle("creatorreactor-settings-subtab-sync", subtab === "sync");
+			document.querySelectorAll(".creatorreactor-settings-container").forEach(function(settingsShell) {
+				var sidebarLinks = settingsShell.querySelectorAll(".creatorreactor-sidebar-link");
+				var sidebarPanels = settingsShell.querySelectorAll(".creatorreactor-settings-panel");
+				if (!sidebarLinks.length || !sidebarPanels.length) {
+					return;
 				}
-			}
-
-			var settingsShell = document.querySelector(".creatorreactor-settings-container");
-			var sidebarLinks = settingsShell ? settingsShell.querySelectorAll(".creatorreactor-sidebar-link") : [];
-			var sidebarPanels = settingsShell ? settingsShell.querySelectorAll(".creatorreactor-settings-panel") : [];
-			if (sidebarLinks.length && sidebarPanels.length) {
+				function activateSubtab(subtab) {
+					sidebarLinks.forEach(function(link) {
+						link.classList.toggle("is-active", link.getAttribute("data-subtab") === subtab);
+					});
+					sidebarPanels.forEach(function(panel) {
+						panel.classList.toggle("is-active", panel.getAttribute("data-subtab") === subtab);
+					});
+					var settingsContent = settingsShell.querySelector(".creatorreactor-settings-content");
+					if (settingsContent) {
+						settingsContent.classList.toggle("creatorreactor-settings-subtab-sync", subtab === "sync");
+					}
+				}
 				sidebarLinks.forEach(function(link) {
 					link.addEventListener("click", function(event) {
 						event.preventDefault();
@@ -5951,10 +6230,10 @@ class Admin_Settings {
 				});
 
 				var urlParams = new URLSearchParams(window.location.search);
-				var fanvueActivePanel = settingsShell ? settingsShell.querySelector(".creatorreactor-settings-panel.is-active") : null;
-				var initialSubtab = urlParams.get("subtab") || (fanvueActivePanel ? fanvueActivePanel.getAttribute("data-subtab") : "oauth");
+				var activePanel = settingsShell.querySelector(".creatorreactor-settings-panel.is-active");
+				var initialSubtab = urlParams.get("subtab") || (activePanel ? activePanel.getAttribute("data-subtab") : "oauth");
 				activateSubtab(initialSubtab);
-			}
+			});
 
 			(function setupCreatorreactorIntegrationChecksUi() {
 				var cfg = window.creatorreactorIntegrationFix;
@@ -6405,6 +6684,8 @@ class Admin_Settings {
 		$current_product_label = Entitlements::product_label( Entitlements::PRODUCT_FANVUE );
 		$secret_mask = ! empty( $opts['creatorreactor_oauth_client_secret'] ) ? '********' : '';
 		$cloud_password_mask = ! empty( $opts['creatorreactor_cloud_password'] ) ? '********' : '';
+		$ofauth_api_key_mask         = ! empty( $opts['creatorreactor_ofauth_api_key'] ) ? '********' : '';
+		$ofauth_webhook_secret_mask = ! empty( $opts['creatorreactor_ofauth_webhook_secret'] ) ? '********' : '';
 		$broker_mode         = ! empty( $opts['broker_mode'] );
 		$oauth_locked_initial = self::oauth_config_should_start_locked( $opts, $broker_mode );
 		$authentication_mode = $broker_mode ? self::AUTH_MODE_AGENCY : self::AUTH_MODE_CREATOR;
@@ -6423,7 +6704,7 @@ class Admin_Settings {
 				],
 			];
 		} elseif ( $is_settings_page ) {
-			$allowed_tabs = [ 'general', 'cloud', 'settings', 'documentation', 'debug' ];
+			$allowed_tabs = [ 'general', 'cloud', 'settings', 'onlyfans', 'documentation', 'debug' ];
 			$tab_links = [
 				'general'    => [
 					'label'     => __( 'General', 'creatorreactor' ),
@@ -6439,6 +6720,11 @@ class Admin_Settings {
 					'label'     => __( 'Fanvue', 'creatorreactor' ),
 					'page_slug' => self::PAGE_SETTINGS_SLUG,
 					'args'      => [ 'tab' => 'settings', 'subtab' => 'oauth' ],
+				],
+				'onlyfans'   => [
+					'label'     => __( 'OnlyFans', 'creatorreactor' ),
+					'page_slug' => self::PAGE_SETTINGS_SLUG,
+					'args'      => [ 'tab' => 'onlyfans', 'subtab' => 'oauth' ],
 				],
 				'documentation' => [
 					'label'     => __( 'Documentation', 'creatorreactor' ),
@@ -6471,6 +6757,9 @@ class Admin_Settings {
 		$allowed_subtabs = [ 'oauth', 'sync' ];
 		$requested_subtab = isset( $_GET['subtab'] ) ? sanitize_key( wp_unslash( $_GET['subtab'] ) ) : $default_subtab;
 		$active_subtab = in_array( $requested_subtab, $allowed_subtabs, true ) ? $requested_subtab : $default_subtab;
+		$onlyfans_active_subtab = ( 'onlyfans' === $active_tab && in_array( $requested_subtab, [ 'oauth', 'sync' ], true ) )
+			? $requested_subtab
+			: 'oauth';
 		$users_snapshot = self::get_users_tab_snapshot();
 		$user_totals      = $users_snapshot['totals'];
 		$user_rows        = $users_snapshot['rows'];
@@ -6584,6 +6873,32 @@ class Admin_Settings {
 	</div>
 </div>
 		</form>
+
+		<div class="creatorreactor-tab-panel <?php echo 'onlyfans' === $active_tab ? 'is-active' : ''; ?>" data-tab="onlyfans">
+			<form method="post" action="<?php echo esc_url( admin_url( 'options.php' ) ); ?>">
+				<?php settings_fields( self::OPTION_NAME ); ?>
+				<div class="creatorreactor-settings-container">
+					<div class="creatorreactor-settings-sidebar">
+						<nav class="creatorreactor-sidebar-nav" aria-label="<?php esc_attr_e( 'OnlyFans settings sections', 'creatorreactor' ); ?>">
+							<a href="<?php echo esc_url( self::admin_page_url( [ 'tab' => 'onlyfans', 'subtab' => 'oauth' ], self::PAGE_SETTINGS_SLUG ) ); ?>" class="creatorreactor-sidebar-link <?php echo 'oauth' === $onlyfans_active_subtab ? 'is-active' : ''; ?>" data-subtab="oauth"><?php esc_html_e( 'OAuth', 'creatorreactor' ); ?></a>
+							<a href="<?php echo esc_url( self::admin_page_url( [ 'tab' => 'onlyfans', 'subtab' => 'sync' ], self::PAGE_SETTINGS_SLUG ) ); ?>" class="creatorreactor-sidebar-link <?php echo 'sync' === $onlyfans_active_subtab ? 'is-active' : ''; ?>" data-subtab="sync"><?php esc_html_e( 'Sync', 'creatorreactor' ); ?></a>
+						</nav>
+					</div>
+					<div class="creatorreactor-settings-content<?php echo 'sync' === $onlyfans_active_subtab ? ' creatorreactor-settings-subtab-sync' : ''; ?>">
+						<div class="creatorreactor-settings-auth-card creatorreactor-onlyfans-auth-mode-root">
+							<h2><?php esc_html_e( 'Authentication Modes', 'creatorreactor' ); ?></h2>
+							<div class="creatorreactor-settings-block">
+								<p class="creatorreactor-auth-mode-intro"><?php esc_html_e( 'Link OnlyFans accounts using OFAuth’s Account Linking service. Generate an access key with Account Linking permissions, set the webhook URL in the OFAuth dashboard, and paste the credentials under OAuth.', 'creatorreactor' ); ?></p>
+								<p>
+									<a href="https://docs.ofauth.com/guide/OnlyFans-authentication/Integrating" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'OFAuth integration guide', 'creatorreactor' ); ?></a>
+								</p>
+							</div>
+						</div>
+						<?php self::render_onlyfans_settings_fields( $opts, $ofauth_api_key_mask, $ofauth_webhook_secret_mask, $onlyfans_active_subtab ); ?>
+					</div>
+				</div>
+			</form>
+		</div>
 
 		<div class="creatorreactor-tab-panel <?php echo 'users' === $active_tab ? 'is-active' : ''; ?>" data-tab="users">
 			<div class="creatorreactor-section">
@@ -6713,7 +7028,14 @@ class Admin_Settings {
 				} elseif ( ! $fanvue_oauth_is_configured ) {
 					$fanvue_oauth_state = 'yellow';
 				}
-				$onlyfans_oauth_state = 'gray';
+				$ofauth_api_configured  = ! empty( $opts['creatorreactor_ofauth_api_key'] );
+				$ofauth_wh_configured   = ! empty( $opts['creatorreactor_ofauth_webhook_secret'] );
+				$onlyfans_oauth_state   = 'gray';
+				if ( $ofauth_api_configured && $ofauth_wh_configured ) {
+					$onlyfans_oauth_state = 'green';
+				} elseif ( $ofauth_api_configured || $ofauth_wh_configured ) {
+					$onlyfans_oauth_state = 'yellow';
+				}
 				$cloud_is_active = ! empty( $opts['creatorreactor_cloud_active'] );
 				$cloud_id_present = ! empty( $opts['creatorreactor_cloud_id'] );
 				$cloud_password_present = ! empty( $opts['creatorreactor_cloud_password'] );
@@ -6748,6 +7070,7 @@ class Admin_Settings {
 								'state' => $fanvue_oauth_state,
 							],
 							[
+								'id'    => 'onlyfans_ofauth',
 								'label' => __( 'OnlyFans OAuth', 'creatorreactor' ),
 								'state' => $onlyfans_oauth_state,
 							],
@@ -6844,7 +7167,15 @@ class Admin_Settings {
 														$child_state = isset( $child['state'] ) ? (string) $child['state'] : 'gray';
 														$child_state = in_array( $child_state, [ 'green', 'yellow', 'red', 'gray' ], true ) ? $child_state : 'gray';
 														?>
-														<?php if ( $child_id === 'fanvue_oauth' ) : ?>
+														<?php if ( $child_id === 'onlyfans_ofauth' ) : ?>
+															<li class="creatorreactor-module-child creatorreactor-module-child--onlyfans-actions">
+																<span class="creatorreactor-module-status-dot is-<?php echo esc_attr( $child_state ); ?>" aria-hidden="true"></span>
+																<span class="creatorreactor-module-child-label"><?php echo esc_html( $child_label ); ?></span>
+																<span class="creatorreactor-module-child-actions">
+																	<a href="<?php echo esc_url( self::admin_page_url( [ 'tab' => 'onlyfans' ], self::PAGE_SETTINGS_SLUG ) ); ?>" class="button-link"><?php esc_html_e( 'Configure', 'creatorreactor' ); ?></a>
+																</span>
+															</li>
+														<?php elseif ( $child_id === 'fanvue_oauth' ) : ?>
 															<li class="creatorreactor-module-child creatorreactor-module-child--fanvue-actions">
 																<span class="creatorreactor-module-status-dot is-<?php echo esc_attr( $child_state ); ?>" aria-hidden="true"></span>
 																<span class="creatorreactor-module-child-label"><?php echo esc_html( $child_label ); ?></span>
@@ -6975,7 +7306,7 @@ class Admin_Settings {
 	}
 
 	public static function render_settings_page() {
-		self::render_page( 'settings', 'oauth' );
+		self::render_page( 'general', 'oauth' );
 	}
 
 	public static function render_users_page() {

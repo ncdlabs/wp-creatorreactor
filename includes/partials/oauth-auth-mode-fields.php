@@ -59,7 +59,7 @@ $redirect_uri_input_value = Admin_Settings::get_redirect_uri_input_value( $opts,
 				<th scope="row"><?php esc_html_e( 'Redirect URI', 'creatorreactor' ); ?></th>
 				<td>
 					<div class="creatorreactor-redirect-uri-row">
-						<input type="text" name="<?php echo esc_attr( $option_name ); ?>[creatorreactor_oauth_redirect_uri]" value="<?php echo esc_attr( $redirect_uri_input_value ); ?>" class="regular-text code creatorreactor-oauth-redirect-uri-input" autocomplete="off" />
+						<input type="text" readonly name="<?php echo esc_attr( $option_name ); ?>[creatorreactor_oauth_redirect_uri]" value="<?php echo esc_attr( $redirect_uri_input_value ); ?>" class="regular-text code creatorreactor-oauth-redirect-uri-input creatorreactor-oauth-redirect-uri-readonly" autocomplete="off" aria-readonly="true" />
 						<button type="button" class="button creatorreactor-copy-redirect-uri" aria-label="<?php esc_attr_e( 'Copy redirect URI to clipboard', 'creatorreactor' ); ?>"><?php esc_html_e( 'Copy', 'creatorreactor' ); ?></button>
 					</div>
 					<?php if ( ! $broker_mode ) : ?>
@@ -85,6 +85,13 @@ $redirect_uri_input_value = Admin_Settings::get_redirect_uri_input_value( $opts,
 				</td>
 			</tr>
 			<?php endif; ?>
+			<tr>
+				<th scope="row"><?php esc_html_e( 'Scopes', 'creatorreactor' ); ?></th>
+				<td>
+					<input type="text" readonly name="<?php echo esc_attr( $option_name ); ?>[creatorreactor_oauth_scopes]" value="<?php echo esc_attr( CreatorReactor_OAuth::normalize_scopes_string( $opts['creatorreactor_oauth_scopes'] ?? '' ) ); ?>" class="regular-text creatorreactor-oauth-scopes-readonly" autocomplete="off" aria-readonly="true" />
+					<p class="description"><?php esc_html_e( 'Space-separated OAuth scopes. Defaults match Fanvue Quick Start. If you enable read:fan for your app in the Fanvue developer portal, add read:fan here too, save settings, then disconnect OAuth and connect again so WordPress gets a new token that includes it.', 'creatorreactor' ); ?></p>
+				</td>
+			</tr>
 		</table>
 	</div>
 	<div class="creatorreactor-subsection creatorreactor-advanced">
@@ -94,7 +101,7 @@ $redirect_uri_input_value = Admin_Settings::get_redirect_uri_input_value( $opts,
 		</button>
 		<div id="creatorreactor-oauth-advanced-panel" class="creatorreactor-advanced-panel" hidden>
 			<div class="creatorreactor-advanced-panel-inner">
-				<p class="description creatorreactor-advanced-hint"><?php esc_html_e( 'Defaults match Fanvue. Use the lock next to the OAuth heading above to edit authorization, token, API base, and scopes.', 'creatorreactor' ); ?></p>
+				<p class="description creatorreactor-advanced-hint"><?php esc_html_e( 'Defaults match Fanvue. Use the lock next to the OAuth heading above to edit authorization, token, and API base.', 'creatorreactor' ); ?></p>
 				<table class="form-table">
 					<tr>
 						<th scope="row"><?php esc_html_e( 'Authorization URL', 'creatorreactor' ); ?></th>
@@ -112,13 +119,6 @@ $redirect_uri_input_value = Admin_Settings::get_redirect_uri_input_value( $opts,
 						<th scope="row"><?php esc_html_e( 'API Base URL', 'creatorreactor' ); ?></th>
 						<td>
 							<input type="text" readonly name="<?php echo esc_attr( $option_name ); ?>[creatorreactor_api_base_url]" value="<?php echo esc_attr( $opts['creatorreactor_api_base_url'] ?? CreatorReactor_OAuth::API_BASE_URL ); ?>" class="regular-text code creatorreactor-advanced-endpoint-input" autocomplete="off" />
-						</td>
-					</tr>
-					<tr>
-						<th scope="row"><?php esc_html_e( 'Scopes', 'creatorreactor' ); ?></th>
-						<td>
-							<input type="text" readonly name="<?php echo esc_attr( $option_name ); ?>[creatorreactor_oauth_scopes]" value="<?php echo esc_attr( CreatorReactor_OAuth::normalize_scopes_string( $opts['creatorreactor_oauth_scopes'] ?? '' ) ); ?>" class="regular-text creatorreactor-advanced-endpoint-input" autocomplete="off" />
-							<p class="description"><?php esc_html_e( 'Space-separated OAuth scopes. Defaults match Fanvue Quick Start. If you enable read:fan for your app in the Fanvue developer portal, add read:fan here too, save settings, then disconnect OAuth and connect again so WordPress gets a new token that includes it.', 'creatorreactor' ); ?></p>
 						</td>
 					</tr>
 				</table>

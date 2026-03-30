@@ -101,7 +101,7 @@ class Banner {
 			. '}'
 			. '#creatorreactor-oauth-banner.creatorreactor-registration-alert-wrap--global .creatorreactor-oauth-banner-message{'
 			. 'flex:1 1 auto!important;min-width:0!important;margin:0!important;'
-			. 'font-size:13px!important;line-height:1.35!important;font-weight:500!important;color:#1d2327!important;'
+			. 'font-size:13px!important;line-height:1.35!important;font-weight:500!important;color:#414a4c!important;'
 			. 'white-space:nowrap!important;overflow:hidden!important;text-overflow:ellipsis!important;'
 			. '}'
 			. '#creatorreactor-oauth-banner.creatorreactor-registration-alert-wrap--global .creatorreactor-oauth-banner-actions{'

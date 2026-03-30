@@ -166,7 +166,7 @@ class Editor_Blocks_Prompt {
 				. '#creatorreactor-onboarding-integration-modal.creatorreactor-modal[aria-hidden="false"]{display:block}'
 				. '#creatorreactor-onboarding-integration-modal .creatorreactor-modal-backdrop{position:absolute;inset:0;background:rgba(0,0,0,.45)}'
 				. '#creatorreactor-onboarding-integration-modal .creatorreactor-modal-dialog{position:relative;display:flex;flex-direction:column;width:min(560px,calc(100% - 32px));max-height:calc(100vh - 48px);margin:24px auto;background:#fff;border-radius:8px;border:1px solid #dcdcde;box-shadow:0 12px 32px rgba(0,0,0,.25);overflow:hidden;outline:none}'
-				. '#creatorreactor-onboarding-integration-modal .creatorreactor-modal-dialog:focus-visible{box-shadow:0 12px 32px rgba(0,0,0,.25),0 0 0 2px #2271b1}'
+				. '#creatorreactor-onboarding-integration-modal .creatorreactor-modal-dialog:focus-visible{box-shadow:0 12px 32px rgba(0,0,0,.25),0 0 0 2px #8e2d77}'
 				. '#creatorreactor-onboarding-integration-modal .creatorreactor-modal-header{display:flex;justify-content:space-between;align-items:flex-start;gap:12px;padding:16px 18px 12px;border-bottom:1px solid #dcdcde}'
 				. '#creatorreactor-onboarding-integration-modal .creatorreactor-modal-close{border:0;background:transparent;color:#50575e;cursor:pointer;font-size:22px;line-height:1;padding:4px;flex-shrink:0}'
 				. '#creatorreactor-onboarding-integration-modal .creatorreactor-onboarding-header-text{flex:1;min-width:0;padding-right:8px}'
