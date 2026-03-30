@@ -52,6 +52,95 @@ final class Entire_Post_Content_Gate {
 	}
 
 	/**
+	 * Elementor document controls + save sync (registered from {@see creatorreactor_register_elementor_integration()} on `plugins_loaded`).
+	 *
+	 * @return void
+	 */
+	public static function register_elementor_document_hooks() {
+		add_action( 'elementor/documents/register_controls', [ __CLASS__, 'elementor_register_controls' ], 20 );
+		add_action( 'elementor/document/save', [ __CLASS__, 'elementor_document_save' ], 10, 2 );
+	}
+
+	/**
+	 * @param mixed $document Elementor document instance.
+	 */
+	public static function elementor_register_controls( $document ) {
+		if ( ! is_object( $document ) || ! class_exists( '\Elementor\Core\DocumentTypes\PageBase' ) ) {
+			return;
+		}
+		if ( ! $document instanceof \Elementor\Core\DocumentTypes\PageBase || ! $document::get_property( 'has_elements' ) ) {
+			return;
+		}
+		if ( ! method_exists( $document, 'get_main_id' ) ) {
+			return;
+		}
+		$post_id = (int) $document->get_main_id();
+		$document->start_controls_section(
+			'creatorreactor_document_gate_section',
+			[
+				'label' => esc_html__( 'CreatorReactor', 'creatorreactor' ),
+				'tab'   => \Elementor\Controls_Manager::TAB_SETTINGS,
+			]
+		);
+		$document->add_control(
+			'creatorreactor_document_gate',
+			[
+				'label'       => esc_html__( 'Gate entire page', 'creatorreactor' ),
+				'type'        => \Elementor\Controls_Manager::SELECT,
+				'description' => esc_html__( 'Hides the full page body for visitors who do not match (same as wrapping everything in the matching shortcode).', 'creatorreactor' ),
+				'options'     => [
+					''                    => esc_html__( 'None', 'creatorreactor' ),
+					'subscriber'          => esc_html__( 'Subscriber only', 'creatorreactor' ),
+					'follower'            => esc_html__( 'Follower only', 'creatorreactor' ),
+					'logged_in'           => esc_html__( 'Any logged-in user', 'creatorreactor' ),
+					'logged_out'          => esc_html__( 'Logged-out visitors only', 'creatorreactor' ),
+					'logged_in_no_role'   => esc_html__( 'Logged in, no entitlement', 'creatorreactor' ),
+					'fanvue_connected'    => esc_html__( 'Fanvue linked', 'creatorreactor' ),
+					'fanvue_not_connected' => esc_html__( 'Fanvue not linked', 'creatorreactor' ),
+				],
+				'default'     => self::get_gate_for_post( $post_id ),
+				'label_block' => true,
+			]
+		);
+		$document->end_controls_section();
+	}
+
+	/**
+	 * Persist Elementor Page Settings control into {@see META_KEY} for front-end and WP meta box.
+	 *
+	 * @param mixed $document Elementor document.
+	 * @param mixed $data     Optional save payload.
+	 */
+	public static function elementor_document_save( $document, $data = null ) {
+		if ( ! is_object( $document ) || ! class_exists( '\Elementor\Core\DocumentTypes\PageBase' ) ) {
+			return;
+		}
+		if ( ! $document instanceof \Elementor\Core\DocumentTypes\PageBase ) {
+			return;
+		}
+		if ( ! method_exists( $document, 'get_main_id' ) || ! method_exists( $document, 'get_settings' ) ) {
+			return;
+		}
+		$post_id = (int) $document->get_main_id();
+		if ( $post_id < 1 || ! current_user_can( 'edit_post', $post_id ) ) {
+			return;
+		}
+		$settings = $document->get_settings();
+		if ( ! is_array( $settings ) ) {
+			$settings = [];
+		}
+		if ( is_array( $data ) && isset( $data['settings'] ) && is_array( $data['settings'] ) ) {
+			$settings = array_merge( $settings, $data['settings'] );
+		}
+		$raw = isset( $settings['creatorreactor_document_gate'] ) ? sanitize_key( (string) $settings['creatorreactor_document_gate'] ) : '';
+		if ( $raw === '' || ! in_array( $raw, self::ALLOWED_TAGS, true ) ) {
+			delete_post_meta( $post_id, self::META_KEY );
+			return;
+		}
+		update_post_meta( $post_id, self::META_KEY, $raw );
+	}
+
+	/**
 	 * @return list<string>
 	 */
 	public static function post_types_with_meta_box(): array {
@@ -184,14 +273,29 @@ final class Entire_Post_Content_Gate {
 		if ( wp_is_json_request() || is_feed() ) {
 			return $content;
 		}
-		if ( ! is_singular() || ! in_the_loop() || ! is_main_query() ) {
+		if ( ! is_singular() ) {
+			return $content;
+		}
+		$post_id = (int) get_queried_object_id();
+		if ( $post_id < 1 ) {
+			return $content;
+		}
+		// Hello Elementor and some templates call {@see the_content()} outside the main query; still require the main queried post.
+		$current_id = (int) get_the_ID();
+		if ( $current_id > 0 && $current_id !== $post_id ) {
 			return $content;
 		}
 		if ( class_exists( __NAMESPACE__ . '\\Editor_Context' ) && Editor_Context::is_elementor_preview_request() ) {
 			return $content;
 		}
-		$post_id = (int) get_queried_object_id();
-		if ( $post_id < 1 ) {
+		/**
+		 * Skip document-wide gate (e.g. theme conflicts).
+		 *
+		 * @param bool   $apply   Default true.
+		 * @param string $content HTML.
+		 * @param int    $post_id Post ID.
+		 */
+		if ( ! apply_filters( 'creatorreactor_apply_document_gate_to_content', true, $content, $post_id ) ) {
 			return $content;
 		}
 		$tag = self::get_gate_for_post( $post_id );

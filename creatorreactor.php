@@ -3,7 +3,7 @@
  * Plugin Name: CreatorReactor
  * Plugin URI: https://github.com/ncdlabs/creatorreactor
  * Description: OAuth integration, sync, and entitlements for creator products (CreatorReactor, with support for additional products such as OnlyFans).
- * Version: 2.0.56
+ * Version: 2.0.57
  * Author: ncdLabs
  * Author URI: https://ncdlabs.com
  * License: GPL v2 or later
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'CREATORREACTOR_VERSION', '2.0.56' );
+define( 'CREATORREACTOR_VERSION', '2.0.57' );
 define( 'CREATORREACTOR_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CREATORREACTOR_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'CREATORREACTOR_TABLE_ENTITLEMENTS', 'creatorreactor_entitlements' );
@@ -54,7 +54,9 @@ add_action( 'init', 'creatorreactor_load_textdomain', 0 );
  */
 function creatorreactor_register_elementor_integration() {
 	require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-creatorreactor-elementor.php';
+	require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-entire-post-content-gate.php';
 	\CreatorReactor\Elementor_Integration::init();
+	\CreatorReactor\Entire_Post_Content_Gate::register_elementor_document_hooks();
 }
 add_action( 'plugins_loaded', 'creatorreactor_register_elementor_integration', 5 );
 
