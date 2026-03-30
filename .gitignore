@@ -2,7 +2,7 @@
 creatorreactor-*.zip
 wp-creatorreactor-*.zip
 
-# Composer (if added later)
+# Composer
 /vendor/
 
 # Deploy (local paths / credentials; not for the repo)
@@ -19,6 +19,7 @@ Thumbs.db
 
 # Editors / IDEs
 .idea/
+.vscode/
 .cursor/
 *.swp
 *.swo
@@ -29,6 +30,16 @@ Thumbs.db
 *.cache
 .phpunit.result.cache
 .php-cs-fixer.cache
+.phpunit.cache/
+
+# PHPUnit / coverage output
+coverage/
+coverage.xml
+clover.xml
+*.cov
 
 # Node (if you add a JS toolchain later)
 node_modules/
+npm-debug.log*
+yarn-error.log*
+pnpm-debug.log*

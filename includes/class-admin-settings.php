@@ -6878,7 +6878,7 @@ class Admin_Settings {
 				],
 			];
 		} elseif ( $is_settings_page ) {
-			$allowed_tabs = [ 'general', 'cloud', 'settings', 'onlyfans', 'google', 'documentation', 'debug' ];
+			$allowed_tabs = [ 'general', 'cloud', 'settings', 'google', 'onlyfans', 'documentation', 'debug' ];
 			$tab_links = [
 				'general'    => [
 					'label'     => __( 'General', 'creatorreactor' ),
@@ -6895,15 +6895,15 @@ class Admin_Settings {
 					'page_slug' => self::PAGE_SETTINGS_SLUG,
 					'args'      => [ 'tab' => 'settings', 'subtab' => 'oauth' ],
 				],
-				'onlyfans'   => [
-					'label'     => __( 'OnlyFans', 'creatorreactor' ),
-					'page_slug' => self::PAGE_SETTINGS_SLUG,
-					'args'      => [ 'tab' => 'onlyfans', 'subtab' => 'oauth' ],
-				],
 				'google'     => [
 					'label'     => __( 'Google', 'creatorreactor' ),
 					'page_slug' => self::PAGE_SETTINGS_SLUG,
 					'args'      => [ 'tab' => 'google' ],
+				],
+				'onlyfans'   => [
+					'label'     => __( 'OnlyFans', 'creatorreactor' ),
+					'page_slug' => self::PAGE_SETTINGS_SLUG,
+					'args'      => [ 'tab' => 'onlyfans', 'subtab' => 'oauth' ],
 				],
 				'documentation' => [
 					'label'     => __( 'Documentation', 'creatorreactor' ),
