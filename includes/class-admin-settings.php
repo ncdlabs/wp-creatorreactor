@@ -1182,7 +1182,6 @@ class Admin_Settings {
 		$opts['hide_admin_bar_for_creatorreactor_users']      = self::stored_bool_default_true( $opts, 'hide_admin_bar_for_creatorreactor_users' );
 		$schema_url = isset( $opts['creatorreactor_schema_service_url'] ) ? trim( (string) $opts['creatorreactor_schema_service_url'] ) : '';
 		$opts['creatorreactor_schema_service_url'] = $schema_url === '' ? self::DEFAULT_SCHEMA_SERVICE_URL : esc_url_raw( $schema_url );
-		$opts['metrics_ingest_enabled'] = ! empty( $opts['metrics_ingest_enabled'] );
 		$metrics_url = isset( $opts['creatorreactor_metrics_ingest_url'] ) ? trim( (string) $opts['creatorreactor_metrics_ingest_url'] ) : '';
 		$opts['creatorreactor_metrics_ingest_url'] = $metrics_url === '' ? '' : esc_url_raw( $metrics_url );
 		return $opts;
@@ -1547,19 +1546,9 @@ class Admin_Settings {
 			$opts['creatorreactor_schema_service_url'] = $prev_schema === '' ? self::DEFAULT_SCHEMA_SERVICE_URL : esc_url_raw( $prev_schema );
 		}
 
-		if ( array_key_exists( 'metrics_ingest_enabled', $input ) ) {
-			$opts['metrics_ingest_enabled'] = ! empty( $input['metrics_ingest_enabled'] );
-		} else {
-			$opts['metrics_ingest_enabled'] = ! empty( $raw_opts['metrics_ingest_enabled'] );
-		}
-
-		if ( isset( $input['creatorreactor_metrics_ingest_url'] ) ) {
-			$metrics_in = trim( (string) wp_unslash( $input['creatorreactor_metrics_ingest_url'] ) );
-			$opts['creatorreactor_metrics_ingest_url'] = $metrics_in === '' ? '' : esc_url_raw( $metrics_in );
-		} else {
-			$prev_metrics = isset( $raw_opts['creatorreactor_metrics_ingest_url'] ) ? trim( (string) $raw_opts['creatorreactor_metrics_ingest_url'] ) : '';
-			$opts['creatorreactor_metrics_ingest_url'] = $prev_metrics === '' ? '' : esc_url_raw( $prev_metrics );
-		}
+		// Metrics ingest base URL is not editable in Settings; preserve stored value (env may override at request time).
+		$prev_metrics = isset( $raw_opts['creatorreactor_metrics_ingest_url'] ) ? trim( (string) $raw_opts['creatorreactor_metrics_ingest_url'] ) : '';
+		$opts['creatorreactor_metrics_ingest_url'] = $prev_metrics === '' ? '' : esc_url_raw( $prev_metrics );
 
 		$metrics_token = isset( $input['creatorreactor_metrics_ingest_token'] ) ? (string) wp_unslash( $input['creatorreactor_metrics_ingest_token'] ) : '';
 		if ( $metrics_token === '********' || $metrics_token === '' ) {
@@ -1925,10 +1914,6 @@ class Admin_Settings {
 		if ( ! isset( $opts['privacy_profile_snapshot_retention_days'] ) ) {
 			$opts['privacy_profile_snapshot_retention_days'] = 90;
 		}
-		if ( ! isset( $opts['metrics_ingest_enabled'] ) ) {
-			$opts['metrics_ingest_enabled'] = false;
-		}
-
 		update_option( self::OPTION_NAME, $opts );
 	}
 
@@ -2497,7 +2482,7 @@ class Admin_Settings {
 						<ul>
 							<li><?php esc_html_e( 'Cloud account: Active, Your CreatorReactor ID, and CreatorReactor Password (encrypted at rest; leave masked value to keep existing secret).', 'creatorreactor' ); ?></li>
 							<li><?php esc_html_e( 'Schema service: Schema Service URL (base URL of the API; unlock the card to edit).', 'creatorreactor' ); ?></li>
-							<li><?php esc_html_e( 'Metrics ingest: optional URL and bearer token to send non-PII operational events (e.g. scheduled sync) to the CreatorReactor metrics edge.', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'Metrics ingest: bearer token for POST /v1/ingest after each scheduled sync (URL is resolved from environment or install-time storage; not editable in Settings).', 'creatorreactor' ); ?></li>
 						</ul>
 						<p><?php esc_html_e( 'Production tip: rotate cloud credentials through a planned maintenance window and verify module status returns to green immediately after update.', 'creatorreactor' ); ?></p>
 					</section>
@@ -4214,7 +4199,8 @@ class Admin_Settings {
 	 * @param array $opts Options from {@see self::get_options()}.
 	 */
 	private static function render_cloud_metrics_ingest_fields( $opts ) {
-		$option_name = self::OPTION_NAME;
+		$option_name          = self::OPTION_NAME;
+		$metrics_resolved_url = self::get_metrics_ingest_url_for_requests();
 		include CREATORREACTOR_PLUGIN_DIR . 'includes/partials/cloud-metrics-ingest-fields.php';
 	}
 

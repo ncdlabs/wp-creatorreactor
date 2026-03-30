@@ -42,6 +42,54 @@ class Login_Page {
 		add_action( 'login_form_login', [ __CLASS__, 'on_login_form_login' ] );
 		add_action( 'login_init', [ __CLASS__, 'maybe_add_fanvue_oauth_login_notice' ] );
 		add_filter( 'login_redirect', [ __CLASS__, 'force_home_login_redirect' ], 20, 3 );
+		add_action( 'login_enqueue_scripts', [ __CLASS__, 'enqueue_login_branding_assets' ], 5 );
+		add_filter( 'login_headerurl', [ __CLASS__, 'filter_login_header_url' ] );
+		add_filter( 'login_headertext', [ __CLASS__, 'filter_login_header_text' ] );
+		add_filter( 'login_body_class', [ __CLASS__, 'filter_login_body_class' ], 10, 2 );
+	}
+
+	/**
+	 * Brand colors, logo, and layout for wp-login.php (all login actions).
+	 */
+	public static function enqueue_login_branding_assets() {
+		$handle = 'creatorreactor-wp-login-brand';
+		wp_enqueue_style(
+			$handle,
+			CREATORREACTOR_PLUGIN_URL . 'assets/css/creatorreactor-wp-login.css',
+			[],
+			CREATORREACTOR_VERSION
+		);
+		$logo = esc_url( CREATORREACTOR_PLUGIN_URL . 'img/cr-logo.png' );
+		wp_add_inline_style(
+			$handle,
+			':root{--cr-logo-url:url("' . $logo . '");}'
+		);
+	}
+
+	/**
+	 * @param string $url Default login logo link URL.
+	 * @return string
+	 */
+	public static function filter_login_header_url( $url ) {
+		return home_url( '/' );
+	}
+
+	/**
+	 * @param string $text Default login logo link title / alt text.
+	 * @return string
+	 */
+	public static function filter_login_header_text( $text ) {
+		return __( 'CreatorReactor', 'creatorreactor' );
+	}
+
+	/**
+	 * @param string[] $classes Body classes.
+	 * @param string   $action  Login action (login, lostpassword, etc.).
+	 * @return string[]
+	 */
+	public static function filter_login_body_class( $classes, $action ) {
+		$classes[] = 'creatorreactor-login';
+		return $classes;
 	}
 
 	/**
@@ -140,7 +188,7 @@ class Login_Page {
 			'pending_expired' => __( 'Your Fanvue sign-in session expired before account setup finished. Use Log in with Fanvue again.', 'creatorreactor' ),
 		];
 		$text = isset( $map[ $raw ] ) ? $map[ $raw ] : __( 'Fanvue sign-in did not finish. Use the Fanvue button to try again.', 'creatorreactor' );
-		$box  = '<div class="creatorreactor-fanvue-login-notice" role="alert" style="border-left:4px solid #d63638;padding:12px;margin:0 0 16px;background:#fcf0f1;"><p style="margin:0;">' . esc_html( $text ) . '</p></div>';
+		$box  = '<div class="creatorreactor-fanvue-login-notice" role="alert"><p style="margin:0;">' . esc_html( $text ) . '</p></div>';
 		return $message . $box;
 	}
 
@@ -202,7 +250,7 @@ class Login_Page {
 	cursor: pointer;
 	pointer-events: auto;
 	text-decoration: none;
-	color: #8e2d77;
+	color: #c23b79;
 }
 .creatorreactor-fanvue-oauth-text {
 	display: block;

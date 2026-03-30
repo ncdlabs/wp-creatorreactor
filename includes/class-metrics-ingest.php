@@ -1,6 +1,6 @@
 <?php
 /**
- * Sends anonymized operational metrics to the CreatorReactor metrics edge (Kafka-backed).
+ * Sends scheduled-sync metrics to the CreatorReactor data-ingestion edge (Kafka-backed).
  *
  * @package CreatorReactor
  * @author  Lou Grossi
@@ -32,13 +32,17 @@ class Metrics_Ingest {
 			return;
 		}
 
+		$opts   = Admin_Settings::get_options();
+		$sync_m = isset( $opts['cron_interval_minutes'] ) ? max( 5, (int) $opts['cron_interval_minutes'] ) : 15;
+
 		$event = [
-			'type' => 'sync.scheduled',
+			'type'  => 'sync.scheduled',
 			'ts_ms' => (int) round( microtime( true ) * 1000 ),
-			'data' => [
-				'success'     => ! empty( $payload['success'] ),
-				'duration_ms' => isset( $payload['duration_ms'] ) ? (int) $payload['duration_ms'] : null,
-				'completed_at' => isset( $payload['completed_at'] ) ? (int) $payload['completed_at'] : null,
+			'data'  => [
+				'success'              => ! empty( $payload['success'] ),
+				'duration_ms'          => isset( $payload['duration_ms'] ) ? (int) $payload['duration_ms'] : null,
+				'completed_at'         => isset( $payload['completed_at'] ) ? (int) $payload['completed_at'] : null,
+				'sync_interval_minutes' => $sync_m,
 			],
 		];
 
@@ -49,10 +53,6 @@ class Metrics_Ingest {
 	 * @return bool
 	 */
 	private static function is_enabled_and_configured() {
-		$opts = Admin_Settings::get_options();
-		if ( empty( $opts['metrics_ingest_enabled'] ) ) {
-			return false;
-		}
 		$url = Admin_Settings::get_metrics_ingest_url_for_requests();
 		if ( $url === '' ) {
 			return false;
