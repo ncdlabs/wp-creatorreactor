@@ -36,7 +36,7 @@ class Admin_Settings {
 	const LOG_TYPE_ERROR              = 'error';
 	const OPTION_TIERS               = 'creatorreactor_tiers';
 	const OPTION_SUBSCRIPTION_TIERS  = 'creatorreactor_subscription_tiers';
-	const ENCRYPTED_FIELDS            = [ 'creatorreactor_oauth_client_id', 'creatorreactor_oauth_client_secret', 'creatorreactor_cloud_password', 'creatorreactor_metrics_ingest_token', 'creatorreactor_ofauth_api_key', 'creatorreactor_ofauth_webhook_secret' ];
+	const ENCRYPTED_FIELDS            = [ 'creatorreactor_oauth_client_id', 'creatorreactor_oauth_client_secret', 'creatorreactor_cloud_password', 'creatorreactor_metrics_ingest_token', 'creatorreactor_ofauth_api_key', 'creatorreactor_ofauth_webhook_secret', 'creatorreactor_google_oauth_client_id', 'creatorreactor_google_oauth_client_secret' ];
 	/** Default Schema Service base URL (local compose publishes the API on host port 18080). */
 	const DEFAULT_SCHEMA_SERVICE_URL = 'http://localhost:18080';
 	/**
@@ -1690,6 +1690,30 @@ class Admin_Settings {
 			$opts['creatorreactor_ofauth_cancel_url'] = self::get_ofauth_redirect_url_default();
 		}
 
+		if ( isset( $input['creatorreactor_google_oauth_client_id'] ) ) {
+			$g_id = sanitize_text_field( wp_unslash( $input['creatorreactor_google_oauth_client_id'] ) );
+			$opts['creatorreactor_google_oauth_client_id'] = $g_id === '' ? '' : self::encrypt_value( $g_id );
+		} else {
+			$opts['creatorreactor_google_oauth_client_id'] = isset( $raw_opts['creatorreactor_google_oauth_client_id'] ) ? $raw_opts['creatorreactor_google_oauth_client_id'] : '';
+		}
+
+		$g_secret = isset( $input['creatorreactor_google_oauth_client_secret'] ) ? (string) wp_unslash( $input['creatorreactor_google_oauth_client_secret'] ) : '';
+		if ( $g_secret === '********' || $g_secret === '' ) {
+			$opts['creatorreactor_google_oauth_client_secret'] = isset( $raw_opts['creatorreactor_google_oauth_client_secret'] ) ? $raw_opts['creatorreactor_google_oauth_client_secret'] : '';
+		} else {
+			$enc_g = self::encrypt_value( $g_secret );
+			if ( $enc_g === '' ) {
+				add_settings_error(
+					self::OPTION_NAME,
+					'creatorreactor_google_oauth_client_secret_encrypt_failed',
+					__( 'Could not encrypt Google OAuth Client Secret (OpenSSL unavailable or encryption failed). The previous secret was kept.', 'creatorreactor' )
+				);
+				$opts['creatorreactor_google_oauth_client_secret'] = isset( $raw_opts['creatorreactor_google_oauth_client_secret'] ) ? $raw_opts['creatorreactor_google_oauth_client_secret'] : '';
+			} else {
+				$opts['creatorreactor_google_oauth_client_secret'] = $enc_g;
+			}
+		}
+
 		if ( $opts['creatorreactor_oauth_redirect_uri'] === '' ) {
 			$opts['creatorreactor_oauth_redirect_uri'] = $opts['broker_mode']
 				? self::get_broker_default_redirect_uri()
@@ -1767,7 +1791,7 @@ class Admin_Settings {
 				add_settings_error(
 					self::OPTION_NAME,
 					'creatorreactor_social_login_not_configured',
-					__( 'The WordPress login page option was turned off because no social login provider is configured. Add Fanvue OAuth (Client ID and Client Secret) in Creator mode.', 'creatorreactor' )
+					__( 'The WordPress login page option was turned off because no social login provider is configured. Add Fanvue OAuth (Client ID and Client Secret) or Google sign-in credentials under Settings → Google.', 'creatorreactor' )
 				);
 			}
 			$opts['replace_wp_login_with_social'] = false;
@@ -1787,18 +1811,35 @@ class Admin_Settings {
 		}
 		$client_id = isset( $opts['creatorreactor_oauth_client_id'] ) ? trim( (string) $opts['creatorreactor_oauth_client_id'] ) : '';
 		$secret    = isset( $opts['creatorreactor_oauth_client_secret'] ) ? trim( (string) $opts['creatorreactor_oauth_client_secret'] ) : '';
-		return $client_id !== '' && $secret !== '';
+		$fanvue_ok = $client_id !== '' && $secret !== '';
+		$g_id      = isset( $opts['creatorreactor_google_oauth_client_id'] ) ? trim( (string) $opts['creatorreactor_google_oauth_client_id'] ) : '';
+		$g_secret  = isset( $opts['creatorreactor_google_oauth_client_secret'] ) ? trim( (string) $opts['creatorreactor_google_oauth_client_secret'] ) : '';
+		$google_ok = $g_id !== '' && $g_secret !== '';
+		return $fanvue_ok || $google_ok;
 	}
 
 	/**
-	 * True when the plugin has at least one configured social (Fanvue) OAuth app for visitor login in Creator mode.
+	 * True when the plugin has at least one configured social (Fanvue and/or Google) OAuth app for visitor login in Creator mode.
 	 */
 	public static function is_fan_social_login_configured() {
 		return self::is_fan_social_login_configured_from_opts( self::get_options() );
 	}
 
 	/**
-	 * Whether to add the social login button on wp-login.php (option on + Fanvue OAuth configured).
+	 * Google OAuth Client ID and Secret are set (Creator mode; decrypted options).
+	 */
+	public static function is_google_login_configured() {
+		if ( self::is_broker_mode() ) {
+			return false;
+		}
+		$o = self::get_options();
+		$id = isset( $o['creatorreactor_google_oauth_client_id'] ) ? trim( (string) $o['creatorreactor_google_oauth_client_id'] ) : '';
+		$sec = isset( $o['creatorreactor_google_oauth_client_secret'] ) ? trim( (string) $o['creatorreactor_google_oauth_client_secret'] ) : '';
+		return $id !== '' && $sec !== '';
+	}
+
+	/**
+	 * Whether to add the social login buttons on wp-login.php (option on + at least one provider configured).
 	 */
 	public static function is_replace_wp_login_with_social() {
 		if ( ! self::is_fan_social_login_configured() ) {
@@ -2834,7 +2875,7 @@ class Admin_Settings {
 							</label>
 							<?php if ( ! $social_ok ) : ?>
 								<p class="description creatorreactor-general-login-error">
-									<?php esc_html_e( 'You must set up at least one social login provider in this plugin before this option can be enabled.', 'creatorreactor' ); ?>
+									<?php esc_html_e( 'Configure Fanvue OAuth (Settings → Fanvue) and/or Google sign-in (Settings → Google) before enabling this option.', 'creatorreactor' ); ?>
 								</p>
 							<?php endif; ?>
 						</td>
@@ -4317,6 +4358,114 @@ class Admin_Settings {
 		$option_name          = self::OPTION_NAME;
 		$metrics_resolved_url = self::get_metrics_ingest_url_for_requests();
 		include CREATORREACTOR_PLUGIN_DIR . 'includes/partials/cloud-metrics-ingest-fields.php';
+	}
+
+	/**
+	 * Google sign-in (OAuth 2.0 / OpenID Connect) for wp-login and shortcodes.
+	 *
+	 * @param array  $opts         Options from {@see self::get_options()}.
+	 * @param string $secret_mask  Mask for client secret field.
+	 */
+	private static function render_google_settings_fields( array $opts, $secret_mask ) {
+		$option_name   = self::OPTION_NAME;
+		$redirect_uri  = trailingslashit(
+			CreatorReactor_OAuth::get_rest_redirect_uri( CreatorReactor_OAuth::REST_NAMESPACE, '/google-oauth-callback' )
+		);
+		$broker_mode   = ! empty( $opts['broker_mode'] );
+		$g_client_id   = isset( $opts['creatorreactor_google_oauth_client_id'] ) ? (string) $opts['creatorreactor_google_oauth_client_id'] : '';
+		?>
+		<div class="creatorreactor-settings-panel is-active" data-subtab="google-oauth">
+			<h2><?php esc_html_e( 'Sign in with Google', 'creatorreactor' ); ?></h2>
+			<?php if ( $broker_mode ) : ?>
+				<div class="creatorreactor-mode-notice broker">
+					<p><?php esc_html_e( 'Google sign-in is not used in Agency (broker) mode.', 'creatorreactor' ); ?></p>
+				</div>
+			<?php else : ?>
+				<div class="creatorreactor-mode-notice direct">
+					<p>
+						<strong>
+							<a href="<?php echo esc_url( 'https://console.cloud.google.com/' ); ?>" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'Google Cloud Console', 'creatorreactor' ); ?></a>
+						</strong>
+					</p>
+					<ol>
+						<li>
+							<?php
+							printf(
+								wp_kses_post(
+									/* translators: 1: opening link to Google Cloud Console, 2: closing link */
+									__( 'Create or open a project in %1$sGoogle Cloud Console%2$s, then APIs & Services → Credentials.', 'creatorreactor' )
+								),
+								'<a href="' . esc_url( 'https://console.cloud.google.com/' ) . '" target="_blank" rel="noopener noreferrer">',
+								'</a>'
+							);
+							?>
+						</li>
+						<li><?php esc_html_e( 'Create an OAuth client ID of type “Web application”.', 'creatorreactor' ); ?></li>
+						<li>
+							<?php
+							printf(
+								/* translators: %s: Authorized redirect URI */
+								esc_html__( 'Under Authorized redirect URIs, add exactly this URL: %s', 'creatorreactor' ),
+								'<code>' . esc_html( $redirect_uri ) . '</code>'
+							);
+							?>
+						</li>
+						<li><?php esc_html_e( 'Copy the Client ID and Client Secret into the fields below.', 'creatorreactor' ); ?></li>
+					</ol>
+					<p class="description">
+						<?php
+						printf(
+							wp_kses_post(
+								/* translators: %s: link to Google OAuth documentation */
+								__( 'See the %s for consent screen and testing requirements.', 'creatorreactor' )
+							),
+							'<a href="' . esc_url( 'https://developers.google.com/identity/protocols/oauth2/web-server' ) . '" target="_blank" rel="noopener noreferrer">' . esc_html__( 'Google OAuth 2.0 for Web Server apps', 'creatorreactor' ) . '</a>'
+						);
+						?>
+					</p>
+				</div>
+				<div class="creatorreactor-settings-block">
+					<table class="form-table" role="presentation">
+						<tr>
+							<th scope="row"><label for="creatorreactor_google_oauth_client_id"><?php esc_html_e( 'Client ID', 'creatorreactor' ); ?></label></th>
+							<td>
+								<input type="text" id="creatorreactor_google_oauth_client_id" name="<?php echo esc_attr( $option_name ); ?>[creatorreactor_google_oauth_client_id]" value="<?php echo esc_attr( $g_client_id ); ?>" class="large-text code" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+								<p class="description"><?php esc_html_e( 'From your Google OAuth client. Stored encrypted.', 'creatorreactor' ); ?></p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><label for="creatorreactor_google_oauth_client_secret"><?php esc_html_e( 'Client Secret', 'creatorreactor' ); ?></label></th>
+							<td>
+								<input type="text" id="creatorreactor_google_oauth_client_secret" name="<?php echo esc_attr( $option_name ); ?>[creatorreactor_google_oauth_client_secret]" value="<?php echo esc_attr( $secret_mask ); ?>" class="large-text code" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" />
+								<p class="description"><?php esc_html_e( 'Stored encrypted. Leave as ******** to keep the existing value.', 'creatorreactor' ); ?></p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'Authorized redirect URI', 'creatorreactor' ); ?></th>
+							<td>
+								<div class="creatorreactor-redirect-uri-row">
+									<input type="text" readonly class="large-text code creatorreactor-oauth-redirect-uri-input" value="<?php echo esc_attr( $redirect_uri ); ?>" autocomplete="off" aria-readonly="true" />
+									<button type="button" class="button creatorreactor-copy-redirect-uri" data-copy-text="<?php echo esc_attr( $redirect_uri ); ?>" aria-label="<?php esc_attr_e( 'Copy redirect URI to clipboard', 'creatorreactor' ); ?>"><?php esc_html_e( 'Copy', 'creatorreactor' ); ?></button>
+								</div>
+								<p class="description">
+									<?php
+									printf(
+										wp_kses_post(
+											/* translators: 1: opening link to Google Cloud Console, 2: closing link */
+											__( 'Must match the value in %1$sGoogle Cloud Console%2$s (including trailing slash).', 'creatorreactor' )
+										),
+										'<a href="' . esc_url( 'https://console.cloud.google.com/' ) . '" target="_blank" rel="noopener noreferrer">',
+										'</a>'
+									);
+									?>
+								</p>
+							</td>
+						</tr>
+					</table>
+				</div>
+			<?php endif; ?>
+		</div>
+		<?php
 	}
 
 	/**
@@ -6710,6 +6859,7 @@ class Admin_Settings {
 		$cloud_password_mask = ! empty( $opts['creatorreactor_cloud_password'] ) ? '********' : '';
 		$ofauth_api_key_mask         = ! empty( $opts['creatorreactor_ofauth_api_key'] ) ? '********' : '';
 		$ofauth_webhook_secret_mask = ! empty( $opts['creatorreactor_ofauth_webhook_secret'] ) ? '********' : '';
+		$google_oauth_secret_mask    = ! empty( $opts['creatorreactor_google_oauth_client_secret'] ) ? '********' : '';
 		$broker_mode         = ! empty( $opts['broker_mode'] );
 		$oauth_locked_initial = self::oauth_config_should_start_locked( $opts, $broker_mode );
 		$authentication_mode = $broker_mode ? self::AUTH_MODE_AGENCY : self::AUTH_MODE_CREATOR;
@@ -6728,7 +6878,7 @@ class Admin_Settings {
 				],
 			];
 		} elseif ( $is_settings_page ) {
-			$allowed_tabs = [ 'general', 'cloud', 'settings', 'onlyfans', 'documentation', 'debug' ];
+			$allowed_tabs = [ 'general', 'cloud', 'settings', 'onlyfans', 'google', 'documentation', 'debug' ];
 			$tab_links = [
 				'general'    => [
 					'label'     => __( 'General', 'creatorreactor' ),
@@ -6749,6 +6899,11 @@ class Admin_Settings {
 					'label'     => __( 'OnlyFans', 'creatorreactor' ),
 					'page_slug' => self::PAGE_SETTINGS_SLUG,
 					'args'      => [ 'tab' => 'onlyfans', 'subtab' => 'oauth' ],
+				],
+				'google'     => [
+					'label'     => __( 'Google', 'creatorreactor' ),
+					'page_slug' => self::PAGE_SETTINGS_SLUG,
+					'args'      => [ 'tab' => 'google' ],
 				],
 				'documentation' => [
 					'label'     => __( 'Documentation', 'creatorreactor' ),
@@ -6911,6 +7066,19 @@ class Admin_Settings {
 					<div class="creatorreactor-settings-content<?php echo 'sync' === $onlyfans_active_subtab ? ' creatorreactor-settings-subtab-sync' : ''; ?>">
 						<?php self::render_onlyfans_settings_fields( $opts, $ofauth_api_key_mask, $ofauth_webhook_secret_mask, $onlyfans_active_subtab ); ?>
 					</div>
+				</div>
+			</form>
+		</div>
+
+		<div class="creatorreactor-tab-panel <?php echo 'google' === $active_tab ? 'is-active' : ''; ?>" data-tab="google">
+			<form method="post" action="<?php echo esc_url( admin_url( 'options.php' ) ); ?>">
+				<?php settings_fields( self::OPTION_NAME ); ?>
+				<div class="creatorreactor-settings-form-card">
+					<?php self::render_google_settings_fields( $opts, $google_oauth_secret_mask ); ?>
+				</div>
+				<div class="creatorreactor-settings-actions">
+					<a class="button" href="<?php echo esc_url( self::admin_page_url( [ 'tab' => 'google' ], self::PAGE_SETTINGS_SLUG ) ); ?>"><?php esc_html_e( 'Cancel', 'creatorreactor' ); ?></a>
+					<?php submit_button( __( 'Save Settings', 'creatorreactor' ) ); ?>
 				</div>
 			</form>
 		</div>

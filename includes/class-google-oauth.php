@@ -307,7 +307,7 @@ class Google_OAuth {
 				wp_safe_redirect( add_query_arg( 'creatorreactor_google', 'closed', $redirect_to ) );
 				exit;
 			}
-			$new_uid = self::insert_wp_user_from_google( $email, $name, $sub );
+			$new_uid = self::insert_wp_user_from_google( $email, $name );
 			if ( is_wp_error( $new_uid ) ) {
 				Admin_Settings::log_connection( 'error', 'Google OAuth: user creation failed: ' . $new_uid->get_error_message() );
 				wp_safe_redirect( add_query_arg( 'creatorreactor_google', 'user', $redirect_to ) );
@@ -418,10 +418,9 @@ class Google_OAuth {
 	/**
 	 * @param string $email Verified email.
 	 * @param string $name  Display name.
-	 * @param string $sub   Google sub.
 	 * @return int|\WP_Error
 	 */
-	private static function insert_wp_user_from_google( $email, $name, $sub ) {
+	private static function insert_wp_user_from_google( $email, $name ) {
 		$email = sanitize_email( (string) $email );
 		if ( ! is_email( $email ) ) {
 			return new \WP_Error( 'invalid_email', __( 'Invalid email from Google profile.', 'creatorreactor' ) );

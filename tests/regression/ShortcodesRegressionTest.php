@@ -89,6 +89,7 @@ final class ShortcodesRegressionTest extends BaseTestCase
             'fanvue_connected'       => 'fanvue_connected',
             'fanvue_not_connected'   => 'fanvue_not_connected',
             'fanvue_login_button'    => 'fanvue_oauth',
+            'google_login_button'    => 'google_oauth',
         ];
 
         foreach ($expect as $tag => $method) {
@@ -98,7 +99,7 @@ final class ShortcodesRegressionTest extends BaseTestCase
         }
 
         Shortcodes::register();
-        self::assertCount(9, $expect);
+        self::assertCount(10, $expect);
     }
 
     public function testInitRegistersRegisterHookOnInitAction(): void

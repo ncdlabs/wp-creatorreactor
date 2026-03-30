@@ -18,6 +18,9 @@ class Shortcodes {
 	/** @var bool */
 	private static $fanvue_oauth_footer_style_scheduled = false;
 
+	/** @var bool */
+	private static $google_oauth_footer_style_scheduled = false;
+
 	public static function init() {
 		add_action( 'init', [ __CLASS__, 'register' ], 20 );
 	}
@@ -32,6 +35,7 @@ class Shortcodes {
 		add_shortcode( 'fanvue_connected', [ __CLASS__, 'fanvue_connected' ] );
 		add_shortcode( 'fanvue_not_connected', [ __CLASS__, 'fanvue_not_connected' ] );
 		add_shortcode( 'fanvue_login_button', [ __CLASS__, 'fanvue_oauth' ] );
+		add_shortcode( 'google_login_button', [ __CLASS__, 'google_oauth' ] );
 	}
 
 	/**
@@ -279,6 +283,121 @@ class Shortcodes {
 			. '<img src="' . esc_url( $img_url ) . '" alt="" class="creatorreactor-fanvue-oauth-img" width="220" decoding="async" />'
 			. '<span class="creatorreactor-fanvue-oauth-text">' . esc_html( $label ) . '</span>'
 			. '</a></p>';
+	}
+
+	/**
+	 * @param array<string, string> $atts Attributes.
+	 */
+	public static function google_oauth( $atts = [] ) {
+		if ( Admin_Settings::is_broker_mode() ) {
+			return '<p class="creatorreactor-google-oauth-unavailable">' . esc_html__( 'Sign in with Google is not available in Agency (broker) mode.', 'creatorreactor' ) . '</p>';
+		}
+
+		if ( Role_Impersonation::effective_is_logged_in_for_creatorreactor_gates() ) {
+			$dashboard = admin_url();
+			$home      = home_url( '/' );
+			return '<p class="creatorreactor-google-oauth-wrap creatorreactor-google-oauth-logged-in">'
+				. esc_html__( 'You are already signed in.', 'creatorreactor' ) . ' '
+				. '<a href="' . esc_url( $dashboard ) . '">' . esc_html__( 'Dashboard', 'creatorreactor' ) . '</a>'
+				. ' <span class="creatorreactor-google-oauth-logged-in-sep" aria-hidden="true">—</span> '
+				. '<a href="' . esc_url( wp_logout_url( $home ) ) . '">' . esc_html__( 'Log out', 'creatorreactor' ) . '</a>'
+				. '</p>';
+		}
+
+		$redirect_to = '';
+		if ( isset( $_REQUEST['redirect_to'] ) && is_string( $_REQUEST['redirect_to'] ) ) {
+			$redirect_to = wp_validate_redirect( wp_unslash( $_REQUEST['redirect_to'] ), '' );
+		}
+		if ( $redirect_to === '' && is_singular() ) {
+			$redirect_to = get_permalink();
+		}
+		if ( ! is_string( $redirect_to ) || $redirect_to === '' ) {
+			$on_wp_login = isset( $_SERVER['REQUEST_URI'] ) && is_string( $_SERVER['REQUEST_URI'] )
+				&& stripos( $_SERVER['REQUEST_URI'], 'wp-login.php' ) !== false;
+			if ( $on_wp_login ) {
+				$redirect_to = admin_url();
+				if ( isset( $_REQUEST['redirect_to'] ) && is_string( $_REQUEST['redirect_to'] ) ) {
+					$redirect_to = wp_validate_redirect( wp_unslash( $_REQUEST['redirect_to'] ), $redirect_to );
+				}
+			} elseif ( isset( $_SERVER['REQUEST_URI'] ) && is_string( $_SERVER['REQUEST_URI'] ) ) {
+				$redirect_to = home_url( wp_unslash( $_SERVER['REQUEST_URI'] ) );
+			} else {
+				$redirect_to = home_url( '/' );
+			}
+		}
+		$redirect_to = wp_validate_redirect( $redirect_to, home_url( '/' ) );
+		$redirect_to = Plugin::normalize_url_path_slashes( $redirect_to );
+		$redirect_to = remove_query_arg( 'creatorreactor_google', $redirect_to );
+
+		$rest_path = CreatorReactor_OAuth::REST_NAMESPACE . '/' . ltrim( Google_OAuth::REST_ROUTE_START, '/' );
+		$rest_base = rest_url( $rest_path );
+		if ( ! is_string( $rest_base ) || $rest_base === '' || ! preg_match( '#\Ahttps?://#i', $rest_base ) ) {
+			$rest_base = add_query_arg( 'rest_route', '/' . trim( $rest_path, '/' ), home_url( '/' ) );
+		}
+		$start = add_query_arg(
+			[
+				'_wpnonce'    => wp_create_nonce( Google_OAuth::NONCE_ACTION ),
+				'redirect_to' => $redirect_to,
+			],
+			$rest_base
+		);
+		if ( strlen( $start ) > 1900 ) {
+			$start = add_query_arg(
+				[
+					'_wpnonce'    => wp_create_nonce( Google_OAuth::NONCE_ACTION ),
+					'redirect_to' => home_url( '/' ),
+				],
+				$rest_base
+			);
+		}
+
+		$href = esc_url( $start, [ 'http', 'https' ] );
+		if ( $href === '' ) {
+			$start = add_query_arg(
+				'_wpnonce',
+				wp_create_nonce( Google_OAuth::NONCE_ACTION ),
+				$rest_base
+			);
+			$href = esc_url( $start, [ 'http', 'https' ] );
+		}
+		if ( $href === '' ) {
+			$href = esc_url( esc_url_raw( $start ), [ 'http', 'https' ] );
+		}
+
+		self::schedule_google_oauth_footer_style();
+
+		$label   = __( 'Sign in with Google', 'creatorreactor' );
+		$configured = Admin_Settings::is_google_login_configured();
+		$link_attrs = 'class="creatorreactor-google-oauth-link" aria-label="' . esc_attr( $label ) . '"';
+		if ( ! $configured ) {
+			$link_attrs .= ' aria-disabled="true" role="button" tabindex="-1"';
+		} else {
+			$link_attrs .= ' href="' . esc_url( $href ) . '"';
+		}
+
+		return '<p class="creatorreactor-google-oauth-wrap">'
+			. '<a ' . $link_attrs . '>'
+			. '<span class="creatorreactor-google-oauth-button">' . esc_html( $label ) . '</span>'
+			. '</a></p>';
+	}
+
+	/**
+	 * @return void
+	 */
+	private static function schedule_google_oauth_footer_style() {
+		if ( self::$google_oauth_footer_style_scheduled ) {
+			return;
+		}
+		self::$google_oauth_footer_style_scheduled = true;
+		if ( isset( $GLOBALS['pagenow'] ) && $GLOBALS['pagenow'] === 'wp-login.php' ) {
+			return;
+		}
+		$css   = '.creatorreactor-google-oauth-link{cursor:pointer;pointer-events:auto;line-height:1.35;text-decoration:none;color:#1a73e8;border:1px solid #dadce0;border-radius:4px;padding:10px 16px;display:inline-block;font-weight:600;font-family:inherit}'
+			. '.creatorreactor-google-oauth-link[aria-disabled="true"]{cursor:not-allowed;pointer-events:none;opacity:.55;filter:grayscale(100%)}';
+		$print = static function () use ( $css ) {
+			echo '<style id="creatorreactor-google-oauth-css">' . $css . '</style>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
+		};
+		add_action( 'wp_footer', $print, 1 );
 	}
 
 	/**

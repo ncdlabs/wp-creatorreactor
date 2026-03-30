@@ -41,6 +41,7 @@ class Login_Page {
 		add_action( 'login_init', [ __CLASS__, 'maybe_offer_pending_fanvue_resume' ], 2 );
 		add_action( 'login_form_login', [ __CLASS__, 'on_login_form_login' ] );
 		add_action( 'login_init', [ __CLASS__, 'maybe_add_fanvue_oauth_login_notice' ] );
+		add_action( 'login_init', [ __CLASS__, 'maybe_add_google_oauth_login_notice' ] );
 		add_filter( 'login_redirect', [ __CLASS__, 'force_home_login_redirect' ], 20, 3 );
 		add_action( 'login_enqueue_scripts', [ __CLASS__, 'enqueue_login_branding_assets' ], 5 );
 		add_filter( 'login_headerurl', [ __CLASS__, 'filter_login_header_url' ] );
@@ -193,6 +194,70 @@ class Login_Page {
 	}
 
 	/**
+	 * @return string Sanitized code or ''.
+	 */
+	private static function get_google_oauth_notice_code_from_request() {
+		if ( isset( $_GET['creatorreactor_google'] ) && is_string( $_GET['creatorreactor_google'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return sanitize_key( wp_unslash( $_GET['creatorreactor_google'] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		}
+		if ( ! isset( $_GET['redirect_to'] ) || ! is_string( $_GET['redirect_to'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return '';
+		}
+		$raw = wp_unslash( $_GET['redirect_to'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$decoded = rawurldecode( $raw );
+		$parts   = wp_parse_url( $decoded );
+		if ( empty( $parts['query'] ) || ! is_string( $parts['query'] ) ) {
+			return '';
+		}
+		parse_str( $parts['query'], $q );
+		if ( empty( $q['creatorreactor_google'] ) || ! is_string( $q['creatorreactor_google'] ) ) {
+			return '';
+		}
+		return sanitize_key( $q['creatorreactor_google'] );
+	}
+
+	/**
+	 * Surface Google OAuth return codes on wp-login.
+	 */
+	public static function maybe_add_google_oauth_login_notice() {
+		if ( self::get_google_oauth_notice_code_from_request() === '' ) {
+			return;
+		}
+		$action = isset( $_GET['action'] ) ? sanitize_key( wp_unslash( $_GET['action'] ) ) : 'login'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		if ( 'login' !== $action ) {
+			return;
+		}
+		add_filter( 'login_message', [ __CLASS__, 'filter_login_message_google_oauth' ], 10, 1 );
+	}
+
+	/**
+	 * @param string $message Existing login message HTML.
+	 * @return string
+	 */
+	public static function filter_login_message_google_oauth( $message ) {
+		$raw = self::get_google_oauth_notice_code_from_request();
+		$map = [
+			'nonce'           => __( 'Google sign-in could not start (link expired or invalid). Use Sign in with Google again.', 'creatorreactor' ),
+			'agency'          => __( 'Google sign-in is not available in Agency (broker) mode.', 'creatorreactor' ),
+			'config'          => __( 'Google sign-in is not configured. Ask the site administrator to add OAuth credentials under Settings → Google.', 'creatorreactor' ),
+			'denied'          => __( 'Google sign-in was cancelled or denied.', 'creatorreactor' ),
+			'oauth_redirect'  => __( 'Google redirect URI does not match this site. In Google Cloud Console, set the Authorized redirect URI to the value shown under Settings → Google.', 'creatorreactor' ),
+			'oauth_client'    => __( 'Google rejected the OAuth client. Check Client ID and Client Secret under Settings → Google.', 'creatorreactor' ),
+			'oauth_request'   => __( 'Google rejected the sign-in request. Try Sign in with Google again.', 'creatorreactor' ),
+			'oauth_error'     => __( 'Google returned an authorization error. Try again or ask the site administrator to check connection logs.', 'creatorreactor' ),
+			'state'           => __( 'Google sign-in could not be verified (session expired). Use Sign in with Google again.', 'creatorreactor' ),
+			'token'           => __( 'Google did not return a usable token. Check OAuth settings under Settings → Google.', 'creatorreactor' ),
+			'profile'         => __( 'Google sign-in could not load profile data. Try again or use your WordPress login.', 'creatorreactor' ),
+			'closed'          => __( 'New accounts are not allowed on this site. An administrator must create your WordPress user or enable registration.', 'creatorreactor' ),
+			'user'            => __( 'Could not create or load your WordPress user after Google sign-in. Contact the site administrator.', 'creatorreactor' ),
+			'missing'         => __( 'Google did not return a complete authorization response. Confirm the redirect URI in Google Cloud Console matches this site.', 'creatorreactor' ),
+		];
+		$text = isset( $map[ $raw ] ) ? $map[ $raw ] : __( 'Google sign-in did not finish. Use Sign in with Google to try again.', 'creatorreactor' );
+		$box  = '<div class="creatorreactor-google-login-notice" role="alert"><p style="margin:0;">' . esc_html( $text ) . '</p></div>';
+		return $message . $box;
+	}
+
+	/**
 	 * Register hooks for the primary login screen only (not lost password, etc.).
 	 */
 	public static function on_login_form_login() {
@@ -269,6 +334,26 @@ class Login_Page {
 	max-width: min(220px, 100%);
 	width: auto;
 }
+.creatorreactor-wp-login-social .creatorreactor-google-oauth-wrap {
+	margin: 12px 0 0;
+}
+.creatorreactor-wp-login-social .creatorreactor-google-oauth-link {
+	display: inline-block;
+	line-height: 1.35;
+	box-shadow: none;
+	text-decoration: none;
+	color: #1a73e8;
+	border: 1px solid #dadce0;
+	border-radius: 4px;
+	padding: 10px 16px;
+	font-weight: 600;
+}
+.creatorreactor-wp-login-social .creatorreactor-google-oauth-link[aria-disabled="true"] {
+	cursor: not-allowed;
+	opacity: 0.55;
+	filter: grayscale(100%);
+	pointer-events: none;
+}
 #login:has(.creatorreactor-wp-login-split) {
 	max-width: 720px;
 	width: 100%;
@@ -288,6 +373,8 @@ JS;
 		echo '<div class="creatorreactor-wp-login-social">';
 		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- shortcode HTML (same as post content).
 		echo do_shortcode( '[fanvue_login_button]' );
+		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- shortcode HTML (same as post content).
+		echo do_shortcode( '[google_login_button]' );
 		echo '</div>';
 	}
 }
