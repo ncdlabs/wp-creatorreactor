@@ -1184,6 +1184,10 @@ class Admin_Settings {
 		$opts['creatorreactor_schema_service_url'] = $schema_url === '' ? self::DEFAULT_SCHEMA_SERVICE_URL : esc_url_raw( $schema_url );
 		$metrics_url = isset( $opts['creatorreactor_metrics_ingest_url'] ) ? trim( (string) $opts['creatorreactor_metrics_ingest_url'] ) : '';
 		$opts['creatorreactor_metrics_ingest_url'] = $metrics_url === '' ? '' : esc_url_raw( $metrics_url );
+		$ofauth_success = isset( $opts['creatorreactor_ofauth_success_url'] ) ? trim( (string) $opts['creatorreactor_ofauth_success_url'] ) : '';
+		$opts['creatorreactor_ofauth_success_url'] = $ofauth_success !== '' ? self::sanitize_ofauth_redirect_url( $ofauth_success ) : self::get_ofauth_redirect_url_default();
+		$ofauth_cancel = isset( $opts['creatorreactor_ofauth_cancel_url'] ) ? trim( (string) $opts['creatorreactor_ofauth_cancel_url'] ) : '';
+		$opts['creatorreactor_ofauth_cancel_url'] = $ofauth_cancel !== '' ? self::sanitize_ofauth_redirect_url( $ofauth_cancel ) : self::get_ofauth_redirect_url_default();
 		return $opts;
 	}
 
@@ -1303,6 +1307,15 @@ class Admin_Settings {
 			return '';
 		}
 		return $url;
+	}
+
+	/**
+	 * Default OFAuth success/cancel redirect when none is stored (front page).
+	 *
+	 * @return string
+	 */
+	private static function get_ofauth_redirect_url_default() {
+		return self::sanitize_ofauth_redirect_url( home_url( '/' ) );
 	}
 
 	private static function sanitize_display_timezone( $value ) {
@@ -1668,6 +1681,13 @@ class Admin_Settings {
 		} else {
 			$prev_c = isset( $raw_opts['creatorreactor_ofauth_cancel_url'] ) ? (string) $raw_opts['creatorreactor_ofauth_cancel_url'] : '';
 			$opts['creatorreactor_ofauth_cancel_url'] = $prev_c !== '' ? self::sanitize_ofauth_redirect_url( $prev_c ) : '';
+		}
+
+		if ( $opts['creatorreactor_ofauth_success_url'] === '' ) {
+			$opts['creatorreactor_ofauth_success_url'] = self::get_ofauth_redirect_url_default();
+		}
+		if ( $opts['creatorreactor_ofauth_cancel_url'] === '' ) {
+			$opts['creatorreactor_ofauth_cancel_url'] = self::get_ofauth_redirect_url_default();
 		}
 
 		if ( $opts['creatorreactor_oauth_redirect_uri'] === '' ) {
@@ -4623,6 +4643,10 @@ class Admin_Settings {
 		.creatorreactor-mode-notice.direct { background: #faf3f8; border-left: 4px solid var(--cr-accent, #8e2d77); }
 		.creatorreactor-mode-notice.broker { background: #f0f6ce; border-left: 4px solid #00a32a; }
 		.creatorreactor-mode-notice p { margin: 0; font-size: 13px; }
+		.creatorreactor-mode-notice > p:first-child { margin-bottom: 8px; }
+		.creatorreactor-mode-notice ol { margin: 0; padding-left: 1.25em; font-size: 13px; }
+		.creatorreactor-mode-notice ol li { margin: 6px 0; }
+		.creatorreactor-mode-notice .creatorreactor-ofauth-doc-link { margin-top: 10px; }
 		.creatorreactor-broker-field { transition: opacity 0.2s ease; }
 		.creatorreactor-broker-field:disabled { opacity: 0.5; cursor: not-allowed; }
 		.creatorreactor-redirect-uri-row { display: flex; align-items: flex-start; gap: 8px; flex-wrap: wrap; margin: 0 0 4px; }
@@ -5424,7 +5448,6 @@ class Admin_Settings {
 		.creatorreactor-sidebar-link:hover:not(.is-active) { background: #f5f5f5; }
 		.creatorreactor-settings-content { flex: 1; min-width: 0; }
 		.creatorreactor-settings-content.creatorreactor-settings-subtab-sync #creatorreactor-auth-mode-root { display: none; }
-		.creatorreactor-settings-content.creatorreactor-settings-subtab-sync .creatorreactor-onlyfans-auth-mode-root { display: none; }
 		.creatorreactor-settings-form-card {
 			background: #fff;
 			border: 1px solid #dcdcde;
@@ -5721,6 +5744,7 @@ class Admin_Settings {
 				});
 			}
 			setupRedirectUriCopyDelegation(oauthDynamic);
+			setupRedirectUriCopyDelegation(document.getElementById("creatorreactor-onlyfans-settings-dynamic"));
 
 			function setupCreatorreactorAdvancedDelegation(root) {
 				if (!root || root.dataset.creatorreactorAdvancedBound) {
@@ -6885,15 +6909,6 @@ class Admin_Settings {
 						</nav>
 					</div>
 					<div class="creatorreactor-settings-content<?php echo 'sync' === $onlyfans_active_subtab ? ' creatorreactor-settings-subtab-sync' : ''; ?>">
-						<div class="creatorreactor-settings-auth-card creatorreactor-onlyfans-auth-mode-root">
-							<h2><?php esc_html_e( 'Authentication Modes', 'creatorreactor' ); ?></h2>
-							<div class="creatorreactor-settings-block">
-								<p class="creatorreactor-auth-mode-intro"><?php esc_html_e( 'Link OnlyFans accounts using OFAuth’s Account Linking service. Generate an access key with Account Linking permissions, set the webhook URL in the OFAuth dashboard, and paste the credentials under OAuth.', 'creatorreactor' ); ?></p>
-								<p>
-									<a href="https://docs.ofauth.com/guide/OnlyFans-authentication/Integrating" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'OFAuth integration guide', 'creatorreactor' ); ?></a>
-								</p>
-							</div>
-						</div>
 						<?php self::render_onlyfans_settings_fields( $opts, $ofauth_api_key_mask, $ofauth_webhook_secret_mask, $onlyfans_active_subtab ); ?>
 					</div>
 				</div>

@@ -3,7 +3,7 @@
  * Plugin Name: CreatorReactor
  * Plugin URI: https://github.com/ncdlabs/creatorreactor
  * Description: OAuth integration, sync, and entitlements for creator products (CreatorReactor, with support for additional products such as OnlyFans).
- * Version: 2.0.54
+ * Version: 2.0.55
  * Author: ncdLabs
  * Author URI: https://ncdlabs.com
  * License: GPL v2 or later
@@ -21,7 +21,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'CREATORREACTOR_VERSION', '2.0.54' );
+define( 'CREATORREACTOR_VERSION', '2.0.55' );
 define( 'CREATORREACTOR_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CREATORREACTOR_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'CREATORREACTOR_TABLE_ENTITLEMENTS', 'creatorreactor_entitlements' );
@@ -34,6 +34,18 @@ require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-creatorreactor-client.p
 require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-cron.php';
 
 require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-broker-client.php';
+
+/**
+ * Load translations on init (WordPress 6.7+; avoids _load_textdomain_just_in_time before init).
+ */
+function creatorreactor_load_textdomain() {
+	load_plugin_textdomain(
+		'creatorreactor',
+		false,
+		dirname( plugin_basename( __FILE__ ) ) . '/languages'
+	);
+}
+add_action( 'init', 'creatorreactor_load_textdomain', 0 );
 
 function creatorreactor_init() {
 	try {
@@ -53,7 +65,7 @@ function creatorreactor_init() {
 		}
 	}
 }
-add_action( 'plugins_loaded', 'creatorreactor_init' );
+add_action( 'init', 'creatorreactor_init', 1 );
 
 function creatorreactor_activate() {
 	try {
