@@ -81,6 +81,10 @@ final class Gated_Content_Cache {
 		if ( ! $post instanceof \WP_Post ) {
 			return false;
 		}
+		if ( class_exists( __NAMESPACE__ . '\\Entire_Post_Content_Gate' )
+			&& Entire_Post_Content_Gate::get_gate_for_post( (int) $post->ID ) !== '' ) {
+			return true;
+		}
 		$content = (string) $post->post_content;
 		if ( strpos( $content, 'wp-block-creatorreactor-' ) !== false ) {
 			return true;
