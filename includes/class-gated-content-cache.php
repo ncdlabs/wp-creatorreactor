@@ -75,14 +75,14 @@ final class Gated_Content_Cache {
 
 	/**
 	 * @param int $post_id Post ID.
+	 * @return bool True when the post contains CreatorReactor gates.
 	 */
-	public static function post_has_creatorreactor_gates( $post_id ) {
+	public static function post_has_creatorreactor_gates( $post_id ): bool {
 		$post = get_post( (int) $post_id );
 		if ( ! $post instanceof \WP_Post ) {
 			return false;
 		}
-		if ( class_exists( __NAMESPACE__ . '\\Entire_Post_Content_Gate' )
-			&& Entire_Post_Content_Gate::get_gate_for_post( (int) $post->ID ) !== '' ) {
+		if ( Entire_Post_Content_Gate::get_gate_for_post( (int) $post->ID ) !== '' ) {
 			return true;
 		}
 		$content = (string) $post->post_content;
@@ -92,7 +92,7 @@ final class Gated_Content_Cache {
 		if ( preg_match( '/\[\s*(subscriber|follower|has_tier|logged_in|logged_out|logged_in_no_role|fanvue_connected|fanvue_not_connected)\b/', $content ) ) {
 			return true;
 		}
-		if ( class_exists( __NAMESPACE__ . '\\Editor_Context' ) && Editor_Context::post_uses_elementor_storage( $post->ID ) ) {
+		if ( Editor_Context::post_uses_elementor_storage( $post->ID ) ) {
 			$data = get_post_meta( $post->ID, '_elementor_data', true );
 			if ( is_string( $data ) && strpos( $data, 'creatorreactor_' ) !== false ) {
 				return true;

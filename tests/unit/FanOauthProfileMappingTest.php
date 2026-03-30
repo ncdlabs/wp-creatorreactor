@@ -52,7 +52,6 @@ final class FanOauthProfileMappingTest extends BaseTestCase
     public function testMapsProvidedFieldsFromOauthPayloadToWpProfileAndMeta(): void
     {
         $method = new \ReflectionMethod(Fan_OAuth::class, 'sync_wp_profile_fields_from_oauth_profile');
-        $method->setAccessible(true);
 
         $profile = [
             'id' => 'fan-123',
@@ -81,7 +80,6 @@ final class FanOauthProfileMappingTest extends BaseTestCase
     public function testSkipsNullOrMissingMappedFields(): void
     {
         $method = new \ReflectionMethod(Fan_OAuth::class, 'sync_wp_profile_fields_from_oauth_profile');
-        $method->setAccessible(true);
 
         $profile = [
             'data' => [
@@ -109,7 +107,6 @@ final class FanOauthProfileMappingTest extends BaseTestCase
         );
 
         $method = new \ReflectionMethod(Fan_OAuth::class, 'get_stored_profile_snapshot_for_user');
-        $method->setAccessible(true);
 
         $decoded = $method->invoke(null, 42);
         self::assertIsArray($decoded);
@@ -124,7 +121,6 @@ final class FanOauthProfileMappingTest extends BaseTestCase
         );
 
         $method = new \ReflectionMethod(Fan_OAuth::class, 'get_stored_profile_snapshot_for_user');
-        $method->setAccessible(true);
 
         self::assertNull($method->invoke(null, 42));
     }
@@ -145,7 +141,6 @@ final class FanOauthProfileMappingTest extends BaseTestCase
         );
 
         $method = new \ReflectionMethod(Fan_OAuth::class, 'role_from_oauth_profile');
-        $method->setAccessible(true);
 
         $slug = $method->invoke(null, [
             'data' => [

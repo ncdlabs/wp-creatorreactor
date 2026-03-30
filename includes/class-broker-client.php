@@ -53,6 +53,35 @@ class Broker_Client {
 		return Admin_Settings::get_options();
 	}
 
+	/**
+	 * Build a \WP_Error instance with constructor argument order compatible with
+	 * both real WordPress and our test harness (which may alias WP_Error to \Exception).
+	 */
+	private static function create_wp_error( $code, $message ) {
+		if ( ! class_exists( '\\WP_Error' ) ) {
+			return new \Exception( (string) $message );
+		}
+
+		try {
+			$rc = new \ReflectionClass( '\\WP_Error' );
+			$ctor = $rc->getConstructor();
+			$params = $ctor ? $ctor->getParameters() : [];
+
+			// When WP_Error is aliased to \Exception, constructor params are ($message, $code).
+			$firstParamName = isset( $params[0] ) ? (string) $params[0]->getName() : '';
+			if ( $firstParamName === 'message' ) {
+				$intCode = is_int( $code ) ? $code : 0;
+				$prefixedMessage = is_string( $code ) && $code !== '' ? (string) $code . ': ' . (string) $message : (string) $message;
+
+				return new \WP_Error( $prefixedMessage, $intCode );
+			}
+		} catch ( \Throwable $e ) {
+			// Fall back to the standard WordPress order.
+		}
+
+		return new \WP_Error( $code, $message );
+	}
+
 	public static function get_broker_url() {
 		$opts = self::get_broker_options();
 		return isset( $opts['broker_url'] ) ? rtrim( $opts['broker_url'], '/' ) : 'https://auth.ncdlabs.com';
@@ -377,7 +406,7 @@ class Broker_Client {
 		try {
 			$jwt = self::get_jwt_token();
 			if ( ! $jwt ) {
-				return new \WP_Error( 'not_connected', 'Not connected to broker' );
+				return self::create_wp_error( 'not_connected', 'Not connected to broker' );
 			}
 
 			$url = self::get_broker_url() . '/api/creatorreactor' . $endpoint;
@@ -405,20 +434,20 @@ class Broker_Client {
 			$code = wp_remote_retrieve_response_code( $response );
 			if ( $code === 401 ) {
 				self::clear_credentials();
-				return new \WP_Error( 'token_expired', 'JWT token expired, please reconnect' );
+				return self::create_wp_error( 'token_expired', 'JWT token expired, please reconnect' );
 			}
 
 			if ( $code !== 200 ) {
 				$body = wp_remote_retrieve_body( $response );
 				if ( (int) $code === 403 && is_string( $body ) && stripos( $body, 'Insufficient scopes' ) !== false ) {
-					return new \WP_Error(
+					return self::create_wp_error(
 						'api_error',
 						'HTTP 403 — ' . __( 'Insufficient OAuth scopes.', 'creatorreactor' ) . ' ' . CreatorReactor_Client::get_insufficient_scopes_hint_text()
 					);
 				}
 				$snippet = is_string( $body ) && $body !== '' ? substr( wp_strip_all_tags( $body ), 0, 500 ) : '';
 				$msg     = 'API request failed: HTTP ' . $code . ( $snippet !== '' ? '. Response: ' . $snippet : '' );
-				return new \WP_Error( 'api_error', $msg );
+				return self::create_wp_error( 'api_error', $msg );
 			}
 
 			return json_decode( wp_remote_retrieve_body( $response ), true );
@@ -426,7 +455,7 @@ class Broker_Client {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 				error_log( 'CreatorReactor api_get error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
 			}
-			return new \WP_Error( 'api_error', 'API request failed: ' . $e->getMessage() );
+			return self::create_wp_error( 'api_error', 'API request failed: ' . $e->getMessage() );
 		}
 	}
 

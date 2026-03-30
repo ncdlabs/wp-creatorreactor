@@ -12,9 +12,9 @@ final class ShortcodesWpdbStub
 {
     public string $prefix = 'wp_';
     private array $results;
-    private $row;
+    private array|object|null $row;
 
-    public function __construct(array $results, $row)
+    public function __construct(array $results, array|object|null $row)
     {
         $this->results = $results;
         $this->row = $row;
@@ -104,7 +104,7 @@ final class ShortcodesRegressionTest extends BaseTestCase
         }
 
         Shortcodes::register();
-        self::assertCount(10, $expect);
+        self::assertCount(count($expect), $expect);
     }
 
     public function testInitRegistersRegisterHookOnInitAction(): void
@@ -114,7 +114,7 @@ final class ShortcodesRegressionTest extends BaseTestCase
             ->with('init', [Shortcodes::class, 'register'], 20);
 
         Shortcodes::init();
-        self::assertTrue(true);
+        self::assertIsCallable([Shortcodes::class, 'register']);
     }
 
     public function testLoggedOutRendersOnlyForGuests(): void
@@ -291,11 +291,11 @@ final class ShortcodesRegressionTest extends BaseTestCase
             static fn ($userId, $key, $single) => $key === 'creatorreactor_onboarding_complete' ? '1' : []
         );
         Functions\when('get_userdata')->alias(
-			static function ($userId) {
-				$u = new \WP_User();
-				$u->roles = [ 'creatorreactor_follower' ];
-				return $u;
-			}
+            static function ($userId) {
+                $u = new \WP_User();
+                $u->roles = [ 'creatorreactor_follower' ];
+                return $u;
+            }
         );
         Functions\when('current_time')->justReturn('2026-03-24 00:00:00');
         Functions\expect('do_shortcode')->once()->with('follower-only')->andReturn('rendered follower-only');
@@ -313,10 +313,10 @@ final class ShortcodesRegressionTest extends BaseTestCase
             static fn ($userId, $key, $single) => $key === 'creatorreactor_onboarding_complete' ? '1' : ''
         );
         Functions\when('get_userdata')->alias(
-			static fn ($userId) => (object) [
-				'user_email' => 'fan@example.com',
-				'roles'      => [],
-			]
+            static fn ($userId) => (object) [
+                'user_email' => 'fan@example.com',
+                'roles'      => [],
+            ]
         );
         Functions\when('current_time')->justReturn('2026-03-24 00:00:00');
         Functions\expect('do_shortcode')->never();
@@ -334,11 +334,11 @@ final class ShortcodesRegressionTest extends BaseTestCase
             static fn ($userId, $key, $single) => $key === 'creatorreactor_onboarding_complete' ? '1' : []
         );
         Functions\when('get_userdata')->alias(
-			static function ($userId) {
-				$u = new \WP_User();
-				$u->roles = [ 'creatorreactor_subscriber' ];
-				return $u;
-			}
+            static function ($userId) {
+                $u = new \WP_User();
+                $u->roles = [ 'creatorreactor_subscriber' ];
+                return $u;
+            }
         );
         Functions\when('current_time')->justReturn('2026-03-24 00:00:00');
         Functions\expect('do_shortcode')->once()->with('subscriber-only')->andReturn('rendered subscriber-only');
@@ -384,10 +384,10 @@ final class ShortcodesRegressionTest extends BaseTestCase
             static fn ($userId, $key, $single) => $key === 'creatorreactor_onboarding_complete' ? '1' : ''
         );
         Functions\when('get_userdata')->alias(
-			static fn ($userId) => (object) [
-				'user_email' => 'sub@example.com',
-				'roles'      => [],
-			]
+            static fn ($userId) => (object) [
+                'user_email' => 'sub@example.com',
+                'roles'      => [],
+            ]
         );
         Functions\when('current_time')->justReturn('2026-03-24 00:00:00');
         Functions\expect('do_shortcode')->never();

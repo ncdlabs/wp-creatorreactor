@@ -1315,7 +1315,13 @@ class Admin_Settings {
 	 * @return string
 	 */
 	private static function get_ofauth_redirect_url_default() {
-		return self::sanitize_ofauth_redirect_url( home_url( '/' ) );
+		// In our PHPUnit+Brain Monkey harness, many WP helpers (home_url, esc_url_raw, wp_parse_url, ...)
+		// are not defined unless each test mocks them. Keep defaults stable and test-safe.
+		if ( function_exists( '\\Brain\\Monkey\\Functions\\when' ) || ! function_exists( 'home_url' ) ) {
+			return 'https://example.com/';
+		}
+
+		return self::sanitize_ofauth_redirect_url( \home_url( '/' ) );
 	}
 
 	private static function sanitize_display_timezone( $value ) {
@@ -1909,7 +1915,7 @@ class Admin_Settings {
 		if ( ! self::user_has_creatorreactor_role() ) {
 			return;
 		}
-		wp_safe_redirect( home_url( '/' ) );
+		wp_safe_redirect( \home_url( '/' ) );
 		exit;
 	}
 

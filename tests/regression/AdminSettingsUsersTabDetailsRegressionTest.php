@@ -26,7 +26,6 @@ final class AdminSettingsUsersTabDetailsRegressionTest extends BaseTestCase
     private function invokeUsersTabRowDetailsPayload(array $row): array
     {
         $method = new \ReflectionMethod(Admin_Settings::class, 'users_tab_row_details_payload');
-        $method->setAccessible(true);
 
         return $method->invoke(null, $row);
     }

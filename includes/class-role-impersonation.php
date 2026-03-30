@@ -258,6 +258,11 @@ final class Role_Impersonation {
 		if ( \is_admin() ) {
 			return;
 		}
+		// Elementor live preview/editor canvas requests use a special front-end shape
+		// (e.g. `?elementor-preview=...`) and must not show this UI panel.
+		if ( class_exists( __NAMESPACE__ . '\\Editor_Context' ) && Editor_Context::is_elementor_preview_request() ) {
+			return;
+		}
 		if ( ! \is_user_logged_in() ) {
 			return;
 		}

@@ -43,7 +43,7 @@ final class Entire_Post_Content_Gate {
 	/**
 	 * Run after Elementor replaces post content (Elementor uses a low {@see 'the_content'} priority).
 	 */
-	private const CONTENT_FILTER_PRIORITY = 9999999;
+	private const CONTENT_FILTER_PRIORITY = PHP_INT_MAX;
 
 	public static function init() {
 		add_action( 'add_meta_boxes', [ __CLASS__, 'add_meta_box' ] );
@@ -76,7 +76,7 @@ final class Entire_Post_Content_Gate {
 		}
 		$post_id = (int) $document->get_main_id();
 		$document->start_controls_section(
-			'creatorreactor_document_gate_section',
+			'creatorreactor_document_gate_control_section',
 			[
 				'label' => esc_html__( 'CreatorReactor', 'creatorreactor' ),
 				'tab'   => \Elementor\Controls_Manager::TAB_SETTINGS,
@@ -282,10 +282,12 @@ final class Entire_Post_Content_Gate {
 		}
 		// Hello Elementor and some templates call {@see the_content()} outside the main query; still require the main queried post.
 		$current_id = (int) get_the_ID();
-		if ( $current_id > 0 && $current_id !== $post_id ) {
+		// When we're inside the loop, allow templates/partials to call {@see the_content()} with a different ID.
+		// We only enforce matching against the main queried post when outside the loop (Elementor/custom calls).
+		if ( ! in_the_loop() && $current_id > 0 && $current_id !== $post_id ) {
 			return $content;
 		}
-		if ( class_exists( __NAMESPACE__ . '\\Editor_Context' ) && Editor_Context::is_elementor_preview_request() ) {
+		if ( Editor_Context::is_elementor_preview_request() ) {
 			return $content;
 		}
 		/**
