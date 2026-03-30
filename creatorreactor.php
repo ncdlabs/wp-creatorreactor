@@ -47,6 +47,17 @@ function creatorreactor_load_textdomain() {
 }
 add_action( 'init', 'creatorreactor_load_textdomain', 0 );
 
+/**
+ * Register Elementor hooks before Elementor fires {@see 'elementor/init'} on `init` priority 0.
+ * If this runs only from {@see creatorreactor_init()} (init priority 1), the listener is added too late
+ * and widgets plus front-end gate inheritance JS never load.
+ */
+function creatorreactor_register_elementor_integration() {
+	require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-creatorreactor-elementor.php';
+	\CreatorReactor\Elementor_Integration::init();
+}
+add_action( 'plugins_loaded', 'creatorreactor_register_elementor_integration', 5 );
+
 function creatorreactor_init() {
 	try {
 		\CreatorReactor\Plugin::bootstrap();

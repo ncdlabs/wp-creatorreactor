@@ -62,7 +62,6 @@ class Plugin {
 			Gated_Content_Cache::init();
 			Role_Impersonation::init();
 			Viewer_State::init();
-			Elementor_Integration::init();
 			Banner::init();
 			Privacy::init();
 			Metrics_Ingest::init();
