@@ -2,7 +2,6 @@ jQuery(document).ready(function($) {
 	$('#creatorreactor-oauth-banner .button').on('click', function(e) {
 		e.preventDefault();
 		var $banner = $('#creatorreactor-oauth-banner');
-		var $button = $(this);
 
 		// Send AJAX request to dismiss the banner
 		$.post(
