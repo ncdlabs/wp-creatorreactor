@@ -37,7 +37,9 @@ final class Elementor_Integration {
 	}
 
 	public static function init() {
-		add_action( 'elementor/init', [ __CLASS__, 'boot' ], 5 );
+		// Register widgets as early as possible so `elementor/widgets/register` is not fired
+		// before we hook `register_widgets()`.
+		add_action( 'elementor/init', [ __CLASS__, 'boot' ], 0 );
 	}
 
 	public static function boot() {
