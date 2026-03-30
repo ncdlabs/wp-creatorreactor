@@ -39,6 +39,7 @@ final class Elementor_Integration {
 	public static function init() {
 		// Register widgets as early as possible so `elementor/widgets/register` is not fired
 		// before we hook `register_widgets()`.
+		add_action( 'elementor/widgets/register', [ __CLASS__, 'register_widgets' ], 0 );
 		add_action( 'elementor/init', [ __CLASS__, 'boot' ], 0 );
 	}
 
@@ -60,7 +61,6 @@ final class Elementor_Integration {
 			);
 		}
 
-		add_action( 'elementor/widgets/register', [ __CLASS__, 'register_widgets' ] );
 		add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_frontend_gates_inheritance_assets' ], 20 );
 		add_action( 'admin_enqueue_scripts', [ __CLASS__, 'enqueue_elementor_gates_editor_constraint_assets' ], 20 );
 	}
@@ -135,6 +135,11 @@ final class Elementor_Integration {
 	 * @param \Elementor\Widgets_Manager $widgets_manager Elementor widgets manager.
 	 */
 	public static function register_widgets( $widgets_manager ) {
+		// In case `boot()` didn't run early enough, ensure widget classes are loaded before registration.
+		if ( ! class_exists( __NAMESPACE__ . '\\Elementor_Widget_Follower_Legacy' ) ) {
+			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-creatorreactor-elementor-widgets.php';
+		}
+
 		$use_nested_gates = self::nested_gate_widgets_supported()
 			&& class_exists( __NAMESPACE__ . '\\Elementor_Widget_Follower_Nested' );
 
