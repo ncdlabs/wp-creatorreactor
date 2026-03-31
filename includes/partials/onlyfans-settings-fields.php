@@ -81,14 +81,14 @@ $broker_mode = ! empty( $opts['broker_mode'] );
 				<tr>
 					<th scope="row"><?php esc_html_e( 'API key', 'creatorreactor' ); ?></th>
 					<td>
-						<input type="text" name="<?php echo esc_attr( $option_name ); ?>[creatorreactor_ofauth_api_key]" value="<?php echo esc_attr( $api_key_mask ); ?>" class="regular-text code" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="text" />
+						<input type="text" id="creatorreactor_ofauth_api_key" name="<?php echo esc_attr( $option_name ); ?>[creatorreactor_ofauth_api_key]" value="<?php echo esc_attr( $api_key_mask ); ?>" class="regular-text code" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="text" />
 						<p class="description"><?php esc_html_e( 'OFAuth access key with Account Linking permissions. Stored encrypted. Leave as ******** to keep the existing value.', 'creatorreactor' ); ?></p>
 					</td>
 				</tr>
 				<tr>
 					<th scope="row"><?php esc_html_e( 'Webhook secret', 'creatorreactor' ); ?></th>
 					<td>
-						<input type="text" name="<?php echo esc_attr( $option_name ); ?>[creatorreactor_ofauth_webhook_secret]" value="<?php echo esc_attr( $webhook_secret_mask ); ?>" class="regular-text code" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="text" />
+						<input type="text" id="creatorreactor_ofauth_webhook_secret" name="<?php echo esc_attr( $option_name ); ?>[creatorreactor_ofauth_webhook_secret]" value="<?php echo esc_attr( $webhook_secret_mask ); ?>" class="regular-text code" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="text" />
 						<p class="description"><?php esc_html_e( 'Must match the secret configured in OFAuth. Sent as the x-webhook-secret header. Stored encrypted. Leave as ******** to keep the existing value.', 'creatorreactor' ); ?></p>
 					</td>
 				</tr>

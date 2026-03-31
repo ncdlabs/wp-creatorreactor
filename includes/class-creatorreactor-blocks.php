@@ -32,12 +32,19 @@ class Blocks {
 		}
 		$version = defined( 'CREATORREACTOR_VERSION' ) ? CREATORREACTOR_VERSION : '1.0.0';
 
+		wp_enqueue_style(
+			'creatorreactor-gates-fouc',
+			CREATORREACTOR_PLUGIN_URL . 'assets/css/creatorreactor-gates-fouc.css',
+			[],
+			$version
+		);
+
 		wp_enqueue_script(
 			'creatorreactor-gutenberg-gates-inheritance',
 			CREATORREACTOR_PLUGIN_URL . 'assets/js/creatorreactor-gutenberg-gates-inheritance.js',
 			[],
 			$version,
-			false
+			true
 		);
 
 		$viewer_state_bootstrap = Viewer_State::bootstrap_for_inline_script();

@@ -142,6 +142,10 @@ class Admin_Settings {
 		add_action( 'admin_init', [ __CLASS__, 'register_settings' ] );
 		add_action( 'admin_post_creatorreactor_disconnect', [ __CLASS__, 'handle_disconnect' ] );
 		add_action( 'admin_post_creatorreactor_test_connection', [ __CLASS__, 'handle_connection_test' ] );
+		add_action( 'admin_post_creatorreactor_disable_google_oauth', [ __CLASS__, 'handle_disable_google_oauth' ] );
+		add_action( 'admin_post_creatorreactor_disable_onlyfans_ofauth', [ __CLASS__, 'handle_disable_onlyfans_ofauth' ] );
+		add_action( 'admin_post_creatorreactor_test_google_oauth', [ __CLASS__, 'handle_test_google_oauth' ] );
+		add_action( 'admin_post_creatorreactor_test_onlyfans_ofauth', [ __CLASS__, 'handle_test_onlyfans_ofauth' ] );
 		add_action( 'admin_post_creatorreactor_clear_connection_logs', [ __CLASS__, 'handle_clear_connection_logs' ] );
 		add_action( 'admin_post_creatorreactor_clear_sync_logs', [ __CLASS__, 'handle_clear_sync_logs' ] );
 		add_action( 'admin_post_creatorreactor_broker_connect', [ __CLASS__, 'handle_broker_connect' ] );
@@ -156,6 +160,9 @@ class Admin_Settings {
 		add_action( 'wp_ajax_creatorreactor_onboarding_apply_fixes', [ __CLASS__, 'ajax_onboarding_apply_fixes' ] );
 		add_action( 'wp_ajax_creatorreactor_onboarding_ignore_checks', [ __CLASS__, 'ajax_onboarding_ignore_failing_checks' ] );
 		add_action( 'wp_ajax_creatorreactor_debug_schema_manifest', [ __CLASS__, 'ajax_debug_schema_manifest' ] );
+		add_action( 'wp_ajax_creatorreactor_google_oauth_validate', [ __CLASS__, 'ajax_google_oauth_validate_config' ] );
+		add_action( 'wp_ajax_creatorreactor_fanvue_oauth_validate', [ __CLASS__, 'ajax_fanvue_oauth_validate_config' ] );
+		add_action( 'wp_ajax_creatorreactor_onlyfans_ofauth_validate', [ __CLASS__, 'ajax_onlyfans_ofauth_validate_config' ] );
 		add_action( 'show_user_profile', [ __CLASS__, 'render_user_profile_creatorreactor_uuid_field' ] );
 		add_action( 'edit_user_profile', [ __CLASS__, 'render_user_profile_creatorreactor_uuid_field' ] );
 		add_action( 'admin_init', [ __CLASS__, 'maybe_redirect_creatorreactor_users_from_wp_admin' ], 1 );
@@ -936,6 +943,239 @@ class Admin_Settings {
 
 		$result = self::fetch_schema_service_manifest( true );
 		wp_send_json_success( $result );
+	}
+
+	/**
+	 * AJAX: verify Google OAuth client ID / secret against Google’s token endpoint before saving settings.
+	 */
+	public static function ajax_google_oauth_validate_config() {
+		check_ajax_referer( 'creatorreactor_google_oauth_save', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( [ 'message' => __( 'Forbidden.', 'creatorreactor' ) ], 403 );
+		}
+		if ( self::is_broker_mode() ) {
+			wp_send_json_success( [ 'skip' => true ] );
+		}
+
+		$client_id = isset( $_POST['client_id'] ) ? trim( sanitize_text_field( wp_unslash( $_POST['client_id'] ) ) ) : '';
+		$secret_in = isset( $_POST['client_secret'] ) ? (string) wp_unslash( $_POST['client_secret'] ) : '';
+		$secret_unchanged = isset( $_POST['secret_unchanged'] ) && (string) wp_unslash( $_POST['secret_unchanged'] ) === '1';
+
+		if ( $client_id === '' ) {
+			wp_send_json_success( [ 'skip' => true ] );
+		}
+
+		$opts = self::get_options();
+		if ( $secret_unchanged || trim( $secret_in ) === '********' ) {
+			$client_secret = isset( $opts['creatorreactor_google_oauth_client_secret'] ) ? trim( (string) $opts['creatorreactor_google_oauth_client_secret'] ) : '';
+		} else {
+			$client_secret = trim( $secret_in );
+		}
+
+		if ( $client_secret === '' ) {
+			wp_send_json_error(
+				[
+					'message'     => __( 'Enter the Client Secret from Google Cloud so we can verify your app, or clear the Client ID if you are removing Google sign-in.', 'creatorreactor' ),
+					'remediation' => __( 'In Google Cloud Console → APIs & Services → Credentials, open your OAuth client, copy the Client Secret (or reset it and copy the new value), then paste it here.', 'creatorreactor' ),
+				]
+			);
+		}
+
+		$redirect = Google_OAuth::get_callback_redirect_uri();
+		$probe    = Google_OAuth::probe_client_credentials_for_settings_test( $client_id, $client_secret, $redirect );
+		if ( is_wp_error( $probe ) ) {
+			$data         = $probe->get_error_data();
+			$google_error = is_array( $data ) && isset( $data['google_error'] ) ? (string) $data['google_error'] : '';
+			wp_send_json_error(
+				[
+					'message'     => $probe->get_error_message(),
+					'remediation' => self::google_oauth_config_test_remediation( $google_error, $probe->get_error_code() ),
+				]
+			);
+		}
+
+		wp_send_json_success(
+			[
+				'message' => __( 'Google accepted your Client ID and Client Secret. Click Acknowledge below to save your settings.', 'creatorreactor' ),
+			]
+		);
+	}
+
+	/**
+	 * Short guidance for admins when the Google OAuth credential probe fails.
+	 *
+	 * @param string $google_error  Value of Google's JSON `error` field, if known.
+	 * @param string $wp_error_code Error code from {@see Google_OAuth::probe_client_credentials_for_settings_test()}.
+	 * @return string
+	 */
+	private static function google_oauth_config_test_remediation( $google_error, $wp_error_code ) {
+		$google_error = sanitize_key( (string) $google_error );
+		$wp_error_code = (string) $wp_error_code;
+
+		if ( $google_error === 'invalid_client' || $google_error === 'unauthorized_client' ) {
+			return __( 'Confirm the Client ID and Client Secret are copied from the same OAuth 2.0 Web client in Google Cloud Console. If the secret was lost, reset it there and paste the new secret here.', 'creatorreactor' );
+		}
+		if ( $google_error === 'redirect_uri_mismatch' ) {
+			return __( 'Add the exact Authorized redirect URL shown on this settings page (including any trailing slash) to your OAuth client under Authorized redirect URIs in Google Cloud Console.', 'creatorreactor' );
+		}
+		if ( $wp_error_code === 'google_probe_http' || $wp_error_code === 'google_probe_bad_response' ) {
+			return __( 'If this persists, check firewall and DNS whitelist rules for outbound HTTPS to oauth2.googleapis.com from your WordPress host.', 'creatorreactor' );
+		}
+
+		return __( 'Double-check your OAuth client type is “Web application”, the consent screen is configured, and API restrictions on the client (if any) allow Google Sign-In / OAuth.', 'creatorreactor' );
+	}
+
+	/**
+	 * AJAX: verify Fanvue OAuth client ID / secret (Creator mode) before saving Fanvue settings.
+	 */
+	public static function ajax_fanvue_oauth_validate_config() {
+		check_ajax_referer( 'creatorreactor_fanvue_oauth_save', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( [ 'message' => __( 'Forbidden.', 'creatorreactor' ) ], 403 );
+		}
+
+		$auth_mode = isset( $_POST['authentication_mode'] ) ? sanitize_text_field( wp_unslash( $_POST['authentication_mode'] ) ) : '';
+		if ( $auth_mode === self::AUTH_MODE_AGENCY ) {
+			wp_send_json_success( [ 'skip' => true ] );
+		}
+
+		$client_id = isset( $_POST['client_id'] ) ? trim( sanitize_text_field( wp_unslash( $_POST['client_id'] ) ) ) : '';
+		$secret_in = isset( $_POST['client_secret'] ) ? (string) wp_unslash( $_POST['client_secret'] ) : '';
+		$secret_unchanged = isset( $_POST['secret_unchanged'] ) && (string) wp_unslash( $_POST['secret_unchanged'] ) === '1';
+
+		if ( $client_id === '' ) {
+			wp_send_json_success( [ 'skip' => true ] );
+		}
+
+		$opts = self::get_options();
+		if ( $secret_unchanged || trim( $secret_in ) === '********' ) {
+			$client_secret = isset( $opts['creatorreactor_oauth_client_secret'] ) ? trim( (string) $opts['creatorreactor_oauth_client_secret'] ) : '';
+		} else {
+			$client_secret = trim( $secret_in );
+		}
+
+		if ( $client_secret === '' ) {
+			wp_send_json_error(
+				[
+					'message'     => __( 'Enter your Fanvue Client Secret so we can verify your app, or clear the Client ID if you are removing direct Fanvue OAuth.', 'creatorreactor' ),
+					'remediation' => __( 'Open your app in the Fanvue developer portal, copy the Client Secret (or create a new app), paste it here, then try Save again.', 'creatorreactor' ),
+				]
+			);
+		}
+
+		$redirect = trailingslashit( CreatorReactor_OAuth::get_default_redirect_uri() );
+		$probe    = CreatorReactor_OAuth::probe_fanvue_oauth_credentials_for_settings_test( $client_id, $client_secret, $redirect, $opts );
+		if ( is_wp_error( $probe ) ) {
+			$data        = $probe->get_error_data();
+			$oauth_error = is_array( $data ) && isset( $data['oauth_error'] ) ? (string) $data['oauth_error'] : '';
+			wp_send_json_error(
+				[
+					'message'     => $probe->get_error_message(),
+					'remediation' => self::fanvue_oauth_config_test_remediation( $oauth_error, $probe->get_error_code() ),
+				]
+			);
+		}
+
+		wp_send_json_success(
+			[
+				'message' => __( 'Fanvue accepted your Client ID and Client Secret. Click Acknowledge below to save your settings.', 'creatorreactor' ),
+			]
+		);
+	}
+
+	/**
+	 * AJAX: verify OFAuth API key before saving OnlyFans settings.
+	 */
+	public static function ajax_onlyfans_ofauth_validate_config() {
+		check_ajax_referer( 'creatorreactor_onlyfans_ofauth_save', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( [ 'message' => __( 'Forbidden.', 'creatorreactor' ) ], 403 );
+		}
+
+		$key_in = isset( $_POST['api_key'] ) ? (string) wp_unslash( $_POST['api_key'] ) : '';
+		$key_unchanged = isset( $_POST['key_unchanged'] ) && (string) wp_unslash( $_POST['key_unchanged'] ) === '1';
+		$wh_in = isset( $_POST['webhook_secret'] ) ? (string) wp_unslash( $_POST['webhook_secret'] ) : '';
+		$wh_unchanged = isset( $_POST['webhook_secret_unchanged'] ) && (string) wp_unslash( $_POST['webhook_secret_unchanged'] ) === '1';
+
+		$opts = self::get_options();
+		if ( $key_unchanged || trim( $key_in ) === '********' ) {
+			$api_key = isset( $opts['creatorreactor_ofauth_api_key'] ) ? trim( (string) $opts['creatorreactor_ofauth_api_key'] ) : '';
+		} else {
+			$api_key = trim( $key_in );
+		}
+
+		if ( $api_key === '' ) {
+			wp_send_json_success( [ 'skip' => true ] );
+		}
+
+		if ( $wh_unchanged || trim( $wh_in ) === '********' ) {
+			$webhook_secret = isset( $opts['creatorreactor_ofauth_webhook_secret'] ) ? trim( (string) $opts['creatorreactor_ofauth_webhook_secret'] ) : '';
+		} else {
+			$webhook_secret = trim( $wh_in );
+		}
+
+		if ( $webhook_secret === '' ) {
+			wp_send_json_error(
+				[
+					'message'     => __( 'Add the Webhook secret that matches your OFAuth webhook configuration before saving, or clear the API key if you are removing OnlyFans linking.', 'creatorreactor' ),
+					'remediation' => __( 'In the OFAuth dashboard → Webhooks, copy the webhook secret and paste it here. Incoming events send it as the x-webhook-secret header.', 'creatorreactor' ),
+				]
+			);
+		}
+
+		$probe = OFAuth::probe_api_key_for_settings_test( $api_key );
+		if ( is_wp_error( $probe ) ) {
+			$data = $probe->get_error_data();
+			$code = is_array( $data ) && isset( $data['http_code'] ) ? (int) $data['http_code'] : 0;
+			wp_send_json_error(
+				[
+					'message'     => $probe->get_error_message(),
+					'remediation' => self::onlyfans_ofauth_config_test_remediation( $probe->get_error_code(), $code ),
+				]
+			);
+		}
+
+		wp_send_json_success(
+			[
+				'message' => __( 'OFAuth accepted your API key. Your webhook secret is stored locally (OFAuth does not verify it over HTTP). Click Acknowledge below to save your settings.', 'creatorreactor' ),
+			]
+		);
+	}
+
+	/**
+	 * @param string $oauth_error   OAuth `error` value from Fanvue JSON when present.
+	 * @param string $wp_error_code From {@see CreatorReactor_OAuth::probe_fanvue_oauth_credentials_for_settings_test()}.
+	 */
+	private static function fanvue_oauth_config_test_remediation( $oauth_error, $wp_error_code ) {
+		$oauth_error   = sanitize_key( (string) $oauth_error );
+		$wp_error_code = (string) $wp_error_code;
+
+		if ( $oauth_error === 'invalid_client' ) {
+			return __( 'Confirm the Client ID and Client Secret are from the same Fanvue OAuth app in the Fanvue developer portal. If you rotated the secret, paste the new value here.', 'creatorreactor' );
+		}
+		if ( $oauth_error === 'redirect_uri_mismatch' || stripos( $oauth_error, 'redirect' ) !== false ) {
+			return __( 'The redirect URI sent to Fanvue must exactly match the “Redirect URI” and your site’s registered callback (including https and trailing slash). Copy the value from this screen into your Fanvue app.', 'creatorreactor' );
+		}
+		if ( $wp_error_code === 'fanvue_probe_http' || $wp_error_code === 'fanvue_probe_bad_response' ) {
+			return __( 'If this persists, check firewall rules for outbound HTTPS to your configured Fanvue token URL (default auth.fanvue.com).', 'creatorreactor' );
+		}
+
+		return __( 'Confirm the app is active in the Fanvue developer portal, OAuth endpoints in Advanced (if customized) match Fanvue’s auth server, and scopes are accepted for your app.', 'creatorreactor' );
+	}
+
+	/**
+	 * @param string $wp_error_code From {@see OFAuth::probe_api_key_for_settings_test()}.
+	 * @param int    $http_code     HTTP status when relevant.
+	 */
+	private static function onlyfans_ofauth_config_test_remediation( $wp_error_code, $http_code ) {
+		if ( $wp_error_code === 'ofauth_probe_unauthorized' || $http_code === 401 ) {
+			return __( 'Generate a new access key with Account Linking permissions in the OFAuth dashboard and paste it into the API key field.', 'creatorreactor' );
+		}
+		if ( $wp_error_code === 'ofauth_probe_http' ) {
+			return __( 'If this persists, check outbound HTTPS to api.ofauth.com and whether a security plugin blocks wp_remote_get.', 'creatorreactor' );
+		}
+
+		return __( 'See the OFAuth integration guide and confirm your key has Account Linking permissions.', 'creatorreactor' );
 	}
 
 	/**
@@ -2160,6 +2400,192 @@ class Admin_Settings {
 		}
 
 		wp_safe_redirect( self::admin_page_url( [ 'tab' => 'dashboard', 'status' => 'connection_tested' ] ) );
+		exit;
+	}
+
+	/**
+	 * Dashboard Wordpress Gateway row: which action links to show.
+	 *
+	 * @param string $state green|yellow|red|gray
+	 * @return string configure_only|configure_test|disable_test
+	 */
+	private static function wordpress_gateway_child_action_mode( $state ) {
+		$state = (string) $state;
+		if ( $state === 'green' ) {
+			return 'disable_test';
+		}
+		if ( $state === 'gray' ) {
+			return 'configure_only';
+		}
+		return 'configure_test';
+	}
+
+	/**
+	 * @param array<string, mixed> $payload Keys: success (bool), message (string), optional remediation (string).
+	 */
+	private static function set_gateway_dashboard_notice( array $payload ) {
+		set_transient( 'creatorreactor_gwdn_' . get_current_user_id(), $payload, 120 );
+	}
+
+	/**
+	 * @return array<string, mixed>|null
+	 */
+	private static function take_gateway_dashboard_notice() {
+		$key = 'creatorreactor_gwdn_' . get_current_user_id();
+		$val = get_transient( $key );
+		if ( is_array( $val ) ) {
+			delete_transient( $key );
+			return $val;
+		}
+		return null;
+	}
+
+	public static function handle_disable_google_oauth() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Unauthorized.', 'creatorreactor' ) );
+		}
+
+		check_admin_referer( 'creatorreactor_disable_google_oauth' );
+
+		$opts = get_option( self::OPTION_NAME, [] );
+		if ( ! is_array( $opts ) ) {
+			$opts = [];
+		}
+		$opts['creatorreactor_google_oauth_client_id']     = '';
+		$opts['creatorreactor_google_oauth_client_secret'] = '';
+		update_option( self::OPTION_NAME, $opts );
+		self::flush_creatorreactor_settings_cache();
+		self::log_connection( 'info', 'Google sign-in: credentials cleared (dashboard Disable).' );
+
+		wp_safe_redirect( self::admin_page_url( [ 'tab' => 'dashboard', 'gateway_disabled' => 'google' ] ) );
+		exit;
+	}
+
+	public static function handle_disable_onlyfans_ofauth() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Unauthorized.', 'creatorreactor' ) );
+		}
+
+		check_admin_referer( 'creatorreactor_disable_onlyfans_ofauth' );
+
+		$opts = get_option( self::OPTION_NAME, [] );
+		if ( ! is_array( $opts ) ) {
+			$opts = [];
+		}
+		$opts['creatorreactor_ofauth_api_key']        = '';
+		$opts['creatorreactor_ofauth_webhook_secret'] = '';
+		update_option( self::OPTION_NAME, $opts );
+		self::flush_creatorreactor_settings_cache();
+		self::log_connection( 'info', 'OnlyFans OFAuth: API key and webhook secret cleared (dashboard Disable).' );
+
+		wp_safe_redirect( self::admin_page_url( [ 'tab' => 'dashboard', 'gateway_disabled' => 'onlyfans' ] ) );
+		exit;
+	}
+
+	public static function handle_test_google_oauth() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Unauthorized.', 'creatorreactor' ) );
+		}
+
+		check_admin_referer( 'creatorreactor_test_google_oauth' );
+
+		if ( self::is_broker_mode() ) {
+			self::set_gateway_dashboard_notice(
+				[
+					'success'  => false,
+					'message'  => __( 'Google sign-in is not used in Agency mode.', 'creatorreactor' ),
+					'fix_url'  => self::admin_page_url( [ 'tab' => 'general' ], self::PAGE_SETTINGS_SLUG ),
+				]
+			);
+			wp_safe_redirect( self::admin_page_url( [ 'tab' => 'dashboard', 'gateway_test' => '1' ] ) );
+			exit;
+		}
+
+		$opts          = self::get_options();
+		$client_id     = isset( $opts['creatorreactor_google_oauth_client_id'] ) ? trim( (string) $opts['creatorreactor_google_oauth_client_id'] ) : '';
+		$client_secret = isset( $opts['creatorreactor_google_oauth_client_secret'] ) ? trim( (string) $opts['creatorreactor_google_oauth_client_secret'] ) : '';
+		if ( $client_id === '' || $client_secret === '' ) {
+			self::set_gateway_dashboard_notice(
+				[
+					'success' => false,
+					'message' => __( 'Add both Client ID and Client Secret under Settings → Google, then run Test again.', 'creatorreactor' ),
+					'fix_url' => self::admin_page_url( [ 'tab' => 'google' ], self::PAGE_SETTINGS_SLUG ),
+				]
+			);
+			wp_safe_redirect( self::admin_page_url( [ 'tab' => 'dashboard', 'gateway_test' => '1' ] ) );
+			exit;
+		}
+
+		$redirect = Google_OAuth::get_callback_redirect_uri();
+		$probe    = Google_OAuth::probe_client_credentials_for_settings_test( $client_id, $client_secret, $redirect );
+		if ( is_wp_error( $probe ) ) {
+			$data         = $probe->get_error_data();
+			$google_error = is_array( $data ) && isset( $data['google_error'] ) ? (string) $data['google_error'] : '';
+			self::set_gateway_dashboard_notice(
+				[
+					'success'     => false,
+					'message'     => $probe->get_error_message(),
+					'remediation' => self::google_oauth_config_test_remediation( $google_error, $probe->get_error_code() ),
+					'fix_url'     => self::admin_page_url( [ 'tab' => 'google' ], self::PAGE_SETTINGS_SLUG ),
+				]
+			);
+		} else {
+			self::set_gateway_dashboard_notice(
+				[
+					'success' => true,
+					'message' => __( 'Google accepted your Client ID and Client Secret.', 'creatorreactor' ),
+				]
+			);
+		}
+
+		wp_safe_redirect( self::admin_page_url( [ 'tab' => 'dashboard', 'gateway_test' => '1' ] ) );
+		exit;
+	}
+
+	public static function handle_test_onlyfans_ofauth() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Unauthorized.', 'creatorreactor' ) );
+		}
+
+		check_admin_referer( 'creatorreactor_test_onlyfans_ofauth' );
+
+		$opts       = self::get_options();
+		$api_key    = isset( $opts['creatorreactor_ofauth_api_key'] ) ? trim( (string) $opts['creatorreactor_ofauth_api_key'] ) : '';
+		$webhook_secret = isset( $opts['creatorreactor_ofauth_webhook_secret'] ) ? trim( (string) $opts['creatorreactor_ofauth_webhook_secret'] ) : '';
+		if ( $api_key === '' || $webhook_secret === '' ) {
+			self::set_gateway_dashboard_notice(
+				[
+					'success' => false,
+					'message' => __( 'Add the OFAuth API key and webhook secret under Settings → OnlyFans, then run Test again.', 'creatorreactor' ),
+					'fix_url' => self::admin_page_url( [ 'tab' => 'onlyfans' ], self::PAGE_SETTINGS_SLUG ),
+				]
+			);
+			wp_safe_redirect( self::admin_page_url( [ 'tab' => 'dashboard', 'gateway_test' => '1' ] ) );
+			exit;
+		}
+
+		$probe = OFAuth::probe_api_key_for_settings_test( $api_key );
+		if ( is_wp_error( $probe ) ) {
+			$data = $probe->get_error_data();
+			$code = is_array( $data ) && isset( $data['http_code'] ) ? (int) $data['http_code'] : 0;
+			self::set_gateway_dashboard_notice(
+				[
+					'success'     => false,
+					'message'     => $probe->get_error_message(),
+					'remediation' => self::onlyfans_ofauth_config_test_remediation( $probe->get_error_code(), $code ),
+					'fix_url'     => self::admin_page_url( [ 'tab' => 'onlyfans' ], self::PAGE_SETTINGS_SLUG ),
+				]
+			);
+		} else {
+			self::set_gateway_dashboard_notice(
+				[
+					'success' => true,
+					'message' => __( 'OFAuth accepted your API key. The webhook secret is stored locally and is not re-checked over the network.', 'creatorreactor' ),
+				]
+			);
+		}
+
+		wp_safe_redirect( self::admin_page_url( [ 'tab' => 'dashboard', 'gateway_test' => '1' ] ) );
 		exit;
 	}
 
@@ -4379,6 +4805,7 @@ class Admin_Settings {
 		);
 		$broker_mode   = ! empty( $opts['broker_mode'] );
 		$g_client_id   = isset( $opts['creatorreactor_google_oauth_client_id'] ) ? (string) $opts['creatorreactor_google_oauth_client_id'] : '';
+		$google_instructions_expanded = ! self::is_google_login_configured();
 		?>
 		<div class="creatorreactor-settings-panel is-active" data-subtab="google-oauth">
 			<h2><?php esc_html_e( 'Sign in with Google', 'creatorreactor' ); ?></h2>
@@ -4387,36 +4814,59 @@ class Admin_Settings {
 					<p><?php esc_html_e( 'Google sign-in is not used in Agency (broker) mode.', 'creatorreactor' ); ?></p>
 				</div>
 			<?php else : ?>
-				<div class="creatorreactor-mode-notice direct">
-					<p>
-						<strong>
-							<a href="<?php echo esc_url( 'https://console.cloud.google.com/' ); ?>" target="_blank" rel="noopener noreferrer"><?php esc_html_e( 'Google Cloud Console', 'creatorreactor' ); ?></a>
-						</strong>
+				<details class="creatorreactor-mode-notice direct creatorreactor-google-instructions"<?php echo $google_instructions_expanded ? ' open' : ''; ?>>
+					<summary class="creatorreactor-google-instructions-summary">
+						<?php esc_html_e( 'Instructions: Setting up Google', 'creatorreactor' ); ?>
+					</summary>
+					<div class="creatorreactor-google-instructions-content">
+					<p class="description">
+						<?php esc_html_e( 'You should not have to enter your credit card into Google Cloud Platform to complete these steps. As of the time this plugin is being written, creating and using an OAuth application in Google Cloud is free. The required features for this plugin should not incur any additional costs.', 'creatorreactor' ); ?>
 					</p>
 					<ol>
 						<li>
 							<?php
 							printf(
 								wp_kses_post(
-									/* translators: 1: opening link to Google Cloud Console, 2: closing link */
-									__( 'Create or open a project in %1$sGoogle Cloud Console%2$s, then APIs & Services → Credentials.', 'creatorreactor' )
+									/* translators: 1: opening link to Google Cloud Console, 2: closing link, 3: opening link to APIs & Services Credentials, 4: closing link */
+									__( 'Create or open a project in %1$sGoogle Cloud Console%2$s, then %3$sAPIs & Services → Credentials%4$s.', 'creatorreactor' )
 								),
 								'<a href="' . esc_url( 'https://console.cloud.google.com/' ) . '" target="_blank" rel="noopener noreferrer">',
+								'</a>',
+								'<a href="' . esc_url( 'https://console.cloud.google.com/apis/credentials' ) . '" target="_blank" rel="noopener noreferrer">',
 								'</a>'
 							);
 							?>
 						</li>
-						<li><?php esc_html_e( 'Create an OAuth client ID of type “Web application”.', 'creatorreactor' ); ?></li>
+						<li><?php esc_html_e( 'Click Create Credentials → OAuth Client ID of type “Web application”.', 'creatorreactor' ); ?></li>
+						<li><?php esc_html_e( 'Click “Configure consent screen” → Get Started.', 'creatorreactor' ); ?></li>
 						<li>
-							<?php
-							printf(
-								/* translators: %s: Authorized redirect URI */
-								esc_html__( 'Under Authorized redirect URIs, add exactly this URL: %s', 'creatorreactor' ),
-								'<code>' . esc_html( $redirect_uri ) . '</code>'
-							);
-							?>
+							<?php esc_html_e( 'Enter an App Name (recommendation: CreatorReactor_OAuth).', 'creatorreactor' ); ?>
+							<br />
+							<?php esc_html_e( 'Enter a support email (recommendation: your admin email or webmaster@YOURDOMAIN.com).', 'creatorreactor' ); ?>
 						</li>
-						<li><?php esc_html_e( 'Copy the Client ID and Client Secret into the fields below.', 'creatorreactor' ); ?></li>
+						<li><?php esc_html_e( 'For Audience select “External”.', 'creatorreactor' ); ?></li>
+						<li><?php esc_html_e( 'Enter email for Contact Information (recommendation: whatever you used in step 4).', 'creatorreactor' ); ?></li>
+						<li><?php esc_html_e( 'Finish → Click “I Agree” → Click Create.', 'creatorreactor' ); ?></li>
+						<li><?php esc_html_e( 'Click “Create OAuth Client”.', 'creatorreactor' ); ?></li>
+						<li>
+							<?php esc_html_e( 'Application Type: “Web application”.', 'creatorreactor' ); ?>
+							<br />
+							<?php esc_html_e( 'Fill out the following fields for your OAuth Client:', 'creatorreactor' ); ?>
+							<br />
+							<?php esc_html_e( 'Name: (recommended: CreatorReactor_OAuth_Client).', 'creatorreactor' ); ?>
+							<br />
+							<?php esc_html_e( 'Authorized redirect URL:', 'creatorreactor' ); ?>
+							<div class="creatorreactor-redirect-uri-row">
+								<input type="text" readonly class="large-text code creatorreactor-oauth-redirect-uri-input" value="<?php echo esc_attr( $redirect_uri ); ?>" autocomplete="off" aria-readonly="true" />
+								<button type="button" class="button creatorreactor-copy-redirect-uri" data-copy-text="<?php echo esc_attr( $redirect_uri ); ?>" aria-label="<?php esc_attr_e( 'Copy redirect URI to clipboard', 'creatorreactor' ); ?>"><?php esc_html_e( 'Copy', 'creatorreactor' ); ?></button>
+							</div>
+						</li>
+						<li><?php esc_html_e( 'Click the Create button.', 'creatorreactor' ); ?></li>
+						<li>
+							<?php esc_html_e( 'After clicking “Create” you will be issued the Client ID and Client Secret. Copy these values and paste them into the CreatorReactor settings for Client ID and Client Secret.', 'creatorreactor' ); ?>
+							<br />
+							<?php esc_html_e( '* If you don’t see your Client Secret and accidentally close the popup you can always click into your OAuth application and you will be able to copy the Client Secret (in the panel on the left of the screen).', 'creatorreactor' ); ?>
+						</li>
 					</ol>
 					<p class="description">
 						<?php
@@ -4429,7 +4879,8 @@ class Admin_Settings {
 						);
 						?>
 					</p>
-				</div>
+					</div>
+				</details>
 				<div class="creatorreactor-settings-block">
 					<table class="form-table" role="presentation">
 						<tr>
@@ -4797,6 +5248,47 @@ class Admin_Settings {
 		.creatorreactor-mode-notice { padding: 12px 15px; border-radius: 4px; margin: 15px 0; }
 		.creatorreactor-mode-notice.direct { background: #faf3f8; border-left: 4px solid var(--cr-accent, #8e2d77); }
 		.creatorreactor-mode-notice.broker { background: #f0f6ce; border-left: 4px solid #00a32a; }
+		.creatorreactor-google-instructions.creatorreactor-mode-notice { padding: 0; }
+		.creatorreactor-google-instructions > .creatorreactor-google-instructions-summary {
+			list-style: none;
+			padding: 12px 15px;
+			margin: 0;
+			cursor: pointer;
+			display: flex;
+			align-items: center;
+			gap: 10px;
+			font-size: 14px;
+			font-weight: 600;
+			line-height: 1.35;
+			color: #1d2327;
+			background: rgba(142, 45, 119, 0.08);
+			border-bottom: 1px solid rgba(142, 45, 119, 0.15);
+			user-select: none;
+		}
+		.creatorreactor-google-instructions > .creatorreactor-google-instructions-summary::-webkit-details-marker { display: none; }
+		.creatorreactor-google-instructions > .creatorreactor-google-instructions-summary::before {
+			content: "";
+			flex-shrink: 0;
+			width: 0;
+			height: 0;
+			border-left: 5px solid transparent;
+			border-right: 5px solid transparent;
+			border-top: 6px solid #50575e;
+			transition: transform 0.2s ease;
+		}
+		.creatorreactor-google-instructions:not([open]) > .creatorreactor-google-instructions-summary::before {
+			transform: rotate(-90deg);
+		}
+		.creatorreactor-google-instructions > .creatorreactor-google-instructions-summary:focus {
+			outline: none;
+			box-shadow: inset 0 0 0 1px var(--cr-accent, #8e2d77);
+		}
+		.creatorreactor-google-instructions > .creatorreactor-google-instructions-summary:focus-visible {
+			box-shadow: inset 0 0 0 2px var(--cr-accent, #8e2d77);
+		}
+		.creatorreactor-google-instructions .creatorreactor-google-instructions-content { padding: 12px 15px 15px; }
+		.creatorreactor-google-instructions .creatorreactor-google-instructions-content > p.description:first-child { margin: 0 0 10px; }
+		.creatorreactor-google-instructions .creatorreactor-google-instructions-content > ol + p.description { margin-top: 10px; }
 		.creatorreactor-mode-notice p { margin: 0; font-size: 13px; }
 		.creatorreactor-mode-notice > p:first-child { margin-bottom: 8px; }
 		.creatorreactor-mode-notice ol { margin: 0; padding-left: 1.25em; font-size: 13px; }
@@ -5235,11 +5727,13 @@ class Admin_Settings {
 			align-items: center;
 			gap: 8px;
 		}
+		.creatorreactor-module-child--gateway,
 		.creatorreactor-module-child--fanvue-actions {
 			justify-content: space-between;
 			flex-wrap: wrap;
 			gap: 8px 12px;
 		}
+		.creatorreactor-modules-shell .creatorreactor-gateway-dashboard-notice { margin: 0 0 12px; }
 		.creatorreactor-module-child-actions {
 			display: flex;
 			align-items: center;
@@ -5306,6 +5800,12 @@ class Admin_Settings {
 		.creatorreactor-brand-logo--modal { max-height: 22px; width: auto; height: auto; display: block; }
 		.creatorreactor-modal-body { padding: 14px 18px; }
 		.creatorreactor-modal-footer { padding: 12px 18px 16px; border-top: 1px solid #dcdcde; text-align: right; }
+		.creatorreactor-modal-footer--split { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; text-align: left; }
+		.creatorreactor-modal-footer-primary { display: flex; gap: 8px; margin-left: auto; flex-wrap: wrap; }
+		#creatorreactor-gateway-test-modal .creatorreactor-gateway-test-status { margin: 0; font-size: 14px; line-height: 1.45; }
+		#creatorreactor-gateway-test-modal .creatorreactor-gateway-test-status.is-ok { color: #00a32a; font-weight: 600; }
+		#creatorreactor-gateway-test-modal .creatorreactor-gateway-test-status.is-error { color: #b32d2e; }
+		#creatorreactor-gateway-test-modal .creatorreactor-gateway-test-remediation-wrap { margin: 12px 0 0; padding: 10px 12px; border-left: 4px solid #dba617; background: #fcf9e8; font-size: 13px; line-height: 1.45; color: #414a4c; }
 		.creatorreactor-modal-close { border: 0; background: transparent; color: #50575e; cursor: pointer; font-size: 22px; line-height: 1; }
 		.creatorreactor-inline-status { margin-left: 8px; }
 		.creatorreactor-connection-card {
@@ -5794,6 +6294,21 @@ class Admin_Settings {
 			}
 		}
 		.creatorreactor-auth-mode-dynamic[aria-busy="true"] { opacity: 0.55; pointer-events: none; transition: opacity 0.15s ease; }
+		#creatorreactor-google-oauth-test-modal .creatorreactor-google-oauth-test-status,
+		#creatorreactor-fanvue-oauth-test-modal .creatorreactor-fanvue-oauth-test-status,
+		#creatorreactor-onlyfans-ofauth-test-modal .creatorreactor-onlyfans-ofauth-test-status { margin: 0; font-size: 14px; line-height: 1.45; }
+		#creatorreactor-google-oauth-test-modal .creatorreactor-google-oauth-test-status.is-ok,
+		#creatorreactor-fanvue-oauth-test-modal .creatorreactor-fanvue-oauth-test-status.is-ok,
+		#creatorreactor-onlyfans-ofauth-test-modal .creatorreactor-onlyfans-ofauth-test-status.is-ok { color: #00a32a; font-weight: 600; }
+		#creatorreactor-google-oauth-test-modal .creatorreactor-google-oauth-test-status.is-error,
+		#creatorreactor-fanvue-oauth-test-modal .creatorreactor-fanvue-oauth-test-status.is-error,
+		#creatorreactor-onlyfans-ofauth-test-modal .creatorreactor-onlyfans-ofauth-test-status.is-error { color: #b32d2e; }
+		#creatorreactor-google-oauth-test-modal .creatorreactor-google-oauth-test-remediation-wrap,
+		#creatorreactor-fanvue-oauth-test-modal .creatorreactor-fanvue-oauth-test-remediation-wrap,
+		#creatorreactor-onlyfans-ofauth-test-modal .creatorreactor-onlyfans-ofauth-test-remediation-wrap { margin: 12px 0 0; padding: 10px 12px; border-left: 4px solid #dba617; background: #fcf9e8; font-size: 13px; line-height: 1.45; color: #414a4c; }
+		#creatorreactor-google-oauth-test-modal .creatorreactor-modal-footer,
+		#creatorreactor-fanvue-oauth-test-modal .creatorreactor-modal-footer,
+		#creatorreactor-onlyfans-ofauth-test-modal .creatorreactor-modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px 16px; border-top: 1px solid #dcdcde; }
 
 		';
 
@@ -5900,6 +6415,10 @@ class Admin_Settings {
 			}
 			setupRedirectUriCopyDelegation(oauthDynamic);
 			setupRedirectUriCopyDelegation(document.getElementById("creatorreactor-onlyfans-settings-dynamic"));
+			var googleTabPanel = document.querySelector(".creatorreactor-tab-panel[data-tab=\"google\"]");
+			if (googleTabPanel) {
+				setupRedirectUriCopyDelegation(googleTabPanel);
+			}
 
 			function setupCreatorreactorAdvancedDelegation(root) {
 				if (!root || root.dataset.creatorreactorAdvancedBound) {
@@ -6245,14 +6764,46 @@ class Admin_Settings {
 				dangerZone.classList.add("collapsed");
 			}
 
+			function stripQueryParam(paramName) {
+				var cleanUrl = new URL(window.location.href);
+				if (!cleanUrl.searchParams.has(paramName)) {
+					return;
+				}
+				cleanUrl.searchParams.delete(paramName);
+				window.history.replaceState({}, "", cleanUrl.toString());
+			}
+
+			var gwTestModal = document.getElementById("creatorreactor-gateway-test-modal");
+			if (gwTestModal) {
+				function closeGatewayTestModal() {
+					gwTestModal.setAttribute("aria-hidden", "true");
+					stripQueryParam("gateway_test");
+				}
+				function openGatewayTestModal() {
+					gwTestModal.setAttribute("aria-hidden", "false");
+				}
+				gwTestModal.querySelectorAll(".creatorreactor-gateway-test-dismiss").forEach(function(btn) {
+					btn.addEventListener("click", closeGatewayTestModal);
+				});
+				var gwBackdrop = gwTestModal.querySelector(".creatorreactor-modal-backdrop");
+				if (gwBackdrop) {
+					gwBackdrop.addEventListener("click", closeGatewayTestModal);
+				}
+				var gwAck = gwTestModal.querySelector(".creatorreactor-gateway-test-acknowledge");
+				if (gwAck) {
+					gwAck.addEventListener("click", closeGatewayTestModal);
+				}
+				if (gwTestModal.getAttribute("data-auto-open") === "1") {
+					openGatewayTestModal();
+				}
+			}
+
 			var urlParams = new URLSearchParams(window.location.search);
 			var status = urlParams.get("status");
 			var testModal = document.getElementById("creatorreactor-test-modal");
 			var testErrors = document.getElementById("creatorreactor-test-errors");
 			var testModalButtons = document.querySelectorAll(".creatorreactor-open-test-modal");
-			var ackButton = document.querySelector(".creatorreactor-ack-test-modal");
-			var closeModalButton = document.querySelector(".creatorreactor-modal-close");
-			var modalBackdrop = document.querySelector(".creatorreactor-modal-backdrop");
+			var ackButton = testModal ? testModal.querySelector(".creatorreactor-ack-test-modal") : null;
 			var modalTime = testModal ? parseInt(testModal.getAttribute("data-test-time") || "0", 10) : 0;
 			var ackStorageKey = "creatorreactorConnectionTestAcknowledgedAt";
 
@@ -6296,12 +6847,14 @@ class Admin_Settings {
 				});
 			});
 
-			if (closeModalButton) {
-				closeModalButton.addEventListener("click", closeTestModal);
-			}
-
-			if (modalBackdrop) {
-				modalBackdrop.addEventListener("click", closeTestModal);
+			if (testModal) {
+				testModal.querySelectorAll(".creatorreactor-dismiss-connection-test").forEach(function(btn) {
+					btn.addEventListener("click", closeTestModal);
+				});
+				var testModalBackdrop = testModal.querySelector(".creatorreactor-modal-backdrop");
+				if (testModalBackdrop) {
+					testModalBackdrop.addEventListener("click", closeTestModal);
+				}
 			}
 
 			document.addEventListener("keydown", function(event) {
@@ -6325,6 +6878,12 @@ class Admin_Settings {
 					intFixModal.dataset.activeFixId = "";
 					return;
 				}
+				var gwEsc = document.getElementById("creatorreactor-gateway-test-modal");
+				if (gwEsc && gwEsc.getAttribute("aria-hidden") === "false") {
+					gwEsc.setAttribute("aria-hidden", "true");
+					stripQueryParam("gateway_test");
+					return;
+				}
 				if (testModal && testModal.getAttribute("aria-hidden") === "false") {
 					closeTestModal();
 				}
@@ -6345,13 +6904,15 @@ class Admin_Settings {
 			var notices = {
 				"disconnected": "' . esc_js( sprintf( __( 'Disconnected from %s.', 'creatorreactor' ), $product_label ) ) . '",
 				"connected": "' . esc_js( sprintf( __( 'Connected to %s successfully.', 'creatorreactor' ), $product_label ) ) . '",
-				"saved": "' . esc_js( __( 'Settings saved.', 'creatorreactor' ) ) . '",
-				"connection_tested": "' . esc_js( __( 'Connection test completed.', 'creatorreactor' ) ) . '"
+				"saved": "' . esc_js( __( 'Settings saved.', 'creatorreactor' ) ) . '"
 			};
 
 			togglePersistentErrors();
-			if (status === "connection_tested" && testModal && modalTime > 0 && !isCurrentTestAcknowledged()) {
-				openTestModal();
+			if (status === "connection_tested") {
+				if (testModal && modalTime > 0 && !isCurrentTestAcknowledged()) {
+					openTestModal();
+				}
+				stripQueryParam("status");
 			}
 
 			if (status && notices[status]) {
@@ -6602,6 +7163,261 @@ class Admin_Settings {
 					});
 				}
 			})();
+			function bindCreatorreactorSettingsSaveTestModal(spec) {
+				var cfg = spec.cfg;
+				if (!cfg) {
+					return;
+				}
+				var form = document.getElementById(spec.formId);
+				if (!form) {
+					return;
+				}
+				if (spec.requireElementId && !document.getElementById(spec.requireElementId)) {
+					return;
+				}
+				var modal = document.getElementById(spec.modalId);
+				if (!modal) {
+					return;
+				}
+				var statusEl = document.getElementById(spec.statusId);
+				var remediationEl = document.getElementById(spec.remediationId);
+				var remediationWrap = document.getElementById(spec.remediationWrapId);
+				var backdrop = modal.querySelector(".creatorreactor-modal-backdrop");
+				var headerDismiss = modal.querySelector(spec.headerDismissSel);
+				var footerDismiss = modal.querySelector(spec.footerDismissSel);
+				var acknowledgeBtn = modal.querySelector(spec.acknowledgeSel);
+				var modalDialog = modal.querySelector(".creatorreactor-modal-dialog");
+				var submitBtn = form.querySelector("input[type=\"submit\"], button[type=\"submit\"]");
+				function setFooterState(state) {
+					if (footerDismiss) {
+						footerDismiss.hidden = state !== "error";
+					}
+					if (acknowledgeBtn) {
+						acknowledgeBtn.hidden = state !== "success";
+					}
+				}
+				function openModal() {
+					modal.setAttribute("aria-hidden", "false");
+					document.body.style.overflow = "hidden";
+					setFooterState("checking");
+					if (modalDialog) {
+						modalDialog.setAttribute("tabindex", "-1");
+						modalDialog.focus();
+					}
+				}
+				function closeModal() {
+					modal.setAttribute("aria-hidden", "true");
+					document.body.style.overflow = "";
+					setFooterState("checking");
+				}
+				function setRemediation(text) {
+					if (!remediationWrap || !remediationEl) {
+						return;
+					}
+					if (text) {
+						remediationEl.textContent = text;
+						remediationWrap.hidden = false;
+					} else {
+						remediationEl.textContent = "";
+						remediationWrap.hidden = true;
+					}
+				}
+				function setStatus(kind, text) {
+					if (!statusEl) {
+						return;
+					}
+					statusEl.textContent = text || "";
+					statusEl.classList.remove("is-ok", "is-error");
+					if (kind === true) {
+						statusEl.classList.add("is-ok");
+					} else if (kind === false) {
+						statusEl.classList.add("is-error");
+					}
+				}
+				function proceedSave() {
+					form.dataset.creatorreactorAllowNativeSubmit = "1";
+					if (submitBtn && typeof form.requestSubmit === "function") {
+						form.requestSubmit(submitBtn);
+					} else {
+						form.submit();
+					}
+				}
+				if (headerDismiss) {
+					headerDismiss.addEventListener("click", closeModal);
+				}
+				if (footerDismiss) {
+					footerDismiss.addEventListener("click", closeModal);
+				}
+				if (acknowledgeBtn) {
+					acknowledgeBtn.addEventListener("click", function() {
+						closeModal();
+						proceedSave();
+					});
+				}
+				if (backdrop) {
+					backdrop.addEventListener("click", closeModal);
+				}
+				document.addEventListener("keydown", function(ev) {
+					if (ev.key !== "Escape") {
+						return;
+					}
+					if (modal.getAttribute("aria-hidden") === "false") {
+						closeModal();
+					}
+				});
+				form.addEventListener("submit", function(ev) {
+					if (form.dataset.creatorreactorAllowNativeSubmit === "1") {
+						delete form.dataset.creatorreactorAllowNativeSubmit;
+						return;
+					}
+					if (spec.skipValidation(form)) {
+						return;
+					}
+					ev.preventDefault();
+					setRemediation("");
+					setStatus(null, cfg.i18n && cfg.i18n.checking ? cfg.i18n.checking : "Checking…");
+					openModal();
+					var body = new window.FormData();
+					body.append("action", spec.ajaxAction);
+					body.append("nonce", cfg.nonce);
+					spec.appendPayload(body, form);
+					window.fetch(cfg.ajaxUrl, { method: "POST", credentials: "same-origin", body: body })
+						.then(function(res) { return res.json(); })
+						.then(function(data) {
+							if (!data) {
+								setStatus(false, cfg.i18n && cfg.i18n.unknownError ? cfg.i18n.unknownError : "Error");
+								setRemediation(cfg.i18n && cfg.i18n.genericRemediate ? cfg.i18n.genericRemediate : "");
+								setFooterState("error");
+								if (footerDismiss) {
+									footerDismiss.focus();
+								}
+								return;
+							}
+							if (data.success && data.data && data.data.skip) {
+								closeModal();
+								proceedSave();
+								return;
+							}
+							if (data.success) {
+								setStatus(true, data.data && data.data.message ? data.data.message : (cfg.i18n && cfg.i18n.ok ? cfg.i18n.ok : ""));
+								setRemediation("");
+								setFooterState("success");
+								if (acknowledgeBtn) {
+									acknowledgeBtn.focus();
+								}
+								return;
+							}
+							var msg = data.data && data.data.message ? data.data.message : (cfg.i18n && cfg.i18n.failed ? cfg.i18n.failed : "");
+							var rem = data.data && data.data.remediation ? data.data.remediation : "";
+							setStatus(false, msg);
+							setRemediation(rem);
+							setFooterState("error");
+							if (footerDismiss) {
+								footerDismiss.focus();
+							}
+						})
+						.catch(function() {
+							setStatus(false, cfg.i18n && cfg.i18n.networkError ? cfg.i18n.networkError : "");
+							setRemediation(cfg.i18n && cfg.i18n.networkRemediate ? cfg.i18n.networkRemediate : "");
+							setFooterState("error");
+							if (footerDismiss) {
+								footerDismiss.focus();
+							}
+						});
+				});
+			}
+			bindCreatorreactorSettingsSaveTestModal({
+				cfg: window.creatorreactorGoogleOAuthSave,
+				formId: "creatorreactor-google-settings-form",
+				modalId: "creatorreactor-google-oauth-test-modal",
+				requireElementId: "creatorreactor_google_oauth_client_id",
+				statusId: "creatorreactor-google-oauth-test-status",
+				remediationId: "creatorreactor-google-oauth-test-remediation",
+				remediationWrapId: "creatorreactor-google-oauth-test-remediation-wrap",
+				headerDismissSel: ".creatorreactor-google-oauth-test-dismiss",
+				footerDismissSel: ".creatorreactor-google-oauth-test-footer-dismiss",
+				acknowledgeSel: ".creatorreactor-google-oauth-test-acknowledge",
+				ajaxAction: "creatorreactor_google_oauth_validate",
+				skipValidation: function() {
+					var el = document.getElementById("creatorreactor_google_oauth_client_id");
+					return !((el && (el.value || "")).trim());
+				},
+				appendPayload: function(body) {
+					var clientIdEl = document.getElementById("creatorreactor_google_oauth_client_id");
+					var clientId = ((clientIdEl && clientIdEl.value) || "").trim();
+					var secretEl = document.getElementById("creatorreactor_google_oauth_client_secret");
+					var secretVal = secretEl ? (secretEl.value || "") : "";
+					var secretUnchanged = (secretVal === "" || secretVal === "********") ? "1" : "0";
+					body.append("client_id", clientId);
+					body.append("client_secret", secretVal);
+					body.append("secret_unchanged", secretUnchanged);
+				}
+			});
+			bindCreatorreactorSettingsSaveTestModal({
+				cfg: window.creatorreactorFanvueOAuthSave,
+				formId: "creatorreactor-fanvue-settings-form",
+				modalId: "creatorreactor-fanvue-oauth-test-modal",
+				requireElementId: "creatorreactor_oauth_client_id",
+				statusId: "creatorreactor-fanvue-oauth-test-status",
+				remediationId: "creatorreactor-fanvue-oauth-test-remediation",
+				remediationWrapId: "creatorreactor-fanvue-oauth-test-remediation-wrap",
+				headerDismissSel: ".creatorreactor-fanvue-oauth-test-dismiss",
+				footerDismissSel: ".creatorreactor-fanvue-oauth-test-footer-dismiss",
+				acknowledgeSel: ".creatorreactor-fanvue-oauth-test-acknowledge",
+				ajaxAction: "creatorreactor_fanvue_oauth_validate",
+				skipValidation: function(form) {
+					var clientIdEl = document.getElementById("creatorreactor_oauth_client_id");
+					var clientId = ((clientIdEl && clientIdEl.value) || "").trim();
+					if (!clientId) {
+						return true;
+					}
+					var authRadio = form.querySelector(".creatorreactor-auth-mode-input:checked");
+					var mode = authRadio ? (authRadio.value || "") : "";
+					return mode === "agency";
+				},
+				appendPayload: function(body, form) {
+					var clientIdEl = document.getElementById("creatorreactor_oauth_client_id");
+					var clientId = ((clientIdEl && clientIdEl.value) || "").trim();
+					var secretEl = document.getElementById("creatorreactor_oauth_client_secret");
+					var secretVal = secretEl ? (secretEl.value || "") : "";
+					var secretUnchanged = (secretVal === "" || secretVal === "********") ? "1" : "0";
+					var authRadio = form.querySelector(".creatorreactor-auth-mode-input:checked");
+					var authMode = authRadio ? (authRadio.value || "") : "";
+					body.append("client_id", clientId);
+					body.append("client_secret", secretVal);
+					body.append("secret_unchanged", secretUnchanged);
+					body.append("authentication_mode", authMode);
+				}
+			});
+			bindCreatorreactorSettingsSaveTestModal({
+				cfg: window.creatorreactorOnlyfansOfauthSave,
+				formId: "creatorreactor-onlyfans-settings-form",
+				modalId: "creatorreactor-onlyfans-ofauth-test-modal",
+				requireElementId: "creatorreactor_ofauth_api_key",
+				statusId: "creatorreactor-onlyfans-ofauth-test-status",
+				remediationId: "creatorreactor-onlyfans-ofauth-test-remediation",
+				remediationWrapId: "creatorreactor-onlyfans-ofauth-test-remediation-wrap",
+				headerDismissSel: ".creatorreactor-onlyfans-ofauth-test-dismiss",
+				footerDismissSel: ".creatorreactor-onlyfans-ofauth-test-footer-dismiss",
+				acknowledgeSel: ".creatorreactor-onlyfans-ofauth-test-acknowledge",
+				ajaxAction: "creatorreactor_onlyfans_ofauth_validate",
+				skipValidation: function() {
+					var el = document.getElementById("creatorreactor_ofauth_api_key");
+					return !((el && (el.value || "")).trim());
+				},
+				appendPayload: function(body) {
+					var keyEl = document.getElementById("creatorreactor_ofauth_api_key");
+					var whEl = document.getElementById("creatorreactor_ofauth_webhook_secret");
+					var keyVal = keyEl ? (keyEl.value || "") : "";
+					var whVal = whEl ? (whEl.value || "") : "";
+					var keyUnchanged = (keyVal === "" || keyVal === "********") ? "1" : "0";
+					var whUnchanged = (whVal === "" || whVal === "********") ? "1" : "0";
+					body.append("api_key", keyVal);
+					body.append("webhook_secret", whVal);
+					body.append("key_unchanged", keyUnchanged);
+					body.append("webhook_secret_unchanged", whUnchanged);
+				}
+			});
 			});
 		})();
 		';
@@ -6648,6 +7464,60 @@ class Admin_Settings {
 					/* translators: 1: spec version or em dash, 2: HTTP status code */
 					'metaLine'  => __( 'Spec version: %1$s · HTTP %2$s', 'creatorreactor' ),
 					'loadError' => __( 'Could not load schema manifest from the schema service.', 'creatorreactor' ),
+				],
+			]
+		);
+		wp_localize_script(
+			'creatorreactor-admin',
+			'creatorreactorGoogleOAuthSave',
+			[
+				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
+				'nonce'   => wp_create_nonce( 'creatorreactor_google_oauth_save' ),
+				'i18n'    => [
+					'checking'        => __( 'Contacting Google to verify your Client ID and Client Secret…', 'creatorreactor' ),
+					'ok'              => __( 'Credentials look valid with Google.', 'creatorreactor' ),
+					'failed'          => __( 'Configuration check failed.', 'creatorreactor' ),
+					'unknownError'    => __( 'Something went wrong. Please try again.', 'creatorreactor' ),
+					'genericRemediate'=> __( 'Reload this page and try Save again. If it keeps failing, check your browser console and server error logs.', 'creatorreactor' ),
+					'networkError'    => __( 'Could not reach your site (admin-ajax). Check your network connection.', 'creatorreactor' ),
+					'networkRemediate' => __( 'Ensure admin-ajax.php is not blocked by a security plugin or firewall.', 'creatorreactor' ),
+					'close'           => __( 'Close', 'creatorreactor' ),
+				],
+			]
+		);
+		wp_localize_script(
+			'creatorreactor-admin',
+			'creatorreactorFanvueOAuthSave',
+			[
+				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
+				'nonce'   => wp_create_nonce( 'creatorreactor_fanvue_oauth_save' ),
+				'i18n'    => [
+					'checking'         => __( 'Contacting Fanvue to verify your OAuth Client ID and Client Secret…', 'creatorreactor' ),
+					'ok'               => __( 'Fanvue accepted your Client ID and Client Secret.', 'creatorreactor' ),
+					'failed'           => __( 'Fanvue configuration check failed.', 'creatorreactor' ),
+					'unknownError'     => __( 'Something went wrong. Please try again.', 'creatorreactor' ),
+					'genericRemediate' => __( 'Reload this page and try Save again. If it keeps failing, check your browser console and server error logs.', 'creatorreactor' ),
+					'networkError'     => __( 'Could not reach your site (admin-ajax). Check your network connection.', 'creatorreactor' ),
+					'networkRemediate' => __( 'Ensure admin-ajax.php is not blocked by a security plugin or firewall.', 'creatorreactor' ),
+					'close'            => __( 'Close', 'creatorreactor' ),
+				],
+			]
+		);
+		wp_localize_script(
+			'creatorreactor-admin',
+			'creatorreactorOnlyfansOfauthSave',
+			[
+				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
+				'nonce'   => wp_create_nonce( 'creatorreactor_onlyfans_ofauth_save' ),
+				'i18n'    => [
+					'checking'         => __( 'Contacting OFAuth to verify your API key…', 'creatorreactor' ),
+					'ok'               => __( 'OFAuth accepted your API key.', 'creatorreactor' ),
+					'failed'           => __( 'OnlyFans (OFAuth) configuration check failed.', 'creatorreactor' ),
+					'unknownError'     => __( 'Something went wrong. Please try again.', 'creatorreactor' ),
+					'genericRemediate' => __( 'Reload this page and try Save again. If it keeps failing, check your browser console and server error logs.', 'creatorreactor' ),
+					'networkError'     => __( 'Could not reach your site (admin-ajax). Check your network connection.', 'creatorreactor' ),
+					'networkRemediate' => __( 'Ensure admin-ajax.php is not blocked by a security plugin or firewall.', 'creatorreactor' ),
+					'close'            => __( 'Close', 'creatorreactor' ),
 				],
 			]
 		);
@@ -6981,7 +7851,7 @@ class Admin_Settings {
 		<?php endif; ?>
 
 		<?php if ( $is_settings_page || $is_users_page ) : ?>
-		<form method="post" action="options.php">
+		<form id="creatorreactor-fanvue-settings-form" method="post" action="options.php">
 			<?php settings_fields( self::OPTION_NAME ); ?>
 
 		<div class="creatorreactor-tab-panel <?php echo 'settings' === $active_tab ? 'is-active' : ''; ?>" data-tab="settings">
@@ -7057,10 +7927,32 @@ class Admin_Settings {
 		</div>
 	</div>
 </div>
+			<div id="creatorreactor-fanvue-oauth-test-modal" class="creatorreactor-modal" aria-hidden="true" role="presentation">
+				<div class="creatorreactor-modal-backdrop" aria-hidden="true"></div>
+				<div class="creatorreactor-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="creatorreactor-fanvue-oauth-test-modal-title">
+					<div class="creatorreactor-modal-header">
+						<div class="creatorreactor-modal-header-title">
+							<h3 id="creatorreactor-fanvue-oauth-test-modal-title"><?php esc_html_e( 'Fanvue OAuth: configuration check', 'creatorreactor' ); ?></h3>
+						</div>
+						<button type="button" class="creatorreactor-fanvue-oauth-test-dismiss" aria-label="<?php esc_attr_e( 'Close', 'creatorreactor' ); ?>">&times;</button>
+					</div>
+					<div class="creatorreactor-modal-body">
+						<p id="creatorreactor-fanvue-oauth-test-status" class="creatorreactor-fanvue-oauth-test-status"></p>
+						<div id="creatorreactor-fanvue-oauth-test-remediation-wrap" class="creatorreactor-fanvue-oauth-test-remediation-wrap" hidden>
+							<strong><?php esc_html_e( 'What to do next', 'creatorreactor' ); ?></strong>
+							<p id="creatorreactor-fanvue-oauth-test-remediation" class="creatorreactor-fanvue-oauth-test-remediation"></p>
+						</div>
+					</div>
+					<div class="creatorreactor-modal-footer">
+						<button type="button" class="button creatorreactor-fanvue-oauth-test-footer-dismiss" hidden><?php esc_html_e( 'Close', 'creatorreactor' ); ?></button>
+						<button type="button" class="button button-primary creatorreactor-fanvue-oauth-test-acknowledge" hidden><?php esc_html_e( 'Acknowledge', 'creatorreactor' ); ?></button>
+					</div>
+				</div>
+			</div>
 		</form>
 
 		<div class="creatorreactor-tab-panel <?php echo 'onlyfans' === $active_tab ? 'is-active' : ''; ?>" data-tab="onlyfans">
-			<form method="post" action="<?php echo esc_url( admin_url( 'options.php' ) ); ?>">
+			<form id="creatorreactor-onlyfans-settings-form" method="post" action="<?php echo esc_url( admin_url( 'options.php' ) ); ?>">
 				<?php settings_fields( self::OPTION_NAME ); ?>
 				<div class="creatorreactor-settings-container">
 					<div class="creatorreactor-settings-sidebar">
@@ -7073,20 +7965,64 @@ class Admin_Settings {
 						<?php self::render_onlyfans_settings_fields( $opts, $ofauth_api_key_mask, $ofauth_webhook_secret_mask, $onlyfans_active_subtab ); ?>
 					</div>
 				</div>
+				<div id="creatorreactor-onlyfans-ofauth-test-modal" class="creatorreactor-modal" aria-hidden="true" role="presentation">
+					<div class="creatorreactor-modal-backdrop" aria-hidden="true"></div>
+					<div class="creatorreactor-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="creatorreactor-onlyfans-ofauth-test-modal-title">
+						<div class="creatorreactor-modal-header">
+							<div class="creatorreactor-modal-header-title">
+								<h3 id="creatorreactor-onlyfans-ofauth-test-modal-title"><?php esc_html_e( 'OnlyFans (OFAuth): configuration check', 'creatorreactor' ); ?></h3>
+							</div>
+							<button type="button" class="creatorreactor-onlyfans-ofauth-test-dismiss" aria-label="<?php esc_attr_e( 'Close', 'creatorreactor' ); ?>">&times;</button>
+						</div>
+						<div class="creatorreactor-modal-body">
+							<p id="creatorreactor-onlyfans-ofauth-test-status" class="creatorreactor-onlyfans-ofauth-test-status"></p>
+							<div id="creatorreactor-onlyfans-ofauth-test-remediation-wrap" class="creatorreactor-onlyfans-ofauth-test-remediation-wrap" hidden>
+								<strong><?php esc_html_e( 'What to do next', 'creatorreactor' ); ?></strong>
+								<p id="creatorreactor-onlyfans-ofauth-test-remediation" class="creatorreactor-onlyfans-ofauth-test-remediation"></p>
+							</div>
+						</div>
+						<div class="creatorreactor-modal-footer">
+							<button type="button" class="button creatorreactor-onlyfans-ofauth-test-footer-dismiss" hidden><?php esc_html_e( 'Close', 'creatorreactor' ); ?></button>
+							<button type="button" class="button button-primary creatorreactor-onlyfans-ofauth-test-acknowledge" hidden><?php esc_html_e( 'Acknowledge', 'creatorreactor' ); ?></button>
+						</div>
+					</div>
+				</div>
 			</form>
 		</div>
 
 		<div class="creatorreactor-tab-panel <?php echo 'google' === $active_tab ? 'is-active' : ''; ?>" data-tab="google">
-			<form method="post" action="<?php echo esc_url( admin_url( 'options.php' ) ); ?>">
+			<form id="creatorreactor-google-settings-form" method="post" action="<?php echo esc_url( admin_url( 'options.php' ) ); ?>">
 				<?php settings_fields( self::OPTION_NAME ); ?>
 				<div class="creatorreactor-settings-form-card">
 					<?php self::render_google_settings_fields( $opts, $google_oauth_secret_mask ); ?>
-				</div>
-				<div class="creatorreactor-settings-actions">
-					<a class="button" href="<?php echo esc_url( self::admin_page_url( [ 'tab' => 'google' ], self::PAGE_SETTINGS_SLUG ) ); ?>"><?php esc_html_e( 'Cancel', 'creatorreactor' ); ?></a>
-					<?php submit_button( __( 'Save Settings', 'creatorreactor' ) ); ?>
+					<div class="creatorreactor-settings-actions">
+						<a class="button" href="<?php echo esc_url( self::admin_page_url( [ 'tab' => 'google' ], self::PAGE_SETTINGS_SLUG ) ); ?>"><?php esc_html_e( 'Cancel', 'creatorreactor' ); ?></a>
+						<?php submit_button( __( 'Save Settings', 'creatorreactor' ) ); ?>
+					</div>
 				</div>
 			</form>
+			<div id="creatorreactor-google-oauth-test-modal" class="creatorreactor-modal" aria-hidden="true" role="presentation">
+				<div class="creatorreactor-modal-backdrop" aria-hidden="true"></div>
+				<div class="creatorreactor-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="creatorreactor-google-oauth-test-modal-title">
+					<div class="creatorreactor-modal-header">
+						<div class="creatorreactor-modal-header-title">
+							<h3 id="creatorreactor-google-oauth-test-modal-title"><?php esc_html_e( 'Google sign-in: configuration check', 'creatorreactor' ); ?></h3>
+						</div>
+						<button type="button" class="creatorreactor-google-oauth-test-dismiss" aria-label="<?php esc_attr_e( 'Close', 'creatorreactor' ); ?>">&times;</button>
+					</div>
+					<div class="creatorreactor-modal-body">
+						<p id="creatorreactor-google-oauth-test-status" class="creatorreactor-google-oauth-test-status"></p>
+						<div id="creatorreactor-google-oauth-test-remediation-wrap" class="creatorreactor-google-oauth-test-remediation-wrap" hidden>
+							<strong><?php esc_html_e( 'What to do next', 'creatorreactor' ); ?></strong>
+							<p id="creatorreactor-google-oauth-test-remediation" class="creatorreactor-google-oauth-test-remediation"></p>
+						</div>
+					</div>
+					<div class="creatorreactor-modal-footer">
+						<button type="button" class="button creatorreactor-google-oauth-test-footer-dismiss" hidden><?php esc_html_e( 'Close', 'creatorreactor' ); ?></button>
+						<button type="button" class="button button-primary creatorreactor-google-oauth-test-acknowledge" hidden><?php esc_html_e( 'Acknowledge', 'creatorreactor' ); ?></button>
+					</div>
+				</div>
+			</div>
 		</div>
 
 		<div class="creatorreactor-tab-panel <?php echo 'users' === $active_tab ? 'is-active' : ''; ?>" data-tab="users">
@@ -7167,6 +8103,8 @@ class Admin_Settings {
 		<?php if ( ! $is_settings_page ) : ?>
 		<div class="creatorreactor-tab-panel <?php echo 'dashboard' === $active_tab ? 'is-active' : ''; ?>" data-tab="dashboard">
 			<?php
+			$gateway_test_modal     = self::take_gateway_dashboard_notice();
+			$connection_fix_url     = self::admin_page_url( [ 'tab' => 'settings', 'subtab' => 'oauth' ], self::PAGE_SETTINGS_SLUG );
 			$connection_test_ran = ! empty( $connection_test ) && is_array( $connection_test );
 				$connection_test_passed = $connection_test_ran && ! empty( $connection_test['success'] );
 				$connection_state = 'yellow';
@@ -7214,6 +8152,10 @@ class Admin_Settings {
 					$fanvue_oauth_state = 'red';
 				} elseif ( $status['connected'] ) {
 					$fanvue_oauth_state = 'green';
+				} elseif ( $broker_mode ) {
+					$fanvue_oauth_state = 'gray';
+				} elseif ( ! $fanvue_client_id_present && ! $fanvue_client_secret_present ) {
+					$fanvue_oauth_state = 'gray';
 				} elseif ( ! $fanvue_oauth_is_configured ) {
 					$fanvue_oauth_state = 'yellow';
 				}
@@ -7224,6 +8166,18 @@ class Admin_Settings {
 					$onlyfans_oauth_state = 'green';
 				} elseif ( $ofauth_api_configured || $ofauth_wh_configured ) {
 					$onlyfans_oauth_state = 'yellow';
+				}
+				$google_oauth_state = 'gray';
+				if ( $broker_mode ) {
+					$google_oauth_state = 'gray';
+				} elseif ( self::is_google_login_configured() ) {
+					$google_oauth_state = 'green';
+				} else {
+					$google_oauth_client_id_present     = ! empty( $opts['creatorreactor_google_oauth_client_id'] );
+					$google_oauth_client_secret_present = ! empty( $opts['creatorreactor_google_oauth_client_secret'] );
+					if ( $google_oauth_client_id_present || $google_oauth_client_secret_present ) {
+						$google_oauth_state = 'yellow';
+					}
 				}
 				$cloud_is_active = ! empty( $opts['creatorreactor_cloud_active'] );
 				$cloud_id_present = ! empty( $opts['creatorreactor_cloud_id'] );
@@ -7237,7 +8191,7 @@ class Admin_Settings {
 					} elseif ( $status['connected'] ) {
 						$cloud_connected_state = 'green';
 					} elseif ( ! $cloud_credentials_ready ) {
-						$cloud_connected_state = 'yellow';
+						$cloud_connected_state = 'gray';
 					}
 				}
 				$cloud_data_sync_state = 'gray';
@@ -7247,6 +8201,8 @@ class Admin_Settings {
 						$cloud_data_sync_state = 'red';
 					} elseif ( $status['connected'] && ! empty( $status['last_sync'] ) ) {
 						$cloud_data_sync_state = 'green';
+					} elseif ( ! $status['connected'] ) {
+						$cloud_data_sync_state = 'gray';
 					}
 				}
 				$modules = [
@@ -7255,13 +8211,18 @@ class Admin_Settings {
 						'children' => [
 							[
 								'id'    => 'fanvue_oauth',
-								'label' => __( 'Fanvue OAuth', 'creatorreactor' ),
+								'label' => __( 'Sign in with Fanvue', 'creatorreactor' ),
 								'state' => $fanvue_oauth_state,
 							],
 							[
 								'id'    => 'onlyfans_ofauth',
-								'label' => __( 'OnlyFans OAuth', 'creatorreactor' ),
+								'label' => __( 'Sign in with OnlyFans', 'creatorreactor' ),
 								'state' => $onlyfans_oauth_state,
+							],
+							[
+								'id'    => 'google_oauth',
+								'label' => __( 'Sign in with Google', 'creatorreactor' ),
+								'state' => $google_oauth_state,
 							],
 						],
 					],
@@ -7303,12 +8264,17 @@ class Admin_Settings {
 					$modules[ $module_index ]['state'] = $module_state;
 				}
 
-				$connect_url = '';
+				$gateway_fanvue_show_connect = false;
+				$gateway_fanvue_connect_href = '';
 				if ( $broker_mode ) {
-					$maybe_connect = Broker_Client::get_connect_url();
-					$connect_url   = ( is_string( $maybe_connect ) && $maybe_connect !== '' ) ? $maybe_connect : '';
+					$maybe_broker_connect = Broker_Client::get_connect_url();
+					if ( is_string( $maybe_broker_connect ) && $maybe_broker_connect !== '' ) {
+						$gateway_fanvue_show_connect = true;
+						$gateway_fanvue_connect_href = wp_nonce_url( admin_url( 'admin-post.php?action=creatorreactor_broker_connect' ), 'creatorreactor_broker_connect' );
+					}
 				} elseif ( ! empty( $opts['creatorreactor_oauth_client_id'] ) ) {
-					$connect_url = self::admin_page_url(
+					$gateway_fanvue_show_connect = true;
+					$gateway_fanvue_connect_href = self::admin_page_url(
 						[
 							'tab'                        => 'dashboard',
 							'creatorreactor_oauth_start' => 1,
@@ -7324,6 +8290,14 @@ class Admin_Settings {
 							<div class="creatorreactor-dashboard-card-head">
 								<h2 class="creatorreactor-dashboard-card-head__title"><?php esc_html_e( 'CreatorReactor Modules', 'creatorreactor' ); ?></h2>
 							</div>
+							<?php
+							$gateway_disabled_key = isset( $_GET['gateway_disabled'] ) ? sanitize_key( wp_unslash( $_GET['gateway_disabled'] ) ) : '';
+							if ( 'google' === $gateway_disabled_key ) :
+								?>
+								<div class="notice notice-success inline creatorreactor-gateway-dashboard-notice"><p><?php esc_html_e( 'Google sign-in credentials were removed from this site.', 'creatorreactor' ); ?></p></div>
+							<?php elseif ( 'onlyfans' === $gateway_disabled_key ) : ?>
+								<div class="notice notice-success inline creatorreactor-gateway-dashboard-notice"><p><?php esc_html_e( 'OnlyFans (OFAuth) API key and webhook secret were removed from this site.', 'creatorreactor' ); ?></p></div>
+							<?php endif; ?>
 							<?php if ( $connection_state === 'red' && $connection_failure_message !== '' ) : ?>
 								<p class="creatorreactor-connection-alert">
 									<?php echo esc_html( $connection_failure_message ); ?>
@@ -7356,38 +8330,78 @@ class Admin_Settings {
 														$child_state = isset( $child['state'] ) ? (string) $child['state'] : 'gray';
 														$child_state = in_array( $child_state, [ 'green', 'yellow', 'red', 'gray' ], true ) ? $child_state : 'gray';
 														?>
-														<?php if ( $child_id === 'onlyfans_ofauth' ) : ?>
-															<li class="creatorreactor-module-child creatorreactor-module-child--onlyfans-actions">
+														<?php
+														if ( in_array( $child_id, [ 'fanvue_oauth', 'onlyfans_ofauth', 'google_oauth' ], true ) ) :
+															$gw_mode = self::wordpress_gateway_child_action_mode( $child_state );
+															if ( 'fanvue_oauth' === $child_id ) {
+																$gw_configure_href = self::admin_page_url( [ 'tab' => 'settings', 'subtab' => 'oauth' ], self::PAGE_SETTINGS_SLUG );
+															} elseif ( 'onlyfans_ofauth' === $child_id ) {
+																$gw_configure_href = self::admin_page_url( [ 'tab' => 'onlyfans' ], self::PAGE_SETTINGS_SLUG );
+															} else {
+																$gw_configure_href = self::admin_page_url( [ 'tab' => 'google' ], self::PAGE_SETTINGS_SLUG );
+															}
+															?>
+															<li class="creatorreactor-module-child creatorreactor-module-child--gateway">
 																<span class="creatorreactor-module-status-dot is-<?php echo esc_attr( $child_state ); ?>" aria-hidden="true"></span>
 																<span class="creatorreactor-module-child-label"><?php echo esc_html( $child_label ); ?></span>
 																<span class="creatorreactor-module-child-actions">
-																	<a href="<?php echo esc_url( self::admin_page_url( [ 'tab' => 'onlyfans' ], self::PAGE_SETTINGS_SLUG ) ); ?>" class="button-link"><?php esc_html_e( 'Configure', 'creatorreactor' ); ?></a>
-																</span>
-															</li>
-														<?php elseif ( $child_id === 'fanvue_oauth' ) : ?>
-															<li class="creatorreactor-module-child creatorreactor-module-child--fanvue-actions">
-																<span class="creatorreactor-module-status-dot is-<?php echo esc_attr( $child_state ); ?>" aria-hidden="true"></span>
-																<span class="creatorreactor-module-child-label"><?php echo esc_html( $child_label ); ?></span>
-																<span class="creatorreactor-module-child-actions">
-																	<?php if ( $status['connected'] ) : ?>
-																		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="creatorreactor-inline-oauth-form">
-																			<?php wp_nonce_field( 'creatorreactor_disconnect' ); ?>
-																			<input type="hidden" name="action" value="creatorreactor_disconnect" />
-																			<button type="submit" class="button-link" onclick="return confirm('<?php echo esc_js( __( 'Are you sure you want to disconnect?', 'creatorreactor' ) ); ?>');"><?php esc_html_e( 'Disconnect', 'creatorreactor' ); ?></button>
-																		</form>
-																	<?php elseif ( $connect_url ) : ?>
-																		<?php if ( $broker_mode ) : ?>
-																			<a href="<?php echo esc_url( wp_nonce_url( admin_url( 'admin-post.php?action=creatorreactor_broker_connect' ), 'creatorreactor_broker_connect' ) ); ?>" class="button-link"><?php esc_html_e( 'Connect', 'creatorreactor' ); ?></a>
-																		<?php else : ?>
-																			<a href="<?php echo esc_url( $connect_url, [ 'https', 'http' ] ); ?>" class="button-link"><?php esc_html_e( 'Connect', 'creatorreactor' ); ?></a>
-																		<?php endif; ?>
+																	<?php if ( in_array( $gw_mode, [ 'configure_only', 'configure_test' ], true ) ) : ?>
+																		<a href="<?php echo esc_url( $gw_configure_href ); ?>" class="button-link"><?php esc_html_e( 'Configure', 'creatorreactor' ); ?></a>
 																	<?php endif; ?>
-																	<?php if ( 'red' === $connection_state ) : ?>
+																	<?php if ( 'fanvue_oauth' === $child_id && 'configure_only' === $gw_mode && $broker_mode && ! $status['connected'] ) : ?>
+																		<?php if ( $gateway_fanvue_show_connect && $gateway_fanvue_connect_href !== '' ) : ?>
+																			<a href="<?php echo esc_url( $gateway_fanvue_connect_href ); ?>" class="button-link"><?php esc_html_e( 'Connect', 'creatorreactor' ); ?></a>
+																		<?php endif; ?>
 																		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="creatorreactor-inline-oauth-form">
 																			<?php wp_nonce_field( 'creatorreactor_test_connection' ); ?>
 																			<input type="hidden" name="action" value="creatorreactor_test_connection" />
-																			<button type="submit" class="button-link"><?php esc_html_e( 'Run connection test', 'creatorreactor' ); ?></button>
+																			<button type="submit" class="button-link"><?php esc_html_e( 'Test', 'creatorreactor' ); ?></button>
 																		</form>
+																	<?php endif; ?>
+																	<?php if ( 'disable_test' === $gw_mode && 'fanvue_oauth' === $child_id ) : ?>
+																		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="creatorreactor-inline-oauth-form">
+																			<?php wp_nonce_field( 'creatorreactor_disconnect' ); ?>
+																			<input type="hidden" name="action" value="creatorreactor_disconnect" />
+																			<button type="submit" class="button-link" onclick="return confirm('<?php echo esc_js( __( 'Disable the site connection to Fanvue? Sync and API access will stop until you connect again.', 'creatorreactor' ) ); ?>');"><?php esc_html_e( 'Disable', 'creatorreactor' ); ?></button>
+																		</form>
+																	<?php elseif ( 'disable_test' === $gw_mode && 'google_oauth' === $child_id ) : ?>
+																		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="creatorreactor-inline-oauth-form">
+																			<?php wp_nonce_field( 'creatorreactor_disable_google_oauth' ); ?>
+																			<input type="hidden" name="action" value="creatorreactor_disable_google_oauth" />
+																			<button type="submit" class="button-link" onclick="return confirm('<?php echo esc_js( __( 'Remove Google sign-in credentials from this site?', 'creatorreactor' ) ); ?>');"><?php esc_html_e( 'Disable', 'creatorreactor' ); ?></button>
+																		</form>
+																	<?php elseif ( 'disable_test' === $gw_mode && 'onlyfans_ofauth' === $child_id ) : ?>
+																		<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="creatorreactor-inline-oauth-form">
+																			<?php wp_nonce_field( 'creatorreactor_disable_onlyfans_ofauth' ); ?>
+																			<input type="hidden" name="action" value="creatorreactor_disable_onlyfans_ofauth" />
+																			<button type="submit" class="button-link" onclick="return confirm('<?php echo esc_js( __( 'Remove the OnlyFans (OFAuth) API key and webhook secret from this site?', 'creatorreactor' ) ); ?>');"><?php esc_html_e( 'Disable', 'creatorreactor' ); ?></button>
+																		</form>
+																	<?php endif; ?>
+																	<?php if ( in_array( $gw_mode, [ 'disable_test', 'configure_test' ], true ) ) : ?>
+																		<?php if ( 'fanvue_oauth' === $child_id ) : ?>
+																			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="creatorreactor-inline-oauth-form">
+																				<?php wp_nonce_field( 'creatorreactor_test_connection' ); ?>
+																				<input type="hidden" name="action" value="creatorreactor_test_connection" />
+																				<button type="submit" class="button-link"><?php esc_html_e( 'Test', 'creatorreactor' ); ?></button>
+																			</form>
+																		<?php elseif ( 'google_oauth' === $child_id ) : ?>
+																			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="creatorreactor-inline-oauth-form">
+																				<?php wp_nonce_field( 'creatorreactor_test_google_oauth' ); ?>
+																				<input type="hidden" name="action" value="creatorreactor_test_google_oauth" />
+																				<button type="submit" class="button-link"><?php esc_html_e( 'Test', 'creatorreactor' ); ?></button>
+																			</form>
+																		<?php elseif ( 'onlyfans_ofauth' === $child_id ) : ?>
+																			<form method="post" action="<?php echo esc_url( admin_url( 'admin-post.php' ) ); ?>" class="creatorreactor-inline-oauth-form">
+																				<?php wp_nonce_field( 'creatorreactor_test_onlyfans_ofauth' ); ?>
+																				<input type="hidden" name="action" value="creatorreactor_test_onlyfans_ofauth" />
+																				<button type="submit" class="button-link"><?php esc_html_e( 'Test', 'creatorreactor' ); ?></button>
+																			</form>
+																		<?php endif; ?>
+																		<?php
+																		if ( 'configure_test' === $gw_mode && 'fanvue_oauth' === $child_id && ! $status['connected'] && $gateway_fanvue_show_connect && $gateway_fanvue_connect_href !== '' ) :
+																			?>
+																			<a href="<?php echo esc_url( $gateway_fanvue_connect_href ); ?>" class="button-link"><?php esc_html_e( 'Connect', 'creatorreactor' ); ?></a>
+																		<?php endif; ?>
 																	<?php endif; ?>
 																</span>
 															</li>
@@ -7405,6 +8419,48 @@ class Admin_Settings {
 								<?php endforeach; ?>
 							</ul>
 						</div>
+						<?php if ( is_array( $gateway_test_modal ) ) : ?>
+							<?php
+							$gwm_ok  = ! empty( $gateway_test_modal['success'] );
+							$gwm_msg = isset( $gateway_test_modal['message'] ) ? (string) $gateway_test_modal['message'] : '';
+							$gwm_rem = isset( $gateway_test_modal['remediation'] ) ? (string) $gateway_test_modal['remediation'] : '';
+							$gwm_fix = isset( $gateway_test_modal['fix_url'] ) ? (string) $gateway_test_modal['fix_url'] : '';
+							if ( ! $gwm_ok && $gwm_fix === '' ) {
+								$gwm_fix = self::admin_page_url( [ 'tab' => 'general' ], self::PAGE_SETTINGS_SLUG );
+							}
+							?>
+							<div id="creatorreactor-gateway-test-modal" class="creatorreactor-modal" aria-hidden="true" data-auto-open="1">
+								<div class="creatorreactor-modal-backdrop"></div>
+								<div class="creatorreactor-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="creatorreactor-gateway-test-modal-title">
+									<div class="creatorreactor-modal-header">
+										<div class="creatorreactor-modal-header-title">
+											<?php self::render_brand_logo_img( 'creatorreactor-brand-logo--modal' ); ?>
+											<h3 id="creatorreactor-gateway-test-modal-title"><?php esc_html_e( 'Test result', 'creatorreactor' ); ?></h3>
+										</div>
+										<button type="button" class="creatorreactor-modal-close creatorreactor-gateway-test-dismiss" aria-label="<?php esc_attr_e( 'Dismiss', 'creatorreactor' ); ?>">&times;</button>
+									</div>
+									<div class="creatorreactor-modal-body">
+										<p id="creatorreactor-gateway-test-status" class="creatorreactor-gateway-test-status <?php echo $gwm_ok ? 'is-ok' : 'is-error'; ?>"><?php echo esc_html( $gwm_msg ); ?></p>
+										<?php if ( ! $gwm_ok && $gwm_rem !== '' ) : ?>
+											<div class="creatorreactor-gateway-test-remediation-wrap">
+												<strong><?php esc_html_e( 'What to do next', 'creatorreactor' ); ?></strong>
+												<p class="creatorreactor-gateway-test-remediation"><?php echo esc_html( $gwm_rem ); ?></p>
+											</div>
+										<?php endif; ?>
+									</div>
+									<div class="creatorreactor-modal-footer creatorreactor-modal-footer--split">
+										<button type="button" class="button creatorreactor-gateway-test-dismiss"><?php esc_html_e( 'Dismiss', 'creatorreactor' ); ?></button>
+										<div class="creatorreactor-modal-footer-primary">
+											<?php if ( ! $gwm_ok ) : ?>
+												<a href="<?php echo esc_url( $gwm_fix ); ?>" class="button button-primary"><?php esc_html_e( 'Fix', 'creatorreactor' ); ?></a>
+											<?php else : ?>
+												<button type="button" class="button button-primary creatorreactor-gateway-test-acknowledge"><?php esc_html_e( 'Acknowledge', 'creatorreactor' ); ?></button>
+											<?php endif; ?>
+										</div>
+									</div>
+								</div>
+							</div>
+						<?php endif; ?>
 						<?php
 						$connection_test_checks = ! empty( $connection_test['checks'] ) && is_array( $connection_test['checks'] ) ? $connection_test['checks'] : [];
 						$failed_connection_checks = [];
@@ -7431,7 +8487,7 @@ class Admin_Settings {
 											<?php self::render_brand_logo_img( 'creatorreactor-brand-logo--modal' ); ?>
 											<h3 id="creatorreactor-test-modal-title"><?php esc_html_e( 'Test Details', 'creatorreactor' ); ?></h3>
 										</div>
-										<button type="button" class="creatorreactor-modal-close" aria-label="<?php esc_attr_e( 'Close', 'creatorreactor' ); ?>">&times;</button>
+										<button type="button" class="creatorreactor-modal-close creatorreactor-dismiss-connection-test" aria-label="<?php esc_attr_e( 'Dismiss', 'creatorreactor' ); ?>">&times;</button>
 									</div>
 									<div class="creatorreactor-modal-body">
 										<ul class="creatorreactor-check-list">
@@ -7453,8 +8509,15 @@ class Admin_Settings {
 											<?php endforeach; ?>
 										</ul>
 									</div>
-									<div class="creatorreactor-modal-footer">
-										<button type="button" class="button button-primary creatorreactor-ack-test-modal"><?php esc_html_e( 'Acknowledge', 'creatorreactor' ); ?></button>
+									<div class="creatorreactor-modal-footer creatorreactor-modal-footer--split">
+										<button type="button" class="button creatorreactor-dismiss-connection-test"><?php esc_html_e( 'Dismiss', 'creatorreactor' ); ?></button>
+										<div class="creatorreactor-modal-footer-primary">
+											<?php if ( ! empty( $failed_connection_checks ) ) : ?>
+												<a href="<?php echo esc_url( $connection_fix_url ); ?>" class="button button-primary"><?php esc_html_e( 'Fix', 'creatorreactor' ); ?></a>
+											<?php else : ?>
+												<button type="button" class="button button-primary creatorreactor-ack-test-modal"><?php esc_html_e( 'Acknowledge', 'creatorreactor' ); ?></button>
+											<?php endif; ?>
+										</div>
 									</div>
 								</div>
 							</div>

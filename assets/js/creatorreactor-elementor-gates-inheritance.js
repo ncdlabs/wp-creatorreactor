@@ -149,6 +149,16 @@
 			});
 	}
 
+	function sealNoGatePageWhenStillEmpty() {
+		if (!document.body || document.body.classList.contains('creatorreactor-gates-ready')) {
+			return;
+		}
+		var hasGutenberg = !!document.querySelector('.creatorreactor-gutenberg-gate-marker[data-creatorreactor-gate-match]');
+		if (!document.querySelector(MARKER_SELECTOR) && !hasGutenberg) {
+			document.body.classList.add('creatorreactor-gates-ready');
+		}
+	}
+
 	function scanAndHide() {
 		Array.prototype.slice
 			.call(document.querySelectorAll('.' + HIDDEN_CLASS + ',.' + PREHIDE_CLASS))
@@ -204,6 +214,10 @@
 					});
 				});
 			}
+		}
+
+		if (document.body) {
+			document.body.classList.add('creatorreactor-gates-ready');
 		}
 	}
 
@@ -268,5 +282,6 @@
 	hydrateViewerStateFromMarkers();
 	refreshViewerState();
 	scanAndHide();
+	window.addEventListener('load', sealNoGatePageWhenStillEmpty);
 	main();
 })();

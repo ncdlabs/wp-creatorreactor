@@ -131,6 +131,82 @@ class Google_OAuth {
 	}
 
 	/**
+	 * Ask Google’s token endpoint whether the client_id and client_secret authenticate.
+	 *
+	 * Sends a deliberately invalid authorization code. {@see invalid_grant} means Google accepted
+	 * the client credentials; other errors indicate misconfiguration.
+	 *
+	 * @param string $client_id     OAuth client ID.
+	 * @param string $client_secret OAuth client secret.
+	 * @param string $redirect_uri  Authorized redirect URI (must match the client’s registered URI).
+	 * @return true|\WP_Error True when credentials are accepted; WP_Error otherwise.
+	 */
+	public static function probe_client_credentials_for_settings_test( $client_id, $client_secret, $redirect_uri ) {
+		$client_id     = trim( (string) $client_id );
+		$client_secret = trim( (string) $client_secret );
+		$redirect_uri  = (string) $redirect_uri;
+
+		if ( $client_id === '' ) {
+			return new \WP_Error( 'google_probe_no_client_id', __( 'Client ID is empty.', 'creatorreactor' ) );
+		}
+		if ( $client_secret === '' ) {
+			return new \WP_Error( 'google_probe_no_secret', __( 'Client Secret is empty.', 'creatorreactor' ) );
+		}
+
+		$response = wp_remote_post(
+			self::TOKEN_URL,
+			[
+				'timeout' => 15,
+				'body'    => [
+					'grant_type'    => 'authorization_code',
+					'code'          => 'creatorreactor_settings_test_invalid_code',
+					'client_id'     => $client_id,
+					'client_secret' => $client_secret,
+					'redirect_uri'  => $redirect_uri,
+					'code_verifier' => 'creatorreactor_settings_test_verifier',
+				],
+			]
+		);
+
+		if ( is_wp_error( $response ) ) {
+			return new \WP_Error(
+				'google_probe_http',
+				sprintf(
+					/* translators: %s: WordPress HTTP error message. */
+					__( 'Could not reach Google (%s). Check that this server can make outbound HTTPS requests.', 'creatorreactor' ),
+					$response->get_error_message()
+				)
+			);
+		}
+
+		$body = wp_remote_retrieve_body( $response );
+		$data = json_decode( is_string( $body ) ? $body : '', true );
+		if ( ! is_array( $data ) ) {
+			return new \WP_Error(
+				'google_probe_bad_response',
+				__( 'Google returned an unexpected response. Try again in a moment.', 'creatorreactor' )
+			);
+		}
+
+		if ( ! empty( $data['access_token'] ) ) {
+			return true;
+		}
+
+		$err = isset( $data['error'] ) ? sanitize_key( (string) $data['error'] ) : '';
+		if ( $err === 'invalid_grant' ) {
+			return true;
+		}
+
+		$desc = isset( $data['error_description'] ) ? sanitize_text_field( (string) $data['error_description'] ) : '';
+
+		return new \WP_Error(
+			'google_probe_failed',
+			$desc !== '' ? $desc : ( $err !== '' ? $err : __( 'Google rejected the credentials.', 'creatorreactor' ) ),
+			[ 'google_error' => $err ]
+		);
+	}
+
+	/**
 	 * @param \WP_REST_Request $request Request.
 	 */
 	public static function rest_start( $request ) {

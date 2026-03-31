@@ -44,6 +44,7 @@ class Plugin {
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-creatorreactor-banner.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-privacy.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-metrics-ingest.php';
+			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-gate-frontend-output.php';
 
 			Entitlements::maybe_migrate_fanvue_product_key();
 			Entitlements::maybe_migrate_legacy_follower_tier_stored();
@@ -67,6 +68,7 @@ class Plugin {
 			Banner::init();
 			Privacy::init();
 			Metrics_Ingest::init();
+			Gate_Frontend_Output::init();
 
 			add_filter( 'admin_url', [ __CLASS__, 'filter_admin_url_normalize_path_slashes' ], 5, 3 );
 

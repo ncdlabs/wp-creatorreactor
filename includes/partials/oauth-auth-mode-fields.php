@@ -36,7 +36,7 @@ $redirect_uri_input_value = Admin_Settings::get_redirect_uri_input_value( $opts,
 			<tr>
 				<th scope="row"><?php esc_html_e( 'Client ID', 'creatorreactor' ); ?></th>
 				<td>
-					<input type="text" name="<?php echo esc_attr( $option_name ); ?>[creatorreactor_oauth_client_id]" value="<?php echo esc_attr( $opts['creatorreactor_oauth_client_id'] ?? '' ); ?>" class="regular-text" />
+					<input type="text" id="creatorreactor_oauth_client_id" name="<?php echo esc_attr( $option_name ); ?>[creatorreactor_oauth_client_id]" value="<?php echo esc_attr( $opts['creatorreactor_oauth_client_id'] ?? '' ); ?>" class="regular-text" />
 					<?php if ( ! $broker_mode ) : ?>
 						<p class="description"><?php printf( esc_html__( 'Required. Client ID from your %1$s OAuth app (Fanvue developer portal). If Fanvue shows a branded 404 when you click Connect, the Client ID does not match an active app—recopy it or create a new OAuth app.', 'creatorreactor' ), esc_html( $current_product_label ) ); ?></p>
 					<?php else : ?>
@@ -47,7 +47,7 @@ $redirect_uri_input_value = Admin_Settings::get_redirect_uri_input_value( $opts,
 			<tr>
 				<th scope="row"><?php esc_html_e( 'Client Secret', 'creatorreactor' ); ?></th>
 				<td>
-					<input type="text" name="<?php echo esc_attr( $option_name ); ?>[creatorreactor_oauth_client_secret]" value="<?php echo esc_attr( $secret_mask ); ?>" class="regular-text code creatorreactor-oauth-client-secret" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="text" />
+					<input type="text" id="creatorreactor_oauth_client_secret" name="<?php echo esc_attr( $option_name ); ?>[creatorreactor_oauth_client_secret]" value="<?php echo esc_attr( $secret_mask ); ?>" class="regular-text code creatorreactor-oauth-client-secret" autocomplete="off" autocorrect="off" autocapitalize="off" spellcheck="false" inputmode="text" />
 					<?php if ( ! $broker_mode ) : ?>
 						<p class="description"><?php esc_html_e( 'Required for Creator mode. Stored encrypted. Leave as ******** to keep the existing value.', 'creatorreactor' ); ?></p>
 					<?php else : ?>

@@ -65,7 +65,7 @@
 			}
 			el = el.parentElement;
 		}
-		return null;
+		return marker.closest('[class*="wp-block-creatorreactor-"]');
 	}
 
 	function hydrateViewerStateFromMarkers() {
@@ -156,6 +156,18 @@
 			});
 	}
 
+	function sealNoGatePageWhenStillEmpty() {
+		if (!document.body || document.body.classList.contains('creatorreactor-gates-ready')) {
+			return;
+		}
+		// Must consider Elementor markers too: both scripts load on Elementor sites; otherwise
+		// this would unlock FOUC CSS before creatorreactor-elementor-gates-inheritance.js runs.
+		var hasElementor = !!document.querySelector('.creatorreactor-elementor-gate-marker[data-creatorreactor-gate-match]');
+		if (!document.querySelector(MARKER_SELECTOR) && !hasElementor) {
+			document.body.classList.add('creatorreactor-gates-ready');
+		}
+	}
+
 	function scanAndHide() {
 		Array.prototype.slice
 			.call(document.querySelectorAll('.' + HIDDEN_CLASS + ',.' + PREHIDE_CLASS))
@@ -214,6 +226,10 @@
 				});
 			}
 		}
+
+		if (document.body) {
+			document.body.classList.add('creatorreactor-gates-ready');
+		}
 	}
 
 	function main() {
@@ -262,6 +278,8 @@
 
 	// Best-effort scan immediately.
 	scanAndHide();
+
+	window.addEventListener('load', sealNoGatePageWhenStillEmpty);
 
 	// Set up MutationObserver immediately (do not wait for `DOMContentLoaded`).
 	main();

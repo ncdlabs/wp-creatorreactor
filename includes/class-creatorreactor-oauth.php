@@ -100,11 +100,99 @@ class CreatorReactor_OAuth {
 	/**
 	 * Token URL: plugin settings override, else {@see TOKEN_URL}.
 	 *
-	 * @param array $opts Sanitized options from {@see Admin_Settings::get_options()}.
+	 * @param array<string, mixed> $opts Sanitized options from {@see Admin_Settings::get_options()}.
+	 * @return string
 	 */
-	private static function get_token_endpoint( array $opts ) {
+	public static function get_token_url_for_options( array $opts ) {
 		$url = isset( $opts['creatorreactor_token_url'] ) ? trim( (string) $opts['creatorreactor_token_url'] ) : '';
 		return $url !== '' ? $url : self::TOKEN_URL;
+	}
+
+	/**
+	 * @param array<string, mixed> $opts Sanitized options.
+	 */
+	private static function get_token_endpoint( array $opts ) {
+		return self::get_token_url_for_options( $opts );
+	}
+
+	/**
+	 * Ask Fanvue’s token endpoint whether the client_id and client_secret authenticate.
+	 *
+	 * Sends an invalid authorization code. {@see invalid_grant} means credentials were accepted.
+	 *
+	 * @param string               $client_id     OAuth client ID.
+	 * @param string               $client_secret OAuth client secret.
+	 * @param string               $redirect_uri  Registered redirect URI for the site OAuth callback.
+	 * @param array<string, mixed> $opts         Options (custom token URL).
+	 * @return true|\WP_Error
+	 */
+	public static function probe_fanvue_oauth_credentials_for_settings_test( $client_id, $client_secret, $redirect_uri, array $opts ) {
+		$client_id     = trim( (string) $client_id );
+		$client_secret = trim( (string) $client_secret );
+		$redirect_uri  = (string) $redirect_uri;
+
+		if ( $client_id === '' ) {
+			return new \WP_Error( 'fanvue_probe_no_client_id', __( 'Client ID is empty.', 'creatorreactor' ) );
+		}
+		if ( $client_secret === '' ) {
+			return new \WP_Error( 'fanvue_probe_no_secret', __( 'Client Secret is empty.', 'creatorreactor' ) );
+		}
+
+		$token_url   = self::get_token_url_for_options( $opts );
+		$auth_header = 'Basic ' . base64_encode( $client_id . ':' . $client_secret );
+		$response    = wp_remote_post(
+			$token_url,
+			[
+				'timeout' => 15,
+				'headers' => [
+					'Content-Type'  => 'application/x-www-form-urlencoded',
+					'Authorization' => $auth_header,
+				],
+				'body'    => [
+					'grant_type'    => 'authorization_code',
+					'code'          => 'creatorreactor_settings_test_invalid_code',
+					'redirect_uri'  => $redirect_uri,
+					'code_verifier' => 'creatorreactor_settings_test_verifier',
+				],
+			]
+		);
+
+		if ( is_wp_error( $response ) ) {
+			return new \WP_Error(
+				'fanvue_probe_http',
+				sprintf(
+					/* translators: %s: WordPress HTTP error message. */
+					__( 'Could not reach the Fanvue token URL (%s). Check outbound HTTPS from this server.', 'creatorreactor' ),
+					$response->get_error_message()
+				)
+			);
+		}
+
+		$body = wp_remote_retrieve_body( $response );
+		$data = json_decode( is_string( $body ) ? $body : '', true );
+		if ( ! is_array( $data ) ) {
+			return new \WP_Error(
+				'fanvue_probe_bad_response',
+				__( 'Fanvue returned an unexpected response. Try again in a moment.', 'creatorreactor' )
+			);
+		}
+
+		if ( ! empty( $data['access_token'] ) ) {
+			return true;
+		}
+
+		$err = isset( $data['error'] ) ? sanitize_key( (string) $data['error'] ) : '';
+		if ( $err === 'invalid_grant' ) {
+			return true;
+		}
+
+		$desc = isset( $data['error_description'] ) ? sanitize_text_field( (string) $data['error_description'] ) : '';
+
+		return new \WP_Error(
+			'fanvue_probe_failed',
+			$desc !== '' ? $desc : ( $err !== '' ? $err : __( 'Fanvue rejected the credentials.', 'creatorreactor' ) ),
+			[ 'oauth_error' => $err ]
+		);
 	}
 
 	public static function init() {

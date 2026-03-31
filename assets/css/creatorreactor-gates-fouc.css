@@ -1,0 +1,20 @@
+/**
+ * Prevent FOUC: hide gated layout containers until JS finishes the first scan
+ * and adds body.creatorreactor-gates-ready.
+ *
+ * Uses :has() (supported in current evergreen browsers).
+ *
+ * @package CreatorReactor
+ */
+
+body:not(.creatorreactor-gates-ready) .wp-block-column:has(.creatorreactor-gutenberg-gate-marker),
+body:not(.creatorreactor-gates-ready) .wp-block-group:has(.creatorreactor-gutenberg-gate-marker),
+body:not(.creatorreactor-gates-ready) .wp-block-columns:has(.creatorreactor-gutenberg-gate-marker),
+body:not(.creatorreactor-gates-ready) [class*="wp-block-creatorreactor-"]:has(.creatorreactor-gutenberg-gate-marker) {
+	visibility: hidden !important;
+}
+
+body:not(.creatorreactor-gates-ready) .e-con-inner:has(.creatorreactor-elementor-gate-marker),
+body:not(.creatorreactor-gates-ready) .elementor-container:has(.creatorreactor-elementor-gate-marker) {
+	visibility: hidden !important;
+}

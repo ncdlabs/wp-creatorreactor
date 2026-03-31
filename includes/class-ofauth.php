@@ -17,6 +17,9 @@ class OFAuth {
 
 	const REST_ROUTE_WEBHOOK = '/ofauth-webhook';
 
+	/** OFAuth HTTP API host (Account Linking). */
+	const API_BASE_URL = 'https://api.ofauth.com';
+
 	public static function init() {
 		add_action( 'rest_api_init', [ __CLASS__, 'register_routes' ] );
 	}
@@ -28,6 +31,74 @@ class OFAuth {
 	 */
 	public static function get_webhook_url() {
 		return CreatorReactor_OAuth::get_rest_redirect_uri( CreatorReactor_OAuth::REST_NAMESPACE, self::REST_ROUTE_WEBHOOK );
+	}
+
+	/**
+	 * Verify an OFAuth API key with a lightweight GET (no client session created).
+	 *
+	 * @param string $api_key Plaintext access key from the OFAuth dashboard.
+	 * @return true|\WP_Error
+	 */
+	public static function probe_api_key_for_settings_test( $api_key ) {
+		$api_key = trim( (string) $api_key );
+		if ( $api_key === '' ) {
+			return new \WP_Error( 'ofauth_probe_no_key', __( 'API key is empty.', 'creatorreactor' ) );
+		}
+
+		$url      = self::API_BASE_URL . '/v2/account';
+		$response = wp_remote_get(
+			$url,
+			[
+				'timeout' => 15,
+				'headers' => [
+					'apiKey' => $api_key,
+				],
+			]
+		);
+
+		if ( is_wp_error( $response ) ) {
+			return new \WP_Error(
+				'ofauth_probe_http',
+				sprintf(
+					/* translators: %s: WordPress HTTP error message. */
+					__( 'Could not reach OFAuth (%s). Check outbound HTTPS from this server.', 'creatorreactor' ),
+					$response->get_error_message()
+				)
+			);
+		}
+
+		$code = wp_remote_retrieve_response_code( $response );
+		if ( $code === 401 ) {
+			return new \WP_Error(
+				'ofauth_probe_unauthorized',
+				__( 'OFAuth rejected this API key (Unauthorized).', 'creatorreactor' ),
+				[ 'http_code' => 401 ]
+			);
+		}
+
+		if ( $code < 200 || $code >= 300 ) {
+			$body = wp_remote_retrieve_body( $response );
+			$snippet = is_string( $body ) ? wp_strip_all_tags( substr( $body, 0, 300 ) ) : '';
+
+			return new \WP_Error(
+				'ofauth_probe_http',
+				$snippet !== ''
+					? sprintf(
+						/* translators: 1: HTTP status code, 2: response snippet */
+						__( 'OFAuth returned HTTP %1$s: %2$s', 'creatorreactor' ),
+						(string) $code,
+						$snippet
+					)
+					: sprintf(
+						/* translators: %s: HTTP status code */
+						__( 'OFAuth returned HTTP %s.', 'creatorreactor' ),
+						(string) $code
+					),
+				[ 'http_code' => $code ]
+			);
+		}
+
+		return true;
 	}
 
 	public static function register_routes() {
