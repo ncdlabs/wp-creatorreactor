@@ -82,7 +82,6 @@ class Blocks {
 		$editor_css = '.creatorreactor-block-hint{font-size:12px;color:#6b5a74;margin:0 0 10px;padding:6px 8px;background:#faf3f8;border-radius:4px;border:1px solid #e8e0ed}.creatorreactor-block-hint strong{color:#301934};'
         . '.wp-block-creatorreactor-follower,'
         . '.wp-block-creatorreactor-subscriber,'
-        . '.wp-block-creatorreactor-not-logged-in,'
         . '.wp-block-creatorreactor-logged-out,'
         . '.wp-block-creatorreactor-logged-in,'
         . '.wp-block-creatorreactor-has-tier,'
@@ -166,25 +165,6 @@ class Blocks {
 						],
 					],
 					'render_callback' => [ __CLASS__, 'render_subscriber' ],
-				]
-			)
-		);
-
-		register_block_type(
-			'creatorreactor/not-logged-in',
-			array_merge(
-				$inner_shared,
-				[
-					'title'           => __( 'CreatorReactor: Logged in no role', 'creatorreactor' ),
-					'description'     => __( 'Inner blocks visible only to logged-in visitors with no specific role/entitlement.', 'creatorreactor' ),
-					'icon'            => 'visibility',
-					'attributes'     => [
-						'container_logic' => [
-							'type'    => 'string',
-							'default' => 'and',
-						],
-					],
-					'render_callback' => [ __CLASS__, 'render_logged_in_no_role' ],
 				]
 			)
 		);
@@ -367,23 +347,6 @@ class Blocks {
 	 * @param string               $content    Inner blocks markup.
 	 * @param \WP_Block            $block      Block instance.
 	 */
-	public static function render_logged_in_no_role( $attributes, $content, $_block ) {
-		$out = '';
-		if ( Role_Impersonation::effective_is_logged_in_for_creatorreactor_gates() ) {
-			if ( ! self::user_has_any_active_entitlement( get_current_user_id() ) ) {
-				$out = self::render_inner_content( $content );
-			}
-		}
-		$matched = trim( (string) $out ) !== '';
-		$logic   = self::resolve_container_logic( $attributes );
-		return self::render_gate_marker( 'logged_in_no_role', $matched, $logic ) . ( $out !== '' ? (string) $out : '' );
-	}
-
-	/**
-	 * @param array<string, mixed> $attributes Block attributes.
-	 * @param string               $content    Inner blocks markup.
-	 * @param \WP_Block            $block      Block instance.
-	 */
 	public static function render_logged_out( $attributes, $content, $_block ) {
 		$out = '';
 		if ( ! Role_Impersonation::effective_is_logged_in_for_creatorreactor_gates() ) {
@@ -550,13 +513,5 @@ class Blocks {
 			. ' data-creatorreactor-gate-logic="' . esc_attr( $logic ) . '"'
 			. ' data-creatorreactor-user-roles="' . esc_attr( $roles ) . '"'
 			. ' style="display:none" aria-hidden="true"></span>';
-	}
-
-	/**
-	 * @param int $user_id WordPress user ID.
-	 */
-	private static function user_has_any_active_entitlement( $user_id ) {
-		$rows = Entitlements::get_active_entitlement_rows_for_wp_user( (int) $user_id );
-		return ! empty( $rows );
 	}
 }

@@ -145,7 +145,6 @@ final class Elementor_Integration {
 		$widgets = [
 			$use_nested_gates ? new Elementor_Widget_Follower_Nested() : new Elementor_Widget_Follower_Legacy(),
 			$use_nested_gates ? new Elementor_Widget_Subscriber_Nested() : new Elementor_Widget_Subscriber_Legacy(),
-			$use_nested_gates ? new Elementor_Widget_Not_Logged_In_Nested() : new Elementor_Widget_Not_Logged_In_Legacy(),
 			$use_nested_gates ? new Elementor_Widget_Logged_Out_Nested() : new Elementor_Widget_Logged_Out_Legacy(),
 			$use_nested_gates ? new Elementor_Widget_Logged_In_Nested() : new Elementor_Widget_Logged_In_Legacy(),
 			$use_nested_gates ? new Elementor_Widget_Has_Tier_Nested() : new Elementor_Widget_Has_Tier_Legacy(),

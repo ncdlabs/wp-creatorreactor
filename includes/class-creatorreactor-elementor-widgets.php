@@ -373,28 +373,6 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 	/**
 	 * @package CreatorReactor
 	 */
-	final class Elementor_Widget_Not_Logged_In_Nested extends Elementor_Widget_Nested_Shortcode_Gate_Base {
-
-		public function get_name() {
-			return 'creatorreactor_logged_in_no_role';
-		}
-
-		public function get_title() {
-			return __( 'CreatorReactor: Logged in no role', 'creatorreactor' );
-		}
-
-		public function get_keywords() {
-			return [ 'creatorreactor', 'logged in', 'no role', 'entitlement', 'container', 'nested' ];
-		}
-
-		protected function shortcode_tag(): string {
-			return 'logged_in_no_role';
-		}
-	}
-
-	/**
-	 * @package CreatorReactor
-	 */
 	final class Elementor_Widget_Logged_Out_Nested extends Elementor_Widget_Nested_Shortcode_Gate_Base {
 
 		public function get_name() {
@@ -599,28 +577,6 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 				$inner
 			);
 		}
-	}
-}
-
-/**
- * @package CreatorReactor
- */
-final class Elementor_Widget_Not_Logged_In_Legacy extends Elementor_Widget_Shortcode_Wrap {
-
-	public function get_name() {
-		return 'creatorreactor_logged_in_no_role';
-	}
-
-	public function get_title() {
-		return __( 'CreatorReactor: Logged in no role', 'creatorreactor' );
-	}
-
-	public function get_keywords() {
-		return [ 'creatorreactor', 'logged in', 'no role', 'entitlement' ];
-	}
-
-	protected function shortcode_tag(): string {
-		return 'logged_in_no_role';
 	}
 }
 

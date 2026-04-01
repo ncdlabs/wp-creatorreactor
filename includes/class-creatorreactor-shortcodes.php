@@ -47,8 +47,6 @@ class Shortcodes {
 				return self::logged_out( [], $inner );
 			case 'logged_in':
 				return self::logged_in( [], $inner );
-			case 'logged_in_no_role':
-				return self::logged_in_no_role( [], $inner );
 			case 'fanvue_connected':
 				return self::fanvue_connected( [], $inner );
 			case 'fanvue_not_connected':
@@ -63,7 +61,6 @@ class Shortcodes {
 		add_shortcode( 'subscriber', [ __CLASS__, 'subscriber' ] );
 		add_shortcode( 'logged_out', [ __CLASS__, 'logged_out' ] );
 		add_shortcode( 'logged_in', [ __CLASS__, 'logged_in' ] );
-		add_shortcode( 'logged_in_no_role', [ __CLASS__, 'logged_in_no_role' ] );
 		add_shortcode( 'has_tier', [ __CLASS__, 'has_tier' ] );
 		add_shortcode( 'fanvue_connected', [ __CLASS__, 'fanvue_connected' ] );
 		add_shortcode( 'fanvue_not_connected', [ __CLASS__, 'fanvue_not_connected' ] );
@@ -161,20 +158,6 @@ class Shortcodes {
 	 */
 	public static function logged_in( $atts, $content = null ) {
 		if ( ! Role_Impersonation::effective_is_logged_in_for_creatorreactor_gates() ) {
-			return '';
-		}
-		return self::render_enclosed( $content );
-	}
-
-	/**
-	 * @param array<string, string> $atts Attributes.
-	 * @param string|null           $content Enclosed content.
-	 */
-	public static function logged_in_no_role( $atts, $content = null ) {
-		if ( ! Role_Impersonation::effective_is_logged_in_for_creatorreactor_gates() ) {
-			return '';
-		}
-		if ( self::user_has_any_active_entitlement( get_current_user_id() ) ) {
 			return '';
 		}
 		return self::render_enclosed( $content );
@@ -441,13 +424,5 @@ class Shortcodes {
 			return '';
 		}
 		return do_shortcode( $content );
-	}
-
-	/**
-	 * @param int $user_id WordPress user ID.
-	 */
-	private static function user_has_any_active_entitlement( $user_id ) {
-		$rows = Entitlements::get_active_entitlement_rows_for_wp_user( (int) $user_id );
-		return ! empty( $rows );
 	}
 }

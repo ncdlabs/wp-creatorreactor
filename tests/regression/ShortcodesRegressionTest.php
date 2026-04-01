@@ -89,7 +89,6 @@ final class ShortcodesRegressionTest extends BaseTestCase
             'subscriber'             => 'subscriber',
             'logged_out'             => 'logged_out',
             'logged_in'              => 'logged_in',
-            'logged_in_no_role'      => 'logged_in_no_role',
             'has_tier'               => 'has_tier',
             'fanvue_connected'       => 'fanvue_connected',
             'fanvue_not_connected'   => 'fanvue_not_connected',
@@ -147,38 +146,6 @@ final class ShortcodesRegressionTest extends BaseTestCase
         Functions\expect('do_shortcode')->never();
 
         self::assertSame('', Shortcodes::logged_in([], 'member content'));
-    }
-
-    public function testLoggedInNoRoleReturnsEmptyWhenGuest(): void
-    {
-        Functions\when('is_user_logged_in')->justReturn(false);
-        Functions\expect('do_shortcode')->never();
-
-        self::assertSame('', Shortcodes::logged_in_no_role([], 'guest'));
-    }
-
-    public function testLoggedInNoRoleReturnsEmptyWhenUserHasActiveEntitlements(): void
-    {
-        $this->mockWpdb([['status' => 'active']], null);
-        Functions\when('is_user_logged_in')->justReturn(true);
-        Functions\when('get_current_user_id')->justReturn(200);
-        Functions\when('get_userdata')->alias(static fn($userId) => (object) ['user_email' => 'role@example.com']);
-        Functions\when('current_time')->justReturn('2026-03-24 00:00:00');
-        Functions\expect('do_shortcode')->never();
-
-        self::assertSame('', Shortcodes::logged_in_no_role([], 'content'));
-    }
-
-    public function testLoggedInNoRoleRendersWhenUserHasNoActiveEntitlements(): void
-    {
-        $this->mockWpdb([], null);
-        Functions\when('is_user_logged_in')->justReturn(true);
-        Functions\when('get_current_user_id')->justReturn(201);
-        Functions\when('get_userdata')->alias(static fn($userId) => (object) ['user_email' => 'role@example.com']);
-        Functions\when('current_time')->justReturn('2026-03-24 00:00:00');
-        Functions\expect('do_shortcode')->once()->with('content')->andReturn('rendered no-role');
-
-        self::assertSame('rendered no-role', Shortcodes::logged_in_no_role([], 'content'));
     }
 
     public function testFanvueConnectedRendersOnlyWhenUserMetaLinked(): void

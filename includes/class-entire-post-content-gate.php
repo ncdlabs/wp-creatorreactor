@@ -35,7 +35,6 @@ final class Entire_Post_Content_Gate {
 		'follower',
 		'logged_in',
 		'logged_out',
-		'logged_in_no_role',
 		'fanvue_connected',
 		'fanvue_not_connected',
 	];
@@ -94,7 +93,6 @@ final class Entire_Post_Content_Gate {
 					'follower'            => esc_html__( 'Follower only', 'creatorreactor' ),
 					'logged_in'           => esc_html__( 'Any logged-in user', 'creatorreactor' ),
 					'logged_out'          => esc_html__( 'Logged-out visitors only', 'creatorreactor' ),
-					'logged_in_no_role'   => esc_html__( 'Logged in, no entitlement', 'creatorreactor' ),
 					'fanvue_connected'    => esc_html__( 'Fanvue linked', 'creatorreactor' ),
 					'fanvue_not_connected' => esc_html__( 'Fanvue not linked', 'creatorreactor' ),
 				],
@@ -216,7 +214,6 @@ final class Entire_Post_Content_Gate {
 				<option value="follower" <?php selected( $current, 'follower' ); ?>><?php esc_html_e( 'Follower only', 'creatorreactor' ); ?></option>
 				<option value="logged_in" <?php selected( $current, 'logged_in' ); ?>><?php esc_html_e( 'Any logged-in user', 'creatorreactor' ); ?></option>
 				<option value="logged_out" <?php selected( $current, 'logged_out' ); ?>><?php esc_html_e( 'Logged-out visitors only', 'creatorreactor' ); ?></option>
-				<option value="logged_in_no_role" <?php selected( $current, 'logged_in_no_role' ); ?>><?php esc_html_e( 'Logged in, no entitlement', 'creatorreactor' ); ?></option>
 				<option value="fanvue_connected" <?php selected( $current, 'fanvue_connected' ); ?>><?php esc_html_e( 'Fanvue linked', 'creatorreactor' ); ?></option>
 				<option value="fanvue_not_connected" <?php selected( $current, 'fanvue_not_connected' ); ?>><?php esc_html_e( 'Fanvue not linked', 'creatorreactor' ); ?></option>
 			</select>

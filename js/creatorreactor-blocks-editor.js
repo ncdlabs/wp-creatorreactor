@@ -103,13 +103,6 @@
 	);
 
 	registerInner(
-		'creatorreactor/not-logged-in',
-		__('CreatorReactor: Logged in no role', 'creatorreactor'),
-		__('Inner blocks show only for logged-in users with no active entitlement.', 'creatorreactor'),
-		'visibility'
-	);
-
-	registerInner(
 		'creatorreactor/logged-out',
 		__('CreatorReactor: Logged out', 'creatorreactor'),
 		__('Inner blocks show only when the visitor is not logged in.', 'creatorreactor'),

@@ -2849,9 +2849,6 @@ class Admin_Settings {
 
 			<hr />
 
-			<p><strong><?php esc_html_e( 'Logged-in users with no entitlement', 'creatorreactor' ); ?></strong></p>
-			<pre class="creatorreactor-guide-code" style="white-space: pre-wrap; word-break: break-word; background: #f6f7f7; padding: 12px; border: 1px solid #c3c4c7;"><code><?php echo esc_html( "[logged_in_no_role]\nYou are logged in, but do not have an active entitlement yet.\n[/logged_in_no_role]" ); ?></code></pre>
-
 			<p><strong><?php esc_html_e( 'Logged-out only', 'creatorreactor' ); ?></strong></p>
 			<pre class="creatorreactor-guide-code" style="white-space: pre-wrap; word-break: break-word; background: #f6f7f7; padding: 12px; border: 1px solid #c3c4c7;"><code><?php echo esc_html( "[logged_out]\nPlease log in to view this content.\n[/logged_out]" ); ?></code></pre>
 
@@ -2937,10 +2934,6 @@ class Admin_Settings {
 						<tr>
 							<td><code style="word-break: break-word;">[subscriber] … [/subscriber]</code></td>
 							<td><?php esc_html_e( 'Shows inner content only when logged in with an active paid subscriber tier (fanvue_subscriber or fanvue_subscriber_<tier>).', 'creatorreactor' ); ?></td>
-						</tr>
-						<tr>
-							<td><code style="word-break: break-word;">[logged_in_no_role] … [/logged_in_no_role]</code></td>
-							<td><?php esc_html_e( 'Shows inner content only to logged-in visitors with no specific role/entitlement (e.g. logged in but not subscribed/follower).', 'creatorreactor' ); ?></td>
 						</tr>
 						<tr>
 							<td><code style="word-break: break-word;">[logged_out] … [/logged_out]</code></td>

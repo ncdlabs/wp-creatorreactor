@@ -89,7 +89,7 @@ final class Gated_Content_Cache {
 		if ( strpos( $content, 'wp-block-creatorreactor-' ) !== false ) {
 			return true;
 		}
-		if ( preg_match( '/\[\s*(subscriber|follower|has_tier|logged_in|logged_out|logged_in_no_role|fanvue_connected|fanvue_not_connected)\b/', $content ) ) {
+		if ( preg_match( '/\[\s*(subscriber|follower|has_tier|logged_in|logged_out|fanvue_connected|fanvue_not_connected)\b/', $content ) ) {
 			return true;
 		}
 		if ( Editor_Context::post_uses_elementor_storage( $post->ID ) ) {

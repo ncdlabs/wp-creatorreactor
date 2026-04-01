@@ -3,8 +3,9 @@
  * Remove gated layout regions from HTML when the current visitor does not match,
  * so paid/restricted content is not present in “View Source” (CSS-only hiding is not security).
  *
- * Elementor: widgets placed as siblings next to a gate widget are still rendered by Elementor;
- * this strips the shared container (e.g. {@see e-con-inner}) server-side when gates fail.
+ * Elementor: each gate marker is tied to the widget that rendered it. When a gate fails for the
+ * current visitor, only that widget’s subtree is stripped (not an entire shared {@see e-con-inner}),
+ * so mixed gates in one section (e.g. Follower + Logged out) do not blank each other for guests.
  *
  * @package CreatorReactor
  * @author  Lou Grossi
@@ -162,7 +163,7 @@ final class Gate_Frontend_Output {
 
 	/**
 	 * Match front-end gate inheritance: Gutenberg walks up (column → group → columns), then block root;
-	 * Elementor prefers {@see .e-con-inner}, then {@see .elementor-container}, then {@see .elementor-element}.
+	 * Elementor uses the CreatorReactor widget wrapper, then legacy fallbacks.
 	 */
 	private static function resolve_container_for_marker( \DOMElement $marker ): ?\DOMElement {
 		$class = $marker->getAttribute( 'class' );
@@ -197,6 +198,11 @@ final class Gate_Frontend_Output {
 	}
 
 	private static function resolve_elementor_container( \DOMElement $marker ): ?\DOMElement {
+		$widget = self::dom_closest_creatorreactor_elementor_widget( $marker );
+		if ( $widget instanceof \DOMElement ) {
+			return $widget;
+		}
+		// Unusual markup: fall back to legacy wide containers (older behavior).
 		$inner = self::dom_closest_class( $marker, 'e-con-inner' );
 		if ( $inner instanceof \DOMElement ) {
 			return $inner;
@@ -207,6 +213,25 @@ final class Gate_Frontend_Output {
 		}
 		$fallback = self::dom_closest_class( $marker, 'elementor-element' );
 		return $fallback instanceof \DOMElement ? $fallback : null;
+	}
+
+	/**
+	 * Nearest Elementor widget root for a CreatorReactor gate (marker lives inside this element).
+	 */
+	private static function dom_closest_creatorreactor_elementor_widget( \DOMElement $from ): ?\DOMElement {
+		$el = $from->parentNode;
+		while ( $el && $el->nodeType === XML_ELEMENT_NODE ) {
+			if ( $el instanceof \DOMElement ) {
+				$c  = $el->getAttribute( 'class' );
+				$wt = $el->getAttribute( 'data-widget_type' );
+				if ( strpos( $c, 'elementor-widget-creatorreactor' ) !== false
+					|| ( is_string( $wt ) && strpos( $wt, 'creatorreactor' ) === 0 ) ) {
+					return $el;
+				}
+			}
+			$el = $el->parentNode;
+		}
+		return null;
 	}
 
 	private static function dom_closest_class( \DOMElement $from, string $class_token ): ?\DOMElement {

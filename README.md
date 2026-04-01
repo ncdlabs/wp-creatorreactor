@@ -61,7 +61,7 @@ Broker mode: WordPress → Broker (OAuth / token) → Fanvue API via broker prox
 - **Subscriber sync** — Tier tracking; scheduled sync via WP-Cron (`includes/class-cron.php`).  
 - **Follower sync** — Followers identified separately from paid tiers (follower tier constant `Entitlements::TIER_FOLLOWER` and product-scoped stored tiers such as `fanvue_follower`).  
 - **Entitlements API** — PHP helpers to test access and list active subscribers by tier and optional product.  
-- **Shortcodes** — `[follower]`, `[subscriber]`, `[logged_out]`, `[logged_in]`, `[logged_in_no_role]`, `[has_tier]`, `[onboarding_incomplete]`, `[onboarding_complete]`, `[fanvue_connected]`, `[fanvue_not_connected]`, `[fanvue_login_button]` (see **Shortcodes** tab in settings).  
+- **Shortcodes** — `[follower]`, `[subscriber]`, `[logged_out]`, `[logged_in]`, `[has_tier]`, `[onboarding_incomplete]`, `[onboarding_complete]`, `[fanvue_connected]`, `[fanvue_not_connected]`, `[fanvue_login_button]` (see **Shortcodes** tab in settings).  
 - **Gutenberg** — Blocks in category **CreatorReactor** for follower/subscriber gates, logged-in/logged-out visibility, tier checks, onboarding status, Fanvue connected state, and Login with Fanvue (same rules as shortcodes).  
 - **Elementor** — Widgets in category **CreatorReactor** for the same gate types plus Fanvue OAuth and onboarding form output.  
 
