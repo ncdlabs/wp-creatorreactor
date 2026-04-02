@@ -1,0 +1,110 @@
+# Release: run the full CI stack on GitHub Releases, then attach an installable plugin zip.
+#
+# Fires when a release is published. Draft releases do not run this workflow until published.
+
+name: Release
+
+on:
+  release:
+    types: [published]
+
+permissions:
+  contents: write
+
+concurrency:
+  group: release-${{ github.event.release.tag_name }}
+  cancel-in-progress: true
+
+jobs:
+  test:
+    name: Test and validate
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.2"
+          coverage: none
+          tools: composer
+
+      - name: Install Composer dependencies
+        uses: ramsey/composer-install@v3
+        with:
+          composer-options: "--prefer-dist --no-progress"
+
+      - name: PHPUnit — unit tests
+        run: composer run test:unit | cat
+
+      - name: PHPUnit — regression tests
+        run: composer run test:regression | cat
+
+      - name: WordPress PHPUnit test library (wp-phpunit package)
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/wp-phpunit-smoke
+          cd /tmp/wp-phpunit-smoke
+          composer init --no-interaction --name="ci/wp-phpunit-smoke" | cat
+          composer require wp-phpunit/wp-phpunit:^6 --prefer-dist --no-progress --no-interaction | cat
+          php -r "require 'vendor/wp-phpunit/wp-phpunit/__loaded.php'; echo 'wp-phpunit library OK' . PHP_EOL;" | cat
+
+      - name: WordPress Plugin Check
+        uses: wordpress/plugin-check-action@v1
+        with:
+          build-dir: ./
+          exclude-directories: |
+            tests
+            vendor
+            .git
+            .github
+          exclude-files: |
+            composer.json
+            composer.lock
+            phpunit.xml
+            build-zip.sh
+            deploy.sh
+
+      - name: 10up — WordPress Coding Standards (PHPCS)
+        uses: 10up/wpcs-action@v2.1.0
+        with:
+          enable_warnings: "true"
+          paths: "creatorreactor.php uninstall.php includes templates"
+          excludes: "tests vendor"
+
+      - name: WP Performance Tests (Playground)
+        uses: swissspidy/wp-performance-action@v2
+        with:
+          create-comment: "false"
+          print-results: "true"
+          upload-artifacts: "true"
+          plugins: |
+            .
+          urls: |
+            /
+
+  package:
+    name: Package release zip
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Build installable zip (no dev files)
+        run: ./build-zip.sh --package-only | cat
+
+      - name: Upload zip to GitHub Release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          set -euo pipefail
+          shopt -s nullglob
+          zips=(wp-creatorreactor-*.zip)
+          if [ ${#zips[@]} -ne 1 ]; then
+            echo "Expected exactly one wp-creatorreactor-*.zip, got: ${zips[*]-}" >&2
+            exit 1
+          fi
+          gh release upload "${{ github.event.release.tag_name }}" "${zips[0]}" --clobber | cat
