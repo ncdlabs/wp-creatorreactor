@@ -45,3 +45,4 @@ require_once __DIR__ . '/../includes/class-role-impersonation.php';
 require_once __DIR__ . '/../includes/class-creatorreactor-shortcodes.php';
 require_once __DIR__ . '/../includes/class-creatorreactor-client.php';
 require_once __DIR__ . '/../includes/class-creatorreactor-fan-oauth.php';
+require_once __DIR__ . '/../includes/class-creatorreactor-wp-login.php';

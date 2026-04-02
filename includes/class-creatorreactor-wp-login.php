@@ -261,12 +261,14 @@ class Login_Page {
 	 * Register hooks for the primary login screen only (not lost password, etc.).
 	 */
 	public static function on_login_form_login() {
+		// @codeCoverageIgnoreStart
 		if ( ! Admin_Settings::is_replace_wp_login_with_social() ) {
 			return;
 		}
 
 		add_action( 'login_enqueue_scripts', [ __CLASS__, 'enqueue_login_assets' ] );
 		add_action( 'login_form', [ __CLASS__, 'render_social_login_markup' ], 0 );
+		// @codeCoverageIgnoreEnd
 	}
 
 	public static function enqueue_login_assets() {

@@ -158,6 +158,79 @@ final class BannerAndPluginRegressionTest extends BaseTestCase
         self::assertTrue(true);
     }
 
+    public function testEnqueueAssetsDoesNothingWhenNotInAdmin(): void
+    {
+        Functions\when('is_admin')->justReturn(false);
+        Functions\expect('wp_enqueue_script')->never();
+        Functions\expect('wp_localize_script')->never();
+
+        Banner::enqueue_assets();
+        self::assertTrue(true);
+    }
+
+    public function testEnqueueAssetsDoesNothingWhenRegistrationIsEnabled(): void
+    {
+        Functions\when('is_admin')->justReturn(true);
+        Functions\when('current_user_can')->justReturn(true);
+        Functions\when('get_option')->alias(
+            static fn ($key, $default = null) => $key === 'users_can_register' ? 1 : $default
+        );
+        Functions\expect('wp_enqueue_script')->never();
+
+        Banner::enqueue_assets();
+        self::assertTrue(true);
+    }
+
+    public function testMaybePrintCriticalBannerCssOutputsInlineStyleWhenAssetsLoad(): void
+    {
+        $_SESSION = [];
+        Functions\when('is_admin')->justReturn(true);
+        Functions\when('current_user_can')->justReturn(true);
+        Functions\when('get_option')->alias(
+            static fn ($key, $default = null) => $key === 'users_can_register' ? 0 : $default
+        );
+
+        ob_start();
+        Banner::maybe_print_critical_banner_css();
+        $html = (string) ob_get_clean();
+
+        self::assertStringContainsString('creatorreactor-reg-banner-critical', $html);
+        self::assertStringContainsString('#creatorreactor-oauth-banner', $html);
+    }
+
+    public function testMaybePrintCriticalBannerCssSilentWhenAssetsDoNotLoad(): void
+    {
+        Functions\when('is_admin')->justReturn(false);
+
+        ob_start();
+        Banner::maybe_print_critical_banner_css();
+        self::assertSame('', (string) ob_get_clean());
+    }
+
+    public function testFilterAdminBodyClassAppendsActiveFlagWhenBannerShows(): void
+    {
+        $_SESSION = [];
+        Functions\when('is_admin')->justReturn(true);
+        Functions\when('get_option')->alias(
+            static fn ($key, $default = null) => $key === 'users_can_register' ? 0 : $default
+        );
+
+        self::assertStringContainsString(
+            'creatorreactor-registration-banner-active',
+            Banner::filter_admin_body_class('wp-admin wp-core-ui')
+        );
+    }
+
+    public function testFilterAdminBodyClassNoopWhenRegistrationEnabled(): void
+    {
+        Functions\when('is_admin')->justReturn(true);
+        Functions\when('get_option')->alias(
+            static fn ($key, $default = null) => $key === 'users_can_register' ? 1 : $default
+        );
+
+        self::assertSame('only-class', Banner::filter_admin_body_class('only-class'));
+    }
+
     public function testAjaxDismissBannerRequiresManageOptionsCapability(): void
     {
         Functions\expect('check_ajax_referer')

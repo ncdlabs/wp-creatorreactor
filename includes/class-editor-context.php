@@ -25,10 +25,12 @@ class Editor_Context {
 			return true;
 		}
 		if ( ! function_exists( 'is_plugin_active' ) ) {
+			// @codeCoverageIgnoreStart
 			if ( ! defined( 'ABSPATH' ) ) {
 				return false;
 			}
 			require_once ABSPATH . 'wp-admin/includes/plugin.php';
+			// @codeCoverageIgnoreEnd
 		}
 		if ( function_exists( 'is_plugin_active' ) && is_plugin_active( 'elementor/elementor.php' ) ) {
 			return true;

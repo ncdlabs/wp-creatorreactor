@@ -142,6 +142,9 @@
 			return;
 		}
 		var slug = (selectEl.value || '').trim();
+		if (!slug && typeof CFG.loggedOutSlug === 'string' && CFG.loggedOutSlug.length) {
+			slug = CFG.loggedOutSlug;
+		}
 		if (!slug) {
 			return;
 		}

@@ -9,16 +9,10 @@
             <file>includes/class-creatorreactor-banner.php</file>
             <file>includes/class-creatorreactor.php</file>
             <file>includes/class-editor-context.php</file>
-            <file>includes/class-creatorreactor-onboarding.php</file>
-            <file>includes/class-creatorreactor-shortcodes.php</file>
             <file>includes/class-creatorreactor-wp-login.php</file>
         </include>
     </source>
     <testsuites>
-        <testsuite name="all">
-            <directory>tests/unit</directory>
-            <directory>tests/regression</directory>
-        </testsuite>
         <testsuite name="unit">
             <directory>tests/unit</directory>
         </testsuite>

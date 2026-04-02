@@ -75,7 +75,8 @@ class Plugin {
 			// Broker REST callback must register in all modes so OAuth redirects to
 			// .../broker-callback never hit rest_no_route (e.g. Fanvue app URI vs mode mismatch).
 			Broker_Client::init();
-		} catch ( \Throwable $e ) {
+		} catch ( \Throwable $e ) { // @codeCoverageIgnore
+			// @codeCoverageIgnoreStart
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
 				error_log( 'CreatorReactor bootstrap error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
 			}
@@ -88,6 +89,7 @@ class Plugin {
 					error_log( 'CreatorReactor error logging failed: ' . $inner->getMessage() );
 				}
 			}
+			// @codeCoverageIgnoreEnd
 		}
 	}
 

@@ -13,6 +13,9 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+/**
+ * Legacy onboarding (removed from live UX). Kept for URL helpers and data migration references.
+ */
 class Onboarding {
 
 	const QUERY_VAR = 'creatorreactor_onboarding';

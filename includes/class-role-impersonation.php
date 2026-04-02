@@ -308,11 +308,12 @@ final class Role_Impersonation {
 			$handle,
 			'CreatorReactorRoleImpersonation',
 			[
-				'ajaxUrl'      => \admin_url( 'admin-ajax.php' ),
-				'nonce'        => \wp_create_nonce( 'creatorreactor_role_impersonate' ),
-				'roles'        => $roles_ui,
-				'current'      => $current,
-				'currentLabel' => ( $current !== null && $current !== '' ) ? self::display_label_for_impersonation_choice( $current ) : '',
+				'ajaxUrl'       => \admin_url( 'admin-ajax.php' ),
+				'nonce'         => \wp_create_nonce( 'creatorreactor_role_impersonate' ),
+				'loggedOutSlug' => self::IMPERSONATION_LOGGED_OUT_SLUG,
+				'roles'         => $roles_ui,
+				'current'       => $current,
+				'currentLabel'  => ( $current !== null && $current !== '' ) ? self::display_label_for_impersonation_choice( $current ) : '',
 				'i18n'         => [
 					'title'             => __( 'Impersonate Role', 'creatorreactor' ),
 					'selectPlaceholder' => __( 'Select role…', 'creatorreactor' ),

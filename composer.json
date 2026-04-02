@@ -1,6 +1,6 @@
 {
     "scripts": {
-        "test": "vendor/bin/phpunit --testsuite all",
+        "test": "vendor/bin/phpunit",
         "test:unit": "vendor/bin/phpunit --testsuite unit",
         "test:regression": "vendor/bin/phpunit --testsuite regression"
     },

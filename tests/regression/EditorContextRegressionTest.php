@@ -300,4 +300,73 @@ final class EditorContextRegressionTest extends BaseTestCase
         self::assertFalse(Editor_Context::is_elementor_preview_request());
         unset($_GET['elementor-preview']);
     }
+
+    public function testIsElementorPluginActiveTrueWhenNetworkActiveOnly(): void
+    {
+        $GLOBALS['__cr_wp_stub_is_plugin_active'] = static fn (): bool => false;
+        $GLOBALS['__cr_wp_stub_is_multisite'] = true;
+        $GLOBALS['__cr_wp_stub_is_plugin_active_for_network'] = static fn (string $plugin): bool => $plugin === 'elementor/elementor.php';
+
+        self::assertTrue(Editor_Context::is_elementor_plugin_active());
+    }
+
+    public function testIsBlockEditorScreenFalseWhenNotInAdmin(): void
+    {
+        Functions\when('is_admin')->justReturn(false);
+
+        self::assertFalse(Editor_Context::is_block_editor_screen());
+    }
+
+    public function testPostPrimaryStorageUsesSingularQueriedPostHtml(): void
+    {
+        Functions\when('is_singular')->justReturn(true);
+        Functions\when('get_queried_object_id')->justReturn(900);
+        Functions\when('get_post_meta')->justReturn('');
+        Functions\when('get_post')->alias(
+            static fn (int $id): ?object => $id === 900 ? (object) ['post_content' => '<p>Hi</p>'] : null
+        );
+        Functions\when('get_the_ID')->justReturn(0);
+
+        self::assertSame('html', Editor_Context::post_primary_storage(null));
+    }
+
+    public function testContentHasBlocksFalseWhenPostObjectHasNoContentKey(): void
+    {
+        Functions\when('is_singular')->justReturn(true);
+        Functions\when('get_queried_object_id')->justReturn(902);
+        Functions\when('get_post')->alias(
+            static fn (int $id): ?object => $id === 902 ? (object) [] : null
+        );
+        Functions\when('has_blocks')->justReturn(false);
+
+        self::assertFalse(Editor_Context::content_has_blocks(null, null));
+    }
+
+    public function testPostPrimaryStorageEmptyWhenPostContentIsNotString(): void
+    {
+        Functions\when('is_singular')->justReturn(true);
+        Functions\when('get_queried_object_id')->justReturn(903);
+        Functions\when('get_post_meta')->justReturn('');
+        Functions\when('get_post')->alias(
+            static fn (int $id): ?object => $id === 903 ? (object) ['post_content' => null] : null
+        );
+
+        self::assertSame('empty', Editor_Context::post_primary_storage(null));
+    }
+
+    /**
+     * @runInSeparateProcess
+     * @preserveGlobalState disabled
+     */
+    public function testIsElementorPluginActiveTrueWhenElementorCoreClassAlreadyLoaded(): void
+    {
+        if (! class_exists('\Elementor\Plugin', false)) {
+            eval(<<<'PHP'
+namespace Elementor;
+class Plugin {}
+PHP);
+        }
+
+        self::assertTrue(Editor_Context::is_elementor_plugin_active());
+    }
 }
