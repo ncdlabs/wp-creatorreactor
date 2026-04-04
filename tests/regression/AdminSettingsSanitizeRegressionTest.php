@@ -140,4 +140,42 @@ final class AdminSettingsSanitizeRegressionTest extends BaseTestCase
         self::assertNotSame('', $opts['creatorreactor_oauth_client_id']);
         self::assertNotSame('', $opts['creatorreactor_oauth_client_secret']);
     }
+
+    public function testGoogleLoginButtonStyleSanitizesUnknownToTextOutline(): void
+    {
+        self::assertSame('text_outline', Admin_Settings::sanitize_google_login_button_style('not-a-style'));
+        self::assertSame('standard_light', Admin_Settings::sanitize_google_login_button_style('standard_light'));
+    }
+
+    public function testSanitizeOptionsStoresGoogleLoginButtonStyleWhenSubmitted(): void
+    {
+        $GLOBALS['creatorreactor_test_raw_options'] = [
+            'broker_mode' => false,
+            'creatorreactor_oauth_client_id' => 'x',
+            'creatorreactor_oauth_client_secret' => 'y',
+        ];
+
+        $opts = Admin_Settings::sanitize_options([
+            'authentication_mode' => 'creator',
+            Admin_Settings::GOOGLE_LOGIN_BUTTON_STYLE_KEY => 'standard_dark',
+        ]);
+
+        self::assertSame('standard_dark', $opts[Admin_Settings::GOOGLE_LOGIN_BUTTON_STYLE_KEY]);
+    }
+
+    public function testSanitizeOptionsPreservesGoogleLoginButtonStyleWhenFieldAbsent(): void
+    {
+        $GLOBALS['creatorreactor_test_raw_options'] = [
+            'broker_mode' => false,
+            'creatorreactor_oauth_client_id' => 'x',
+            'creatorreactor_oauth_client_secret' => 'y',
+            Admin_Settings::GOOGLE_LOGIN_BUTTON_STYLE_KEY => 'logo_only',
+        ];
+
+        $opts = Admin_Settings::sanitize_options([
+            'authentication_mode' => 'creator',
+        ]);
+
+        self::assertSame('logo_only', $opts[Admin_Settings::GOOGLE_LOGIN_BUTTON_STYLE_KEY]);
+    }
 }

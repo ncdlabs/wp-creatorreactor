@@ -4,11 +4,12 @@
  * Plugin URI: https://github.com/ncdlabs/creatorreactor
  * Description: OAuth integration, sync, and entitlements for creator products (CreatorReactor, with support for additional products such as OnlyFans).
  * Version: 2.0.64
- * Author: ncdLabs
+ * Author: Lou Grossi
  * Author URI: https://ncdlabs.com
  * License: GPL v2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
  * Text Domain: creatorreactor
+ * Domain Path: /languages
  * Requires at least: 5.9
  * Requires PHP: 8.1
  *
@@ -111,5 +112,3 @@ function creatorreactor_deactivate() {
 	}
 }
 register_deactivation_hook( __FILE__, 'creatorreactor_deactivate' );
-
-register_uninstall_hook( __FILE__, __DIR__ . '/uninstall.php' );

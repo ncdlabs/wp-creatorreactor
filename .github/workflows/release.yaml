@@ -66,6 +66,8 @@ jobs:
             phpunit.xml
             build-zip.sh
             deploy.sh
+            deploy-hostinger.sh
+            banner.js
 
       - name: 10up — WordPress Coding Standards (PHPCS)
         uses: 10up/wpcs-action@v2.1.0

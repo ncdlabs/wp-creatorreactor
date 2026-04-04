@@ -56,6 +56,18 @@ final class ShortcodesRegressionTest extends BaseTestCase
     protected function setUp(): void
     {
         parent::setUp();
+        Functions\when('shortcode_atts')->alias(
+            static function (array $pairs, $atts, $shortcode = ''): array {
+                $atts = (array) $atts;
+                $out  = $pairs;
+                foreach ( array_keys( $pairs ) as $name ) {
+                    if ( array_key_exists( $name, $atts ) ) {
+                        $out[ $name ] = $atts[ $name ];
+                    }
+                }
+                return $out;
+            }
+        );
         Functions\when('sanitize_key')->alias(
             static fn ($value): string => strtolower(trim((string) $value))
         );
@@ -85,15 +97,19 @@ final class ShortcodesRegressionTest extends BaseTestCase
     public function testRegisterAddsExpectedShortcodeTags(): void
     {
         $expect = [
-            'follower'               => 'follower',
-            'subscriber'             => 'subscriber',
-            'logged_out'             => 'logged_out',
-            'logged_in'              => 'logged_in',
-            'has_tier'               => 'has_tier',
-            'fanvue_connected'       => 'fanvue_connected',
-            'fanvue_not_connected'   => 'fanvue_not_connected',
-            'fanvue_login_button'    => 'fanvue_oauth',
-            'google_login_button'    => 'google_oauth',
+            'follower'                      => 'follower',
+            'subscriber'                    => 'subscriber',
+            'logged_out'                    => 'logged_out',
+            'logged_in'                     => 'logged_in',
+            'has_tier'                      => 'has_tier',
+            'fanvue_connected'              => 'fanvue_connected',
+            'fanvue_not_connected'          => 'fanvue_not_connected',
+            'standard_fanvue_login_button'  => 'standard_fanvue_login_button',
+            'minimal_fanvue_login_button'   => 'minimal_fanvue_login_button',
+            'standard_google_login_button'  => 'standard_google_login_button',
+            'minimal_google_login_button'   => 'minimal_google_login_button',
+            'fanvue_login_button'           => 'fanvue_oauth',
+            'google_login_button'           => 'google_oauth',
         ];
 
         foreach ($expect as $tag => $method) {

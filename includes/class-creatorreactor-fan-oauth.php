@@ -201,7 +201,7 @@ class Fan_OAuth {
 	}
 
 	/**
-	 * Redirect URI registered in the Fanvue app (add this URL if you use [fanvue_login_button]).
+	 * Redirect URI registered in the Fanvue app (add this URL if you use Fanvue login shortcodes).
 	 */
 	public static function get_callback_redirect_uri() {
 		return trailingslashit(

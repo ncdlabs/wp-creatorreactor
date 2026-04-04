@@ -131,6 +131,12 @@ trap 'rm -rf "$STAGE"' EXIT
 
 mkdir -p "$STAGE/${PLUGIN_SLUG}"
 cp creatorreactor.php uninstall.php "$STAGE/${PLUGIN_SLUG}/"
+if [ -f readme.txt ]; then
+	cp readme.txt "$STAGE/${PLUGIN_SLUG}/"
+fi
+if [ -f license.txt ]; then
+	cp license.txt "$STAGE/${PLUGIN_SLUG}/"
+fi
 if [ -f README.md ]; then
 	cp README.md "$STAGE/${PLUGIN_SLUG}/"
 fi

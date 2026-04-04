@@ -37,6 +37,8 @@ class Admin_Settings {
 	const OPTION_TIERS               = 'creatorreactor_tiers';
 	const OPTION_SUBSCRIPTION_TIERS  = 'creatorreactor_subscription_tiers';
 	const ENCRYPTED_FIELDS            = [ 'creatorreactor_oauth_client_id', 'creatorreactor_oauth_client_secret', 'creatorreactor_cloud_password', 'creatorreactor_metrics_ingest_token', 'creatorreactor_ofauth_api_key', 'creatorreactor_ofauth_webhook_secret', 'creatorreactor_google_oauth_client_id', 'creatorreactor_google_oauth_client_secret' ];
+	/** Option key: appearance of Sign in with Google on wp-login and the shortcode. */
+	const GOOGLE_LOGIN_BUTTON_STYLE_KEY = 'creatorreactor_google_login_button_style';
 	/** Default Schema Service base URL (local compose publishes the API on host port 18080). */
 	const DEFAULT_SCHEMA_SERVICE_URL = 'http://localhost:18080';
 	/**
@@ -214,8 +216,8 @@ class Admin_Settings {
 	 * @return array<string, array{type: string, title: string, message: string, redirect_url?: string}>
 	 */
 	private static function get_integration_fix_definitions() {
-		$plugins_url = admin_url( 'plugins.php' );
-		$oauth_url   = self::admin_page_url( [ 'tab' => 'settings', 'subtab' => 'oauth' ], self::PAGE_SETTINGS_SLUG );
+		$plugins_url       = admin_url( 'plugins.php' );
+		$social_setup_url  = self::admin_page_url( [ 'tab' => 'general' ], self::PAGE_SETTINGS_SLUG );
 
 		return [
 			'membership_signup'               => [
@@ -235,14 +237,14 @@ class Admin_Settings {
 			],
 			'social_login_enable_wp_login'    => [
 				'type'    => 'ajax',
-				'title'   => __( 'Enable Fanvue login on wp-login', 'creatorreactor' ),
-				'message' => __( 'Fanvue OAuth is already saved in this plugin. This will turn on “Add social login button to the WordPress login page?” in the plugin’s Settings (General tab) so the wp-login screen shows the Fanvue button.', 'creatorreactor' ),
+				'title'   => __( 'Enable social login on wp-login', 'creatorreactor' ),
+				'message' => __( 'Fanvue and/or Google sign-in is already saved in this plugin. This will turn on “Add social login button to the WordPress login page?” in the plugin’s Settings (General tab) so wp-login shows the configured provider button(s).', 'creatorreactor' ),
 			],
 			'social_login_configure_oauth'    => [
 				'type'          => 'redirect',
-				'title'         => __( 'Configure Fanvue OAuth', 'creatorreactor' ),
-				'message'       => __( 'Social login on wp-login requires Fanvue Client ID and Client Secret (Creator mode). You will be taken to Settings → Fanvue → OAuth to enter them, then save. After that, open Settings → Debug to run checks again or use Fix on the social login check to enable the wp-login button.', 'creatorreactor' ),
-				'redirect_url'  => $oauth_url,
+				'title'         => __( 'Configure social login (Fanvue and/or Google)', 'creatorreactor' ),
+				'message'       => __( 'Social login on wp-login needs at least one provider in Creator mode: Fanvue OAuth (Settings → Fanvue) and/or Google (Settings → Google). Save credentials, then open Settings → Debug to run checks again or use Fix on the social login check to enable the wp-login option.', 'creatorreactor' ),
+				'redirect_url'  => $social_setup_url,
 			],
 			'open_plugins_registration_conflict' => [
 				'type'          => 'redirect',
@@ -259,7 +261,7 @@ class Admin_Settings {
 			'open_plugins_custom_fields'     => [
 				'type'          => 'redirect',
 				'title'         => __( 'Review custom registration field plugins', 'creatorreactor' ),
-				'message'       => __( 'Extra signup fields can block Fanvue OAuth sign-up. You will be taken to the Plugins screen to adjust or deactivate plugins that add required registration fields.', 'creatorreactor' ),
+				'message'       => __( 'Extra signup fields can block OAuth social sign-up (Fanvue or Google). You will be taken to the Plugins screen to adjust or deactivate plugins that add required registration fields.', 'creatorreactor' ),
 				'redirect_url'  => $plugins_url,
 			],
 			'open_plugins_content_restriction' => [
@@ -356,7 +358,7 @@ class Admin_Settings {
 				if ( ! self::is_fan_social_login_configured() ) {
 					return new \WP_Error(
 						'oauth',
-						__( 'Fanvue OAuth is not configured. Add Client ID and Secret first.', 'creatorreactor' )
+						__( 'No social login provider is configured. Add Fanvue OAuth (Client ID and Secret) and/or Google sign-in under Settings → Google.', 'creatorreactor' )
 					);
 				}
 				$sanitized = self::sanitize_options( [ 'replace_wp_login_with_social' => 1 ] );
@@ -1960,6 +1962,13 @@ class Admin_Settings {
 			}
 		}
 
+		if ( isset( $input[ self::GOOGLE_LOGIN_BUTTON_STYLE_KEY ] ) ) {
+			$opts[ self::GOOGLE_LOGIN_BUTTON_STYLE_KEY ] = self::sanitize_google_login_button_style( wp_unslash( $input[ self::GOOGLE_LOGIN_BUTTON_STYLE_KEY ] ) );
+		} else {
+			$prev_style = isset( $raw_opts[ self::GOOGLE_LOGIN_BUTTON_STYLE_KEY ] ) ? (string) $raw_opts[ self::GOOGLE_LOGIN_BUTTON_STYLE_KEY ] : '';
+			$opts[ self::GOOGLE_LOGIN_BUTTON_STYLE_KEY ] = self::sanitize_google_login_button_style( $prev_style !== '' ? $prev_style : 'text_outline' );
+		}
+
 		if ( $opts['creatorreactor_oauth_redirect_uri'] === '' ) {
 			$opts['creatorreactor_oauth_redirect_uri'] = $opts['broker_mode']
 				? self::get_broker_default_redirect_uri()
@@ -2082,6 +2091,48 @@ class Admin_Settings {
 		$id = isset( $o['creatorreactor_google_oauth_client_id'] ) ? trim( (string) $o['creatorreactor_google_oauth_client_id'] ) : '';
 		$sec = isset( $o['creatorreactor_google_oauth_client_secret'] ) ? trim( (string) $o['creatorreactor_google_oauth_client_secret'] ) : '';
 		return $id !== '' && $sec !== '';
+	}
+
+	/**
+	 * Allowed slugs for Sign in with Google button appearance.
+	 *
+	 * @return string[]
+	 */
+	public static function google_login_button_style_slugs() {
+		return [ 'text_outline', 'standard_light', 'standard_dark', 'logo_only' ];
+	}
+
+	/**
+	 * Human-readable labels for each button style (settings UI).
+	 *
+	 * @return array<string, string> slug => label
+	 */
+	public static function get_google_login_button_style_choices() {
+		return [
+			'text_outline'    => __( 'Text outline', 'creatorreactor' ),
+			'standard_light'  => __( 'Standard — light', 'creatorreactor' ),
+			'standard_dark'   => __( 'Standard — dark', 'creatorreactor' ),
+			'logo_only'       => __( 'Logo only', 'creatorreactor' ),
+		];
+	}
+
+	/**
+	 * @param mixed $slug Raw submitted value.
+	 * @return string One of {@see self::google_login_button_style_slugs()}; invalid values become text_outline.
+	 */
+	public static function sanitize_google_login_button_style( $slug ) {
+		$key = sanitize_key( (string) $slug );
+		return in_array( $key, self::google_login_button_style_slugs(), true ) ? $key : 'text_outline';
+	}
+
+	/**
+	 * Stored appearance for the Google login control (wp-login.php and [standard_google_login_button] / legacy [google_login_button]).
+	 */
+	public static function get_google_login_button_style() {
+		$o     = self::get_options();
+		$raw   = isset( $o[ self::GOOGLE_LOGIN_BUTTON_STYLE_KEY ] ) ? (string) $o[ self::GOOGLE_LOGIN_BUTTON_STYLE_KEY ] : '';
+		$style = $raw !== '' ? $raw : 'text_outline';
+		return self::sanitize_google_login_button_style( $style );
 	}
 
 	/**
@@ -2691,6 +2742,12 @@ class Admin_Settings {
 				: $snapshot_raw;
 		}
 
+		$normalized_for_sections = isset( $row['product'] ) && $row['product'] !== null && (string) $row['product'] !== ''
+			? Entitlements::normalize_product( (string) $row['product'] )
+			: Entitlements::PRODUCT_FANVUE;
+		$is_fanvue_row    = ( $normalized_for_sections === Entitlements::PRODUCT_FANVUE );
+		$is_onlyfans_row  = ( $normalized_for_sections === Entitlements::PRODUCT_ONLYFANS );
+
 		$lines = [
 			[
 				'section' => true,
@@ -2749,41 +2806,60 @@ class Admin_Settings {
 				'label' => __( 'Updated at', 'creatorreactor' ),
 				'value' => self::format_datetime_for_selected_timezone( (string) ( $row['updated_at'] ?? '' ) ),
 			],
-			[
+		];
+
+		if ( $is_fanvue_row ) {
+			$lines[] = [
 				'section' => true,
 				'label'   => __( 'Fanvue Records', 'creatorreactor' ),
 				'value'   => '',
-			],
-			[
+			];
+			$lines[] = [
 				'label' => __( 'Fanvue user UUID', 'creatorreactor' ),
 				'value' => (string) ( $row['fanvue_user_uuid'] ?? '' ) !== '' ? (string) $row['fanvue_user_uuid'] : '-',
-			],
-			[
+			];
+			$lines[] = [
 				'label' => __( 'Fanvue email', 'creatorreactor' ),
 				'value' => (string) ( $row['fanvue_email'] ?? '' ) !== '' ? (string) $row['fanvue_email'] : '-',
-			],
-			[
+			];
+			$lines[] = [
 				'label' => __( 'Fanvue display name', 'creatorreactor' ),
 				'value' => (string) ( $row['fanvue_display_name'] ?? '' ) !== '' ? (string) $row['fanvue_display_name'] : '-',
-			],
-			[
+			];
+			$lines[] = [
 				'label' => __( 'Fanvue tier (stored)', 'creatorreactor' ),
 				'value' => (string) ( $row['fanvue_tier'] ?? '' ) !== '' ? (string) $row['fanvue_tier'] : '-',
-			],
-			[
+			];
+			$lines[] = [
 				'label' => __( 'Fanvue sync snapshot', 'creatorreactor' ),
 				'value' => $snapshot_out,
-			],
-			[
-				'section' => true,
-				'label'   => __( 'OnlyFans Records (coming soon)', 'creatorreactor' ),
-				'value'   => '',
-			],
-			[
-				'label' => __( 'Status', 'creatorreactor' ),
-				'value' => __( 'Coming soon', 'creatorreactor' ),
-			],
+			];
+		}
+
+		$lines[] = [
+			'section' => true,
+			'label'   => __( 'OnlyFans', 'creatorreactor' ),
+			'value'   => '',
 		];
+		if ( $is_onlyfans_row ) {
+			$lines[] = [
+				'label' => __( 'Notes', 'creatorreactor' ),
+				'value' => __( 'This row is stored for the OnlyFans product using the shared entitlement schema. Visitor linking is configured under Settings → OnlyFans (OFAuth).', 'creatorreactor' ),
+			];
+			if ( $snapshot_raw !== '' ) {
+				$lines[] = [
+					'label' => __( 'Webhook / payload snapshot (raw)', 'creatorreactor' ),
+					'value' => $snapshot_out,
+				];
+			}
+		} else {
+			$lines[] = [
+				'label' => __( 'Entitlement scope', 'creatorreactor' ),
+				'value' => $is_fanvue_row
+					? __( 'Fanvue — OnlyFans-specific rows use product “onlyfans”.', 'creatorreactor' )
+					: __( 'Not OnlyFans — this row uses a different product key.', 'creatorreactor' ),
+			];
+		}
 
 		return [ 'lines' => $lines ];
 	}
@@ -2792,7 +2868,8 @@ class Admin_Settings {
 	 * Shortcodes settings tab: user guide (collapsible), quick shortcode reference.
 	 */
 	private static function render_shortcodes_tab_body() {
-		$fan_callback = Fan_OAuth::get_callback_redirect_uri();
+		$fan_callback    = Fan_OAuth::get_callback_redirect_uri();
+		$google_callback = Google_OAuth::get_callback_redirect_uri();
 		?>
 		<div class="creatorreactor-shortcodes-guide-wrap" style="max-width: 920px;">
 			<details class="creatorreactor-section creatorreactor-shortcodes-guide-details">
@@ -2809,6 +2886,7 @@ class Admin_Settings {
 				<li><?php esc_html_e( 'Restrict content using shortcodes', 'creatorreactor' ); ?></li>
 				<li><?php esc_html_e( 'Use the same logic in Block Editor blocks or Elementor widgets', 'creatorreactor' ); ?></li>
 				<li><?php esc_html_e( 'Allow users to log in via Fanvue OAuth', 'creatorreactor' ); ?></li>
+				<li><?php esc_html_e( 'Optionally allow visitors to sign in with Google (Creator/direct mode)', 'creatorreactor' ); ?></li>
 			</ul>
 
 			<hr />
@@ -2855,11 +2933,22 @@ class Admin_Settings {
 			<hr />
 
 			<p><strong><?php esc_html_e( 'Fanvue login button', 'creatorreactor' ); ?></strong></p>
-			<pre class="creatorreactor-guide-code" style="white-space: pre-wrap; word-break: break-word; background: #f6f7f7; padding: 12px; border: 1px solid #c3c4c7;"><code><?php echo esc_html( '[fanvue_login_button]' ); ?></code></pre>
-			<p><?php esc_html_e( 'Displays a “Login with Fanvue” link.', 'creatorreactor' ); ?></p>
+			<pre class="creatorreactor-guide-code" style="white-space: pre-wrap; word-break: break-word; background: #f6f7f7; padding: 12px; border: 1px solid #c3c4c7;"><code><?php echo esc_html( "[standard_fanvue_login_button]\n[minimal_fanvue_login_button]\n\n[fanvue_login_button]" ); ?></code></pre>
+			<p><?php esc_html_e( 'Standard shows the full image + label; minimal shows a small circular “F” button. [fanvue_login_button] is the same as standard.', 'creatorreactor' ); ?></p>
 			<p><?php esc_html_e( 'What happens after login:', 'creatorreactor' ); ?></p>
 			<ul style="list-style: disc; margin-left: 1.5em;">
 				<li><?php esc_html_e( 'If the Fanvue email matches an existing WordPress user → user is logged in', 'creatorreactor' ); ?></li>
+				<li><?php esc_html_e( 'If no match → a new account is created (if registration is enabled)', 'creatorreactor' ); ?></li>
+			</ul>
+
+			<hr />
+
+			<p><strong><?php esc_html_e( 'Google sign-in button', 'creatorreactor' ); ?></strong></p>
+			<pre class="creatorreactor-guide-code" style="white-space: pre-wrap; word-break: break-word; background: #f6f7f7; padding: 12px; border: 1px solid #c3c4c7;"><code><?php echo esc_html( "[standard_google_login_button]\n[minimal_google_login_button]\n\n[google_login_button]" ); ?></code></pre>
+			<p><?php esc_html_e( 'Standard uses the “Login button appearance” from Settings → Google; minimal shows only the Google “G” mark. [google_login_button] is the same as standard. Not available in Agency (broker) mode.', 'creatorreactor' ); ?></p>
+			<p><?php esc_html_e( 'What happens after sign-in:', 'creatorreactor' ); ?></p>
+			<ul style="list-style: disc; margin-left: 1.5em;">
+				<li><?php esc_html_e( 'If the Google account email matches an existing WordPress user → user is logged in', 'creatorreactor' ); ?></li>
 				<li><?php esc_html_e( 'If no match → a new account is created (if registration is enabled)', 'creatorreactor' ); ?></li>
 			</ul>
 
@@ -2869,20 +2958,27 @@ class Admin_Settings {
 			<p><strong><?php esc_html_e( 'Block Editor (Gutenberg)', 'creatorreactor' ); ?></strong></p>
 			<ul style="list-style: disc; margin-left: 1.5em;">
 				<li><?php esc_html_e( 'Look for blocks under “CreatorReactor”', 'creatorreactor' ); ?></li>
-				<li><?php esc_html_e( 'Same behavior as shortcodes (no difference in logic)', 'creatorreactor' ); ?></li>
+				<li><?php esc_html_e( 'Gates and visibility match the shortcodes (no difference in logic).', 'creatorreactor' ); ?></li>
+				<li><?php esc_html_e( 'There is a dedicated “Login with Fanvue” block; for Google sign-in on a page, use the Shortcode block (or a shortcode-enabled block) with [standard_google_login_button] or [minimal_google_login_button].', 'creatorreactor' ); ?></li>
 			</ul>
 			<p><strong><?php esc_html_e( 'Elementor', 'creatorreactor' ); ?></strong></p>
 			<ul style="list-style: disc; margin-left: 1.5em;">
-				<li><?php esc_html_e( 'Use widgets in the “CreatorReactor” category', 'creatorreactor' ); ?></li>
-				<li><?php esc_html_e( 'Identical functionality to shortcodes', 'creatorreactor' ); ?></li>
+				<li><?php esc_html_e( 'Use widgets in the “CreatorReactor” category for gates and Fanvue login.', 'creatorreactor' ); ?></li>
+				<li><?php esc_html_e( 'For Google sign-in in Elementor, use the Shortcode widget with the same Google shortcodes as above.', 'creatorreactor' ); ?></li>
 			</ul>
 
 			<hr />
 
 			<h3><?php esc_html_e( '4. OAuth Setup (Required for Login)', 'creatorreactor' ); ?></h3>
+			<p><?php esc_html_e( 'Visitor login uses redirect URIs you register with each provider. In Creator (direct) mode:', 'creatorreactor' ); ?></p>
+			<p><strong><?php esc_html_e( 'Fanvue', 'creatorreactor' ); ?></strong></p>
 			<p><?php esc_html_e( 'Add this redirect URI to your Fanvue app:', 'creatorreactor' ); ?></p>
 			<p><code style="word-break: break-all; display: inline-block; max-width: 100%;"><?php echo esc_html( $fan_callback ); ?></code></p>
-			<p class="description"><?php esc_html_e( 'This endpoint handles login and account linking.', 'creatorreactor' ); ?></p>
+			<p class="description"><?php esc_html_e( 'Handles Fanvue login and account linking.', 'creatorreactor' ); ?></p>
+			<p><strong><?php esc_html_e( 'Google', 'creatorreactor' ); ?></strong></p>
+			<p><?php esc_html_e( 'Add this as an Authorized redirect URI on your OAuth 2.0 Web client in Google Cloud Console (APIs & Services → Credentials):', 'creatorreactor' ); ?></p>
+			<p><code style="word-break: break-all; display: inline-block; max-width: 100%;"><?php echo esc_html( $google_callback ); ?></code></p>
+			<p class="description"><?php esc_html_e( 'Configure Client ID and Secret under Settings → Google. Google sign-in is not available in Agency (broker) mode.', 'creatorreactor' ); ?></p>
 
 			<hr />
 
@@ -2909,7 +3005,7 @@ class Admin_Settings {
 			<ul style="list-style: disc; margin-left: 1.5em;">
 				<li><?php esc_html_e( 'Use shortcodes, blocks, or widgets interchangeably', 'creatorreactor' ); ?></li>
 				<li><?php esc_html_e( 'Content is shown based on Fanvue follower/subscriber status', 'creatorreactor' ); ?></li>
-				<li><?php esc_html_e( 'OAuth enables automatic login + account linking', 'creatorreactor' ); ?></li>
+				<li><?php esc_html_e( 'Fanvue and (optionally) Google OAuth enable automatic login and account linking in Creator mode', 'creatorreactor' ); ?></li>
 				<li><?php esc_html_e( 'Works across Elementor and Gutenberg without extra setup', 'creatorreactor' ); ?></li>
 			</ul>
 
@@ -2952,8 +3048,28 @@ class Admin_Settings {
 							<td><?php esc_html_e( 'Shows inner content only when a logged-in user has not linked Fanvue OAuth.', 'creatorreactor' ); ?></td>
 						</tr>
 						<tr>
+							<td><code>[standard_fanvue_login_button]</code></td>
+							<td><?php esc_html_e( 'Large “Login with Fanvue” control (image + label). Creator/direct mode only; add the plugin’s fan OAuth callback URL to your Fanvue app.', 'creatorreactor' ); ?></td>
+						</tr>
+						<tr>
+							<td><code>[minimal_fanvue_login_button]</code></td>
+							<td><?php esc_html_e( 'Compact circular “F” button; same OAuth flow as the standard Fanvue login shortcode.', 'creatorreactor' ); ?></td>
+						</tr>
+						<tr>
 							<td><code>[fanvue_login_button]</code></td>
-							<td><?php esc_html_e( 'Renders a “Login with Fanvue” link (self-closing). Creator/direct mode only; add the plugin’s fan OAuth callback URL to your Fanvue app. After login, WP user is matched or created by email if registration is allowed.', 'creatorreactor' ); ?></td>
+							<td><?php esc_html_e( 'Legacy alias for [standard_fanvue_login_button].', 'creatorreactor' ); ?></td>
+						</tr>
+						<tr>
+							<td><code>[standard_google_login_button]</code></td>
+							<td><?php esc_html_e( 'Sign in with Google using the “Login button appearance” from Settings → Google (self-closing). Creator/direct mode only; add the plugin’s Google OAuth callback URL to your Web client’s Authorized redirect URIs.', 'creatorreactor' ); ?></td>
+						</tr>
+						<tr>
+							<td><code>[minimal_google_login_button]</code></td>
+							<td><?php esc_html_e( 'Compact Google “G” mark only; ignores the appearance preset. Same OAuth flow and mode rules as the standard Google shortcode.', 'creatorreactor' ); ?></td>
+						</tr>
+						<tr>
+							<td><code>[google_login_button]</code></td>
+							<td><?php esc_html_e( 'Legacy alias for [standard_google_login_button].', 'creatorreactor' ); ?></td>
 						</tr>
 					</tbody>
 				</table>
@@ -2985,7 +3101,8 @@ class Admin_Settings {
 						<li><a href="#cr-docs-overview"><?php esc_html_e( 'Overview', 'creatorreactor' ); ?></a></li>
 						<li><a href="#cr-docs-dashboard"><?php esc_html_e( 'Dashboard & Module Status', 'creatorreactor' ); ?></a></li>
 						<li><a href="#cr-docs-general"><?php esc_html_e( 'General', 'creatorreactor' ); ?></a></li>
-						<li><a href="#cr-docs-fanvue"><?php esc_html_e( 'Fanvue', 'creatorreactor' ); ?></a></li>
+						<li><a href="#cr-docs-fanvue"><?php esc_html_e( 'Fanvue (OAuth)', 'creatorreactor' ); ?></a></li>
+						<li><a href="#cr-docs-google"><?php esc_html_e( 'Google (OAuth)', 'creatorreactor' ); ?></a></li>
 						<li><a href="#cr-docs-onlyfans"><?php esc_html_e( 'OnlyFans (OFAuth)', 'creatorreactor' ); ?></a></li>
 						<li><a href="#cr-docs-cloud"><?php esc_html_e( 'CreatorReactor Cloud', 'creatorreactor' ); ?></a></li>
 						<li><a href="#cr-docs-sync"><?php esc_html_e( 'Sync', 'creatorreactor' ); ?></a></li>
@@ -2999,11 +3116,12 @@ class Admin_Settings {
 					<section id="cr-docs-overview" class="creatorreactor-doc-section">
 						<h3><?php esc_html_e( 'Overview', 'creatorreactor' ); ?></h3>
 						<p><?php esc_html_e( 'CreatorReactor is a WordPress access-control plugin that gates content and login behavior based on creator-platform entitlements. In production, the plugin handles OAuth connection, entitlement sync, user mapping, and role-aware content rendering.', 'creatorreactor' ); ?></p>
-						<p><?php esc_html_e( 'Core production flow: (1) configure authentication, (2) connect Fanvue or broker mode, (3) sync/refresh entitlements, (4) apply shortcodes or blocks to protected content, (5) validate with test users before go-live.', 'creatorreactor' ); ?></p>
+						<p><?php esc_html_e( 'Core production flow: (1) configure authentication, (2) connect Fanvue or broker mode, (3) optionally enable Sign in with Google for visitors in Creator mode, (4) sync/refresh entitlements, (5) apply shortcodes or blocks to protected content, (6) validate with test users before go-live.', 'creatorreactor' ); ?></p>
 						<h4><?php esc_html_e( 'Production prerequisites', 'creatorreactor' ); ?></h4>
 						<ul>
 							<li><?php esc_html_e( 'WordPress administrator access and ability to install/activate plugins', 'creatorreactor' ); ?></li>
 							<li><?php esc_html_e( 'Fanvue developer app credentials (Creator mode) or broker credentials (Agency mode)', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'When using Google login: a Google Cloud OAuth 2.0 Web client and the plugin’s Authorized redirect URI copied exactly into that client', 'creatorreactor' ); ?></li>
 							<li><?php esc_html_e( 'Confirmed redirect URIs and HTTPS site URL in production', 'creatorreactor' ); ?></li>
 							<li><?php esc_html_e( 'A test user matrix (follower, subscriber, no entitlement, logged-out)', 'creatorreactor' ); ?></li>
 						</ul>
@@ -3024,13 +3142,13 @@ class Admin_Settings {
 						<p><?php esc_html_e( 'General tab controls site-wide behavior independent of OAuth credentials.', 'creatorreactor' ); ?></p>
 						<h4><?php esc_html_e( 'Key options', 'creatorreactor' ); ?></h4>
 						<ul>
-							<li><?php esc_html_e( 'WordPress login social button behavior', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'WordPress login: Fanvue and/or Google social buttons when those providers are configured', 'creatorreactor' ); ?></li>
 							<li><?php esc_html_e( 'Admin timezone display for user/sync timestamps', 'creatorreactor' ); ?></li>
 						</ul>
 						<p><?php esc_html_e( 'Recommendation: keep timezone aligned with your operations team so sync and error timelines are easy to correlate.', 'creatorreactor' ); ?></p>
 					</section>
 					<section id="cr-docs-fanvue" class="creatorreactor-doc-section">
-						<h3><?php esc_html_e( 'Fanvue', 'creatorreactor' ); ?></h3>
+						<h3><?php esc_html_e( 'Fanvue (OAuth)', 'creatorreactor' ); ?></h3>
 						<p><?php esc_html_e( 'Use the Fanvue tab to configure authentication mode and OAuth settings for production access control.', 'creatorreactor' ); ?></p>
 						<h4><?php esc_html_e( 'Configuration steps', 'creatorreactor' ); ?></h4>
 						<ol>
@@ -3041,6 +3159,20 @@ class Admin_Settings {
 							<li><?php esc_html_e( 'Run a connection test and confirm green status.', 'creatorreactor' ); ?></li>
 						</ol>
 						<p><?php esc_html_e( 'If connection fails, validate credentials, redirect URI accuracy, HTTPS, and provider-side app status before retrying.', 'creatorreactor' ); ?></p>
+					</section>
+					<section id="cr-docs-google" class="creatorreactor-doc-section">
+						<h3><?php esc_html_e( 'Google (OAuth)', 'creatorreactor' ); ?></h3>
+						<p><?php esc_html_e( 'The Google tab configures OAuth 2.0 for visitor sign-in (wp-login and shortcodes). It is independent of Fanvue connection: users can log in with Google, then entitlements still come from Fanvue sync when their email or account matches.', 'creatorreactor' ); ?></p>
+						<p><?php esc_html_e( 'Sign in with Google is available only in Creator (direct) mode; it is disabled in Agency (broker) mode.', 'creatorreactor' ); ?></p>
+						<h4><?php esc_html_e( 'Configuration steps', 'creatorreactor' ); ?></h4>
+						<ol>
+							<li><?php esc_html_e( 'In Google Cloud Console, create or open a project and open APIs & Services for OAuth credentials.', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'Configure the OAuth consent screen (app name, support email, and test users while in testing). The plugin requests openid, email, and profile scopes.', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'Create credentials → OAuth client ID → Application type “Web application”.', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'Paste the plugin’s Authorized redirect URI from Settings → Google into “Authorized redirect URIs” (must match exactly, including https and trailing slash).', 'creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'Copy the Client ID and Client Secret into Settings → Google, run the configuration check, save, then test Sign in with Google from wp-login or a page with the Google login shortcode.', 'creatorreactor' ); ?></li>
+						</ol>
+						<p><?php esc_html_e( 'If Google returns redirect_uri_mismatch, compare the URI shown in this plugin with the Web client in Google Cloud Console character for character.', 'creatorreactor' ); ?></p>
 					</section>
 					<section id="cr-docs-onlyfans" class="creatorreactor-doc-section">
 						<h3><?php esc_html_e( 'OnlyFans (OFAuth)', 'creatorreactor' ); ?></h3>
@@ -3081,6 +3213,7 @@ class Admin_Settings {
 						<h3><?php esc_html_e( 'Shortcodes', 'creatorreactor' ); ?></h3>
 						<p><?php esc_html_e( 'Shortcodes are the primary production mechanism for gating visibility by entitlement state, login state, and tier.', 'creatorreactor' ); ?></p>
 						<p><?php esc_html_e( 'Best practice: wrap premium sections with explicit fallback content for logged-out or non-entitled visitors to improve conversion and reduce support tickets.', 'creatorreactor' ); ?></p>
+						<p><?php esc_html_e( 'Gutenberg includes a Fanvue login block; Google sign-in on pages uses the same shortcodes via the Shortcode block (or Elementor Shortcode widget).', 'creatorreactor' ); ?></p>
 						<?php self::render_shortcodes_tab_body(); ?>
 					</section>
 					<section id="cr-docs-users" class="creatorreactor-doc-section">
@@ -3734,8 +3867,8 @@ class Admin_Settings {
 				'label'    => __( 'Social login flow is ready on WordPress login', 'creatorreactor' ),
 				'status'   => $social_login_on ? 'green' : 'red',
 				'message'  => $social_login_on
-					? __( 'Pass: Fanvue social login is configured and enabled on wp-login.', 'creatorreactor' )
-					: __( 'Fail: Configure Fanvue OAuth and enable social login in CreatorReactor > Settings > General.', 'creatorreactor' ),
+					? __( 'Pass: At least one social provider (Fanvue and/or Google) is configured and wp-login social buttons are enabled.', 'creatorreactor' )
+					: __( 'Fail: Configure Fanvue OAuth and/or Google sign-in, then enable “Add social login button to the WordPress login page?” in CreatorReactor → Settings → General.', 'creatorreactor' ),
 				'fix_id'   => $social_fix_id,
 			],
 			[
@@ -4798,6 +4931,7 @@ class Admin_Settings {
 		);
 		$broker_mode   = ! empty( $opts['broker_mode'] );
 		$g_client_id   = isset( $opts['creatorreactor_google_oauth_client_id'] ) ? (string) $opts['creatorreactor_google_oauth_client_id'] : '';
+		$google_button_style = self::get_google_login_button_style();
 		$google_instructions_expanded = ! self::is_google_login_configured();
 		?>
 		<div class="creatorreactor-settings-panel is-active" data-subtab="google-oauth">
@@ -4909,6 +5043,38 @@ class Admin_Settings {
 									);
 									?>
 								</p>
+							</td>
+						</tr>
+						<tr>
+							<th scope="row"><?php esc_html_e( 'Login button appearance', 'creatorreactor' ); ?></th>
+							<td>
+								<p class="description" style="margin-top:0;">
+									<?php esc_html_e( 'Shown on the WordPress login screen (when social login is enabled) and wherever you use [standard_google_login_button] or the legacy [google_login_button] shortcode. Use [minimal_google_login_button] for a compact G-only control.', 'creatorreactor' ); ?>
+								</p>
+								<fieldset class="creatorreactor-google-login-style-fieldset">
+									<legend class="screen-reader-text"><?php esc_html_e( 'Sign in with Google button style', 'creatorreactor' ); ?></legend>
+									<div class="creatorreactor-google-login-style-grid" role="radiogroup" aria-label="<?php esc_attr_e( 'Sign in with Google button style', 'creatorreactor' ); ?>">
+										<?php foreach ( self::get_google_login_button_style_choices() as $style_slug => $style_label ) : ?>
+											<label class="creatorreactor-google-login-style-option">
+												<span class="creatorreactor-google-login-style-option-head">
+													<input
+														type="radio"
+														name="<?php echo esc_attr( $option_name ); ?>[<?php echo esc_attr( self::GOOGLE_LOGIN_BUTTON_STYLE_KEY ); ?>]"
+														value="<?php echo esc_attr( $style_slug ); ?>"
+														<?php checked( $google_button_style, $style_slug ); ?>
+													/>
+													<span class="creatorreactor-google-login-style-option-label"><?php echo esc_html( $style_label ); ?></span>
+												</span>
+												<span class="creatorreactor-google-login-style-preview" aria-hidden="true">
+													<?php
+													// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static SVG + escaped label inside Shortcodes helper.
+													echo Shortcodes::google_oauth_admin_preview_chip( $style_slug );
+													?>
+												</span>
+											</label>
+										<?php endforeach; ?>
+									</div>
+								</fieldset>
 							</td>
 						</tr>
 					</table>
@@ -5282,6 +5448,56 @@ class Admin_Settings {
 		.creatorreactor-google-instructions .creatorreactor-google-instructions-content { padding: 12px 15px 15px; }
 		.creatorreactor-google-instructions .creatorreactor-google-instructions-content > p.description:first-child { margin: 0 0 10px; }
 		.creatorreactor-google-instructions .creatorreactor-google-instructions-content > ol + p.description { margin-top: 10px; }
+		.creatorreactor-google-login-style-fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
+		.creatorreactor-google-login-style-grid {
+			display: grid;
+			grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
+			gap: 14px;
+			margin-top: 10px;
+			max-width: 920px;
+		}
+		.creatorreactor-google-login-style-option {
+			display: flex;
+			flex-direction: column;
+			gap: 10px;
+			margin: 0;
+			padding: 12px;
+			border: 1px solid #dcdcde;
+			border-radius: 8px;
+			background: #f6f7f7;
+			cursor: pointer;
+			transition: border-color 0.15s ease, box-shadow 0.15s ease;
+		}
+		.creatorreactor-google-login-style-option:hover { border-color: #c3c4c7; }
+		.creatorreactor-google-login-style-option:has(input:checked) {
+			border-color: var(--cr-brand-magenta, #8e2d77);
+			box-shadow: 0 0 0 1px var(--cr-brand-magenta, #8e2d77);
+			background: #fff;
+		}
+		.creatorreactor-google-login-style-option-head {
+			display: flex;
+			align-items: flex-start;
+			gap: 8px;
+			font-weight: 600;
+			font-size: 13px;
+			color: var(--cr-text-body, #414a4c);
+		}
+		.creatorreactor-google-login-style-option-head input { margin-top: 2px; flex-shrink: 0; }
+		.creatorreactor-google-login-style-option-label { line-height: 1.35; }
+		.creatorreactor-google-login-style-preview {
+			display: flex;
+			align-items: center;
+			justify-content: center;
+			min-height: 56px;
+			padding: 10px;
+			background: #fff;
+			border: 1px dashed #c3c4c7;
+			border-radius: 6px;
+		}
+		.creatorreactor-google-login-style-preview .creatorreactor-google-oauth-link.creatorreactor-google-oauth--admin-preview {
+			pointer-events: none;
+			cursor: default;
+		}
 		.creatorreactor-mode-notice p { margin: 0; font-size: 13px; }
 		.creatorreactor-mode-notice > p:first-child { margin-bottom: 8px; }
 		.creatorreactor-mode-notice ol { margin: 0; padding-left: 1.25em; font-size: 13px; }
@@ -6304,6 +6520,8 @@ class Admin_Settings {
 		#creatorreactor-onlyfans-ofauth-test-modal .creatorreactor-modal-footer { display: flex; justify-content: flex-end; gap: 8px; padding: 12px 18px 16px; border-top: 1px solid #dcdcde; }
 
 		';
+
+		$css .= Shortcodes::get_google_oauth_button_css();
 
 		wp_register_style( 'creatorreactor-admin', false, [ 'wp-admin' ], CREATORREACTOR_VERSION );
 		wp_enqueue_style( 'creatorreactor-admin' );

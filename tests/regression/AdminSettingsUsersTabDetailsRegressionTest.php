@@ -66,10 +66,91 @@ final class AdminSettingsUsersTabDetailsRegressionTest extends BaseTestCase
             [
                 'CreatorReactor Records',
                 'Fanvue Records',
-                'OnlyFans Records (coming soon)',
+                'OnlyFans',
             ],
             $sectionLabels
         );
+    }
+
+    public function testOnlyfansProductRowOmitsFanvueSectionAndShowsOnlyFansNotes(): void
+    {
+        $row = [
+            'id'                       => 5,
+            'wp_user_id'               => 9,
+            'creatorreactor_uuid'      => 'of-cr-uuid',
+            'creatorreactor_user_uuid' => 'of-platform-uuid',
+            'fanvue_user_uuid'         => '',
+            'fanvue_email'             => '',
+            'fanvue_display_name'      => '',
+            'fanvue_tier'              => '',
+            'fanvue_sync_snapshot'     => '',
+            'product'                  => 'onlyfans',
+            'email'                    => 'fan@example.com',
+            'display_name'             => 'Fan Name',
+            'status'                   => 'active',
+            'tier'                     => 'onlyfans_subscriber',
+            'expires_at'               => '',
+            'updated_at'               => '',
+        ];
+
+        $lines = $this->invokeUsersTabRowDetailsPayload($row)['lines'];
+        $sectionLabels = [];
+        foreach ($lines as $line) {
+            if (! empty($line['section'])) {
+                $sectionLabels[] = (string) ($line['label'] ?? '');
+            }
+        }
+
+        self::assertSame(
+            [
+                'CreatorReactor Records',
+                'OnlyFans',
+            ],
+            $sectionLabels
+        );
+
+        $byLabel = [];
+        foreach ($lines as $line) {
+            if (empty($line['section']) && isset($line['label'])) {
+                $byLabel[(string) $line['label']] = (string) ($line['value'] ?? '');
+            }
+        }
+
+        self::assertStringContainsString('OnlyFans product', $byLabel['Notes']);
+        self::assertArrayNotHasKey('Fanvue user UUID', $byLabel);
+    }
+
+    public function testOnlyfansRowShowsWebhookSnapshotWhenPresent(): void
+    {
+        $row = [
+            'id'                       => 6,
+            'wp_user_id'               => 1,
+            'creatorreactor_uuid'      => 'x',
+            'creatorreactor_user_uuid' => 'y',
+            'fanvue_user_uuid'         => '',
+            'fanvue_email'             => '',
+            'fanvue_display_name'      => '',
+            'fanvue_tier'              => '',
+            'fanvue_sync_snapshot'     => '{"ofauth":true}',
+            'product'                  => 'onlyfans',
+            'email'                    => 'a@b.c',
+            'display_name'             => 'N',
+            'status'                   => 'active',
+            'tier'                     => 'onlyfans_follower',
+            'expires_at'               => '',
+            'updated_at'               => '',
+        ];
+
+        $lines = $this->invokeUsersTabRowDetailsPayload($row)['lines'];
+        $snap = null;
+        foreach ($lines as $line) {
+            if (empty($line['section']) && ($line['label'] ?? '') === 'Webhook / payload snapshot (raw)') {
+                $snap = (string) ($line['value'] ?? '');
+                break;
+            }
+        }
+
+        self::assertSame('{"ofauth":true}', $snap);
     }
 
     public function testFanvueSectionContainsFanvueColumnsAndValues(): void

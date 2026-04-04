@@ -830,7 +830,7 @@ final class Elementor_Widget_Fanvue_Oauth extends \Elementor\Widget_Base {
 			'note',
 			[
 				'type' => \Elementor\Controls_Manager::RAW_HTML,
-				'raw'  => '<p class="elementor-descriptor">' . esc_html__( 'Outputs the same “Login with Fanvue” link as the [fanvue_login_button] shortcode (Creator/direct mode only).', 'creatorreactor' ) . '</p>',
+				'raw'  => '<p class="elementor-descriptor">' . esc_html__( 'Outputs the same “Login with Fanvue” control as [standard_fanvue_login_button] / [fanvue_login_button] (Creator/direct mode only). For Google sign-in, use the Shortcode widget with [standard_google_login_button] or [minimal_google_login_button].', 'creatorreactor' ) . '</p>',
 			]
 		);
 

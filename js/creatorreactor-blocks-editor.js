@@ -134,7 +134,7 @@
 		apiVersion: 3,
 		title: __('CreatorReactor: Login with Fanvue', 'creatorreactor'),
 		description: __(
-			'Displays the Fanvue OAuth login link (Creator/direct mode).',
+			'Displays the Fanvue OAuth login link (Creator/direct mode). For Google sign-in, use the Shortcode block with [standard_google_login_button] or [minimal_google_login_button].',
 			'creatorreactor'
 		),
 		category: 'creatorreactor',

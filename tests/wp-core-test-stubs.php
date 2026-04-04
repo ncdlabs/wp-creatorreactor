@@ -57,4 +57,21 @@ namespace {
             return is_callable($fn) ? (bool) $fn($post_type) : false;
         }
     }
+
+    if (! function_exists('sanitize_html_class')) {
+        /**
+         * @param string $classname
+         * @param string $fallback
+         */
+        function sanitize_html_class($classname, $fallback = '')
+        {
+            $classname = (string) $classname;
+            if ($classname === '') {
+                return $fallback;
+            }
+            $out = preg_replace('|[^a-zA-Z0-9_-]|', '', $classname);
+
+            return $out !== '' ? $out : $fallback;
+        }
+    }
 }

@@ -336,31 +336,12 @@ class Login_Page {
 	max-width: min(220px, 100%);
 	width: auto;
 }
-.creatorreactor-wp-login-social .creatorreactor-google-oauth-wrap {
-	margin: 12px 0 0;
-}
-.creatorreactor-wp-login-social .creatorreactor-google-oauth-link {
-	display: inline-block;
-	line-height: 1.35;
-	box-shadow: none;
-	text-decoration: none;
-	color: #1a73e8;
-	border: 1px solid #dadce0;
-	border-radius: 4px;
-	padding: 10px 16px;
-	font-weight: 600;
-}
-.creatorreactor-wp-login-social .creatorreactor-google-oauth-link[aria-disabled="true"] {
-	cursor: not-allowed;
-	opacity: 0.55;
-	filter: grayscale(100%);
-	pointer-events: none;
-}
 #login:has(.creatorreactor-wp-login-split) {
 	max-width: 720px;
 	width: 100%;
 }
 CSS;
+		$css .= Shortcodes::get_google_oauth_button_css();
 		wp_add_inline_style( $style_handle, $css );
 
 		wp_register_script( $script_handle, false, [], CREATORREACTOR_VERSION, true );

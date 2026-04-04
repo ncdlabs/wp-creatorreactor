@@ -2,7 +2,7 @@
 
 WordPress plugin for OAuth, scheduled subscriber/follower sync, and entitlement checks for creator platforms (Fanvue today; additional products such as OnlyFans are supported at the data model level). It also provides shortcodes, Gutenberg blocks, and optional Elementor widgets for tier gates and Fanvue login on the front end.
 
-**Version:** 2.0.18 (see `creatorreactor.php`)
+**Version:** 2.0.64 (see `creatorreactor.php`)
 
 **Author:** Lou Grossi · [ncdLabs](https://ncdlabs.com)
 
