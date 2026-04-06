@@ -115,6 +115,9 @@ final class Viewer_State {
 	 * @return void
 	 */
 	public static function ajax_viewer_state() {
+		if ( function_exists( 'nocache_headers' ) ) {
+			nocache_headers();
+		}
 		wp_send_json_success( self::build_payload() );
 	}
 }

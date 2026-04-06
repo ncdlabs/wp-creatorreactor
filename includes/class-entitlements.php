@@ -156,6 +156,7 @@ class Entitlements {
 			self::$schema_checked = true;
 		} catch ( \Throwable $e ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug-only when WP_DEBUG is on.
 				error_log( 'CreatorReactor create_table error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
 			}
 			throw $e;
@@ -337,9 +338,9 @@ class Entitlements {
 		}
 		$tier = (string) $tier;
 		if ( $tier === self::TIER_FOLLOWER || str_ends_with( $tier, '_follower' ) ) {
-			return __( 'Follower', 'creatorreactor' );
+			return __( 'Follower', 'wp-creatorreactor' );
 		}
-		return __( 'Subscriber', 'creatorreactor' );
+		return __( 'Subscriber', 'wp-creatorreactor' );
 	}
 
 	public static function maybe_add_product_column() {
@@ -683,6 +684,7 @@ class Entitlements {
 			return $result !== false;
 		} catch ( \Throwable $e ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug-only when WP_DEBUG is on.
 				error_log( 'CreatorReactor upsert_by_creatorreactor_uuid error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
 			}
 			return false;
@@ -741,6 +743,7 @@ class Entitlements {
 			return (int) $wpdb->rows_affected;
 		} catch ( \Throwable $e ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug-only when WP_DEBUG is on.
 				error_log( 'CreatorReactor mark_missing_subscribers_as_inactive error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
 			}
 			return 0;
@@ -799,6 +802,7 @@ class Entitlements {
 			return (int) $wpdb->rows_affected;
 		} catch ( \Throwable $e ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug-only when WP_DEBUG is on.
 				error_log( 'CreatorReactor mark_missing_followers_as_inactive error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
 			}
 			return 0;

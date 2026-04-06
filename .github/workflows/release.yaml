@@ -36,6 +36,9 @@ jobs:
         with:
           composer-options: "--prefer-dist --no-progress"
 
+      - name: PHPCS — EscapeOutput gate
+        run: composer run lint | cat
+
       - name: PHPUnit — unit tests
         run: composer run test:unit | cat
 
@@ -60,6 +63,7 @@ jobs:
             vendor
             .git
             .github
+            tools
           exclude-files: |
             composer.json
             composer.lock

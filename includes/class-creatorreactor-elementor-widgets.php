@@ -32,7 +32,7 @@ abstract class Elementor_Widget_Shortcode_Wrap extends \Elementor\Widget_Base {
 		$this->start_controls_section(
 			'section_content',
 			[
-				'label' => __( 'Content', 'creatorreactor' ),
+				'label' => __( 'Content', 'wp-creatorreactor' ),
 				'tab'   => \Elementor\Controls_Manager::TAB_CONTENT,
 			]
 		);
@@ -40,24 +40,24 @@ abstract class Elementor_Widget_Shortcode_Wrap extends \Elementor\Widget_Base {
 		$this->add_control(
 			'inner_content',
 			[
-				'label'       => __( 'Visible content', 'creatorreactor' ),
+				'label'       => __( 'Visible content', 'wp-creatorreactor' ),
 				'type'        => \Elementor\Controls_Manager::WYSIWYG,
 				'default'     => '',
-				'description' => __( 'Shown only when the visitor matches this block’s visibility rules (same as the matching shortcode).', 'creatorreactor' ),
+				'description' => __( 'Shown only when the visitor matches this block’s visibility rules (same as the matching shortcode).', 'wp-creatorreactor' ),
 			]
 		);
 
 		$this->add_control(
 			'container_logic',
 			[
-				'label'       => __( 'Container visibility logic', 'creatorreactor' ),
+				'label'       => __( 'Container visibility logic', 'wp-creatorreactor' ),
 				'type'        => \Elementor\Controls_Manager::SELECT,
 				'default'     => 'and',
 				'options'     => [
-					'and' => __( 'AND (current): hide container if any gate fails', 'creatorreactor' ),
-					'or'  => __( 'OR: show container if any gate passes', 'creatorreactor' ),
+					'and' => __( 'AND (current): hide container if any gate fails', 'wp-creatorreactor' ),
+					'or'  => __( 'OR: show container if any gate passes', 'wp-creatorreactor' ),
 				],
-				'description' => __( 'Block editor: used when multiple gate blocks share a layout container. Elementor: each gate only affects its own widget on the front end.', 'creatorreactor' ),
+				'description' => __( 'Block editor: used when multiple gate blocks share a layout container. Elementor: each gate only affects its own widget on the front end.', 'wp-creatorreactor' ),
 			]
 		);
 
@@ -101,7 +101,7 @@ final class Elementor_Widget_Follower_Legacy extends Elementor_Widget_Shortcode_
 	}
 
 	public function get_title() {
-		return __( 'CreatorReactor: Follower', 'creatorreactor' );
+		return __( 'CreatorReactor: Follower', 'wp-creatorreactor' );
 	}
 
 	public function get_keywords() {
@@ -123,7 +123,7 @@ final class Elementor_Widget_Subscriber_Legacy extends Elementor_Widget_Shortcod
 	}
 
 	public function get_title() {
-		return __( 'CreatorReactor: Subscriber', 'creatorreactor' );
+		return __( 'CreatorReactor: Subscriber', 'wp-creatorreactor' );
 	}
 
 	public function get_keywords() {
@@ -164,7 +164,7 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 				[
 					'elType'   => 'container',
 					'settings' => [
-						'_title'        => __( 'Gated content', 'creatorreactor' ),
+						'_title'        => __( 'Gated content', 'wp-creatorreactor' ),
 						'content_width' => 'full',
 					],
 				],
@@ -177,7 +177,7 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 
 		protected function get_default_children_title() {
 			/* translators: %d: Content area index (1-based). */
-			return __( 'Content #%d', 'creatorreactor' );
+			return __( 'Content #%d', 'wp-creatorreactor' );
 		}
 
 		protected function get_default_children_container_placeholder_selector() {
@@ -188,7 +188,7 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 			$this->start_controls_section(
 				'section_content',
 				[
-					'label' => __( 'Content', 'creatorreactor' ),
+					'label' => __( 'Content', 'wp-creatorreactor' ),
 					'tab'   => \Elementor\Controls_Manager::TAB_CONTENT,
 				]
 			);
@@ -197,9 +197,9 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 			$repeater->add_control(
 				'slot_title',
 				[
-					'label'       => __( 'Area label', 'creatorreactor' ),
+					'label'       => __( 'Area label', 'wp-creatorreactor' ),
 					'type'        => \Elementor\Controls_Manager::TEXT,
-					'default'     => __( 'Gated content', 'creatorreactor' ),
+					'default'     => __( 'Gated content', 'wp-creatorreactor' ),
 					'label_block' => true,
 				]
 			);
@@ -207,16 +207,16 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 			$this->add_control(
 				'gate_slots',
 				[
-					'label'       => __( 'Gated content area', 'creatorreactor' ),
+					'label'       => __( 'Gated content area', 'wp-creatorreactor' ),
 					'type'        => \Elementor\Modules\NestedElements\Controls\Control_Nested_Repeater::CONTROL_TYPE,
 					'fields'      => $repeater->get_controls(),
 					'default'     => [
 						[
-							'slot_title' => __( 'Gated content', 'creatorreactor' ),
+							'slot_title' => __( 'Gated content', 'wp-creatorreactor' ),
 						],
 					],
 					'title_field' => '{{{ slot_title }}}',
-					'button_text' => __( 'Add area', 'creatorreactor' ),
+					'button_text' => __( 'Add area', 'wp-creatorreactor' ),
 					'min_items'   => 1,
 					'max_items'   => 1,
 				]
@@ -226,7 +226,7 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 				'gate_hint',
 				[
 					'type' => \Elementor\Controls_Manager::RAW_HTML,
-					'raw'  => '<p class="elementor-descriptor">' . esc_html__( 'Add widgets inside this gate widget (nested content area). Images or other widgets placed as separate elements below the gate are not wrapped by the shortcode; move them into this area so they are omitted from the HTML when the visitor does not match. Front-end output matches the matching shortcode.', 'creatorreactor' ) . '</p>',
+					'raw'  => '<p class="elementor-descriptor">' . esc_html__( 'Add widgets inside this gate widget (nested content area). Images or other widgets placed as separate elements below the gate are not wrapped by the shortcode; move them into this area so they are omitted from the HTML when the visitor does not match. Front-end output matches the matching shortcode.', 'wp-creatorreactor' ) . '</p>',
 				]
 			);
 
@@ -276,7 +276,7 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 			$this->start_controls_section(
 				'section_container_logic',
 				[
-					'label' => __( 'Container visibility', 'creatorreactor' ),
+					'label' => __( 'Container visibility', 'wp-creatorreactor' ),
 					'tab'   => \Elementor\Controls_Manager::TAB_CONTENT,
 				]
 			);
@@ -284,14 +284,14 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 			$this->add_control(
 				'container_logic',
 				[
-					'label'       => __( 'Container visibility logic', 'creatorreactor' ),
+					'label'       => __( 'Container visibility logic', 'wp-creatorreactor' ),
 					'type'        => \Elementor\Controls_Manager::SELECT,
 					'default'     => 'and',
 					'options'     => [
-						'and' => __( 'AND (current): hide container if any gate fails', 'creatorreactor' ),
-						'or'  => __( 'OR: show container if any gate passes', 'creatorreactor' ),
+						'and' => __( 'AND (current): hide container if any gate fails', 'wp-creatorreactor' ),
+						'or'  => __( 'OR: show container if any gate passes', 'wp-creatorreactor' ),
 					],
-					'description' => __( 'Block editor: used when multiple gate blocks share a layout container. Elementor: each gate only affects its own widget on the front end.', 'creatorreactor' ),
+					'description' => __( 'Block editor: used when multiple gate blocks share a layout container. Elementor: each gate only affects its own widget on the front end.', 'wp-creatorreactor' ),
 				]
 			);
 
@@ -336,7 +336,7 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 		}
 
 		public function get_title() {
-			return __( 'CreatorReactor: Follower', 'creatorreactor' );
+			return __( 'CreatorReactor: Follower', 'wp-creatorreactor' );
 		}
 
 		public function get_keywords() {
@@ -358,7 +358,7 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 		}
 
 		public function get_title() {
-			return __( 'CreatorReactor: Subscriber', 'creatorreactor' );
+			return __( 'CreatorReactor: Subscriber', 'wp-creatorreactor' );
 		}
 
 		public function get_keywords() {
@@ -380,7 +380,7 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 		}
 
 		public function get_title() {
-			return __( 'CreatorReactor: Logged out', 'creatorreactor' );
+			return __( 'CreatorReactor: Logged out', 'wp-creatorreactor' );
 		}
 
 		public function get_keywords() {
@@ -402,7 +402,7 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 		}
 
 		public function get_title() {
-			return __( 'CreatorReactor: Logged in', 'creatorreactor' );
+			return __( 'CreatorReactor: Logged in', 'wp-creatorreactor' );
 		}
 
 		public function get_keywords() {
@@ -424,7 +424,7 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 		}
 
 		public function get_title() {
-			return __( 'CreatorReactor: Fanvue connected', 'creatorreactor' );
+			return __( 'CreatorReactor: Fanvue connected', 'wp-creatorreactor' );
 		}
 
 		public function get_keywords() {
@@ -446,7 +446,7 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 		}
 
 		public function get_title() {
-			return __( 'CreatorReactor: Fanvue not connected', 'creatorreactor' );
+			return __( 'CreatorReactor: Fanvue not connected', 'wp-creatorreactor' );
 		}
 
 		public function get_keywords() {
@@ -468,7 +468,7 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 		}
 
 		public function get_title() {
-			return __( 'CreatorReactor: Has tier', 'creatorreactor' );
+			return __( 'CreatorReactor: Has tier', 'wp-creatorreactor' );
 		}
 
 		public function get_icon() {
@@ -483,7 +483,7 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 			$this->start_controls_section(
 				'section_tier',
 				[
-					'label' => __( 'Tier conditions', 'creatorreactor' ),
+					'label' => __( 'Tier conditions', 'wp-creatorreactor' ),
 					'tab'   => \Elementor\Controls_Manager::TAB_CONTENT,
 				]
 			);
@@ -491,22 +491,22 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 			$this->add_control(
 				'tier',
 				[
-					'label'       => __( 'Tier', 'creatorreactor' ),
+					'label'       => __( 'Tier', 'wp-creatorreactor' ),
 					'type'        => \Elementor\Controls_Manager::TEXT,
 					'default'     => '',
-					'placeholder' => __( 'premium', 'creatorreactor' ),
-					'description' => __( 'Leave empty to match any active tier.', 'creatorreactor' ),
+					'placeholder' => __( 'premium', 'wp-creatorreactor' ),
+					'description' => __( 'Leave empty to match any active tier.', 'wp-creatorreactor' ),
 				]
 			);
 
 			$this->add_control(
 				'product',
 				[
-					'label'       => __( 'Product', 'creatorreactor' ),
+					'label'       => __( 'Product', 'wp-creatorreactor' ),
 					'type'        => \Elementor\Controls_Manager::TEXT,
 					'default'     => '',
-					'placeholder' => __( 'fanvue', 'creatorreactor' ),
-					'description' => __( 'Leave empty to match across products.', 'creatorreactor' ),
+					'placeholder' => __( 'fanvue', 'wp-creatorreactor' ),
+					'description' => __( 'Leave empty to match across products.', 'wp-creatorreactor' ),
 				]
 			);
 
@@ -515,7 +515,7 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 			$this->start_controls_section(
 				'section_container_logic',
 				[
-					'label' => __( 'Container visibility', 'creatorreactor' ),
+					'label' => __( 'Container visibility', 'wp-creatorreactor' ),
 					'tab'   => \Elementor\Controls_Manager::TAB_CONTENT,
 				]
 			);
@@ -523,14 +523,14 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 			$this->add_control(
 				'container_logic',
 				[
-					'label'       => __( 'Container visibility logic', 'creatorreactor' ),
+					'label'       => __( 'Container visibility logic', 'wp-creatorreactor' ),
 					'type'        => \Elementor\Controls_Manager::SELECT,
 					'default'     => 'and',
 					'options'     => [
-						'and' => __( 'AND (current): hide container if any gate fails', 'creatorreactor' ),
-						'or'  => __( 'OR: show container if any gate passes', 'creatorreactor' ),
+						'and' => __( 'AND (current): hide container if any gate fails', 'wp-creatorreactor' ),
+						'or'  => __( 'OR: show container if any gate passes', 'wp-creatorreactor' ),
 					],
-					'description' => __( 'Block editor: used when multiple gate blocks share a layout container. Elementor: each gate only affects its own widget on the front end.', 'creatorreactor' ),
+					'description' => __( 'Block editor: used when multiple gate blocks share a layout container. Elementor: each gate only affects its own widget on the front end.', 'wp-creatorreactor' ),
 				]
 			);
 
@@ -568,7 +568,7 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 				. ' data-creatorreactor-user-roles="' . esc_attr( $roles ) . '"'
 				. ' style="display:none" aria-hidden="true"></span>';
 
-			// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- HTML from shortcode renderer.
+			// phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped -- Shortcodes::has_tier returns kses-filtered HTML (post-content parity).
 			echo Shortcodes::has_tier(
 				[
 					'tier'    => $tier,
@@ -576,6 +576,7 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 				],
 				$inner
 			);
+			// phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped
 		}
 	}
 }
@@ -590,7 +591,7 @@ final class Elementor_Widget_Logged_Out_Legacy extends Elementor_Widget_Shortcod
 	}
 
 	public function get_title() {
-		return __( 'CreatorReactor: Logged out', 'creatorreactor' );
+		return __( 'CreatorReactor: Logged out', 'wp-creatorreactor' );
 	}
 
 	public function get_keywords() {
@@ -612,7 +613,7 @@ final class Elementor_Widget_Logged_In_Legacy extends Elementor_Widget_Shortcode
 	}
 
 	public function get_title() {
-		return __( 'CreatorReactor: Logged in', 'creatorreactor' );
+		return __( 'CreatorReactor: Logged in', 'wp-creatorreactor' );
 	}
 
 	public function get_keywords() {
@@ -634,7 +635,7 @@ final class Elementor_Widget_Has_Tier_Legacy extends \Elementor\Widget_Base {
 	}
 
 	public function get_title() {
-		return __( 'CreatorReactor: Has tier', 'creatorreactor' );
+		return __( 'CreatorReactor: Has tier', 'wp-creatorreactor' );
 	}
 
 	public function get_categories() {
@@ -653,7 +654,7 @@ final class Elementor_Widget_Has_Tier_Legacy extends \Elementor\Widget_Base {
 		$this->start_controls_section(
 			'section_content',
 			[
-				'label' => __( 'Tier conditions', 'creatorreactor' ),
+				'label' => __( 'Tier conditions', 'wp-creatorreactor' ),
 				'tab'   => \Elementor\Controls_Manager::TAB_CONTENT,
 			]
 		);
@@ -661,46 +662,46 @@ final class Elementor_Widget_Has_Tier_Legacy extends \Elementor\Widget_Base {
 		$this->add_control(
 			'tier',
 			[
-				'label'       => __( 'Tier', 'creatorreactor' ),
+				'label'       => __( 'Tier', 'wp-creatorreactor' ),
 				'type'        => \Elementor\Controls_Manager::TEXT,
 				'default'     => '',
-				'placeholder' => __( 'premium', 'creatorreactor' ),
-				'description' => __( 'Leave empty to match any active tier.', 'creatorreactor' ),
+				'placeholder' => __( 'premium', 'wp-creatorreactor' ),
+				'description' => __( 'Leave empty to match any active tier.', 'wp-creatorreactor' ),
 			]
 		);
 
 		$this->add_control(
 			'product',
 			[
-				'label'       => __( 'Product', 'creatorreactor' ),
+				'label'       => __( 'Product', 'wp-creatorreactor' ),
 				'type'        => \Elementor\Controls_Manager::TEXT,
 				'default'     => '',
-				'placeholder' => __( 'fanvue', 'creatorreactor' ),
-				'description' => __( 'Leave empty to match across products.', 'creatorreactor' ),
+				'placeholder' => __( 'fanvue', 'wp-creatorreactor' ),
+				'description' => __( 'Leave empty to match across products.', 'wp-creatorreactor' ),
 			]
 		);
 
 		$this->add_control(
 			'inner_content',
 			[
-				'label'       => __( 'Visible content', 'creatorreactor' ),
+				'label'       => __( 'Visible content', 'wp-creatorreactor' ),
 				'type'        => \Elementor\Controls_Manager::WYSIWYG,
 				'default'     => '',
-				'description' => __( 'Shown only when the visitor matches these tier conditions.', 'creatorreactor' ),
+				'description' => __( 'Shown only when the visitor matches these tier conditions.', 'wp-creatorreactor' ),
 			]
 		);
 
 		$this->add_control(
 			'container_logic',
 			[
-				'label'       => __( 'Container visibility logic', 'creatorreactor' ),
+				'label'       => __( 'Container visibility logic', 'wp-creatorreactor' ),
 				'type'        => \Elementor\Controls_Manager::SELECT,
 				'default'     => 'and',
 				'options'     => [
-					'and' => __( 'AND (current): hide container if any gate fails', 'creatorreactor' ),
-					'or'  => __( 'OR: show container if any gate passes', 'creatorreactor' ),
+					'and' => __( 'AND (current): hide container if any gate fails', 'wp-creatorreactor' ),
+					'or'  => __( 'OR: show container if any gate passes', 'wp-creatorreactor' ),
 				],
-				'description' => __( 'Block editor: used when multiple gate blocks share a layout container. Elementor: each gate only affects its own widget on the front end.', 'creatorreactor' ),
+				'description' => __( 'Block editor: used when multiple gate blocks share a layout container. Elementor: each gate only affects its own widget on the front end.', 'wp-creatorreactor' ),
 			]
 		);
 
@@ -737,7 +738,7 @@ final class Elementor_Widget_Has_Tier_Legacy extends \Elementor\Widget_Base {
 			. ' data-creatorreactor-user-roles="' . esc_attr( $roles ) . '"'
 			. ' style="display:none" aria-hidden="true"></span>';
 
-		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- HTML from shortcode renderer.
+		// phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped -- Shortcodes::has_tier returns kses-filtered HTML (post-content parity).
 		echo Shortcodes::has_tier(
 			[
 				'tier'    => $tier,
@@ -745,6 +746,7 @@ final class Elementor_Widget_Has_Tier_Legacy extends \Elementor\Widget_Base {
 			],
 			$inner
 		);
+		// phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped
 	}
 }
 
@@ -758,7 +760,7 @@ final class Elementor_Widget_Fanvue_Connected_Legacy extends Elementor_Widget_Sh
 	}
 
 	public function get_title() {
-		return __( 'CreatorReactor: Fanvue connected', 'creatorreactor' );
+		return __( 'CreatorReactor: Fanvue connected', 'wp-creatorreactor' );
 	}
 
 	public function get_keywords() {
@@ -780,7 +782,7 @@ final class Elementor_Widget_Fanvue_Not_Connected_Legacy extends Elementor_Widge
 	}
 
 	public function get_title() {
-		return __( 'CreatorReactor: Fanvue not connected', 'creatorreactor' );
+		return __( 'CreatorReactor: Fanvue not connected', 'wp-creatorreactor' );
 	}
 
 	public function get_keywords() {
@@ -802,7 +804,7 @@ final class Elementor_Widget_Fanvue_Oauth extends \Elementor\Widget_Base {
 	}
 
 	public function get_title() {
-		return __( 'CreatorReactor: Login with Fanvue', 'creatorreactor' );
+		return __( 'CreatorReactor: Login with Fanvue', 'wp-creatorreactor' );
 	}
 
 	public function get_categories() {
@@ -821,7 +823,7 @@ final class Elementor_Widget_Fanvue_Oauth extends \Elementor\Widget_Base {
 		$this->start_controls_section(
 			'section_note',
 			[
-				'label' => __( 'About', 'creatorreactor' ),
+				'label' => __( 'About', 'wp-creatorreactor' ),
 				'tab'   => \Elementor\Controls_Manager::TAB_CONTENT,
 			]
 		);
@@ -830,7 +832,7 @@ final class Elementor_Widget_Fanvue_Oauth extends \Elementor\Widget_Base {
 			'note',
 			[
 				'type' => \Elementor\Controls_Manager::RAW_HTML,
-				'raw'  => '<p class="elementor-descriptor">' . esc_html__( 'Outputs the same “Login with Fanvue” control as [standard_fanvue_login_button] / [fanvue_login_button] (Creator/direct mode only). For Google sign-in, use the Shortcode widget with [standard_google_login_button] or [minimal_google_login_button].', 'creatorreactor' ) . '</p>',
+				'raw'  => '<p class="elementor-descriptor">' . esc_html__( 'Outputs the “Login with Fanvue” control using the style from Settings → Fanvue → Login Button Appearance (same as [fanvue_login_button]; Creator/direct mode only). For Google sign-in, use the Shortcode widget with [standard_google_login_button] or [minimal_google_login_button]. Instagram (Meta) OAuth credentials live under Settings → Instagram (OAuth Configuration); Login Button Appearance there stores a gradient preview style for future use—there is no Instagram login widget yet.', 'wp-creatorreactor' ) . '</p>',
 			]
 		);
 

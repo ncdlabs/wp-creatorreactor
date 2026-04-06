@@ -47,7 +47,7 @@ final class Elementor_Integration {
 			$elements->add_category(
 				'creatorreactor',
 				[
-					'title' => esc_html__( 'CreatorReactor', 'creatorreactor' ),
+					'title' => esc_html__( 'CreatorReactor', 'wp-creatorreactor' ),
 					'icon'  => 'eicon-shortcode',
 				]
 			);
@@ -125,7 +125,7 @@ final class Elementor_Integration {
 			'creatorreactor-elementor-gates-editor-constraint',
 			'CreatorReactorElementorGateEditorConstraint',
 			[
-				'warningText' => __( 'Only one CreatorReactor content gate widget per container is allowed.', 'creatorreactor' ),
+				'warningText' => __( 'Only one CreatorReactor content gate widget per container is allowed.', 'wp-creatorreactor' ),
 			]
 		);
 	}

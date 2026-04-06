@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<ruleset name="CreatorReactor">
+	<description>Security-focused PHPCS for local runs; CI still runs full WPCS via GitHub Actions.</description>
+
+	<file>creatorreactor.php</file>
+	<file>uninstall.php</file>
+	<file>includes</file>
+	<file>templates</file>
+
+	<exclude-pattern>*/vendor/*</exclude-pattern>
+	<exclude-pattern>*/tests/*</exclude-pattern>
+
+	<config name="minimum_supported_wp_version" value="5.9"/>
+
+	<rule ref="WordPress.Security.EscapeOutput"/>
+</ruleset>

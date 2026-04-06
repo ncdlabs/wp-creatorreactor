@@ -149,7 +149,7 @@ class Banner {
 		echo \wp_kses(
 			\sprintf(
 				/* translators: 1: opening <strong>, 2: closing </strong>, 3: opening <a> for Fix, 4: closing </a>. */
-				\__( 'This system is set to not accept new users! Please go to Settings → General then click %1$s"Anyone can register"%2$s, or click %3$sFix%4$s to configure now.', 'creatorreactor' ),
+				\__( 'This system is set to not accept new users! Please go to Settings → General then click %1$s"Anyone can register"%2$s, or click %3$sFix%4$s to configure now.', 'wp-creatorreactor' ),
 				'<strong>',
 				'</strong>',
 				'<a href="#" class="creatorreactor-registration-alert-fix">',
@@ -193,14 +193,14 @@ class Banner {
 				<div class="creatorreactor-oauth-banner-inner">
 					<img
 						src="<?php echo \esc_url( CREATORREACTOR_PLUGIN_URL . 'img/cr-logo.png' ); ?>"
-						alt="<?php echo \esc_attr( \__( 'CreatorReactor', 'creatorreactor' ) ); ?>"
+						alt="<?php echo \esc_attr( \__( 'CreatorReactor', 'wp-creatorreactor' ) ); ?>"
 						class="creatorreactor-brand-logo creatorreactor-brand-logo--banner"
 						loading="lazy"
 						decoding="async"
 					/>
 					<p class="creatorreactor-oauth-banner-message"><?php self::render_banner_message(); ?></p>
 					<div class="creatorreactor-oauth-banner-actions">
-						<button type="button" class="button button-small creatorreactor-oauth-banner-dismiss"><?php \esc_html_e( 'Dismiss', 'creatorreactor' ); ?></button>
+						<button type="button" class="button button-small creatorreactor-oauth-banner-dismiss"><?php \esc_html_e( 'Dismiss', 'wp-creatorreactor' ); ?></button>
 					</div>
 				</div>
 			</div>
@@ -245,7 +245,7 @@ class Banner {
 			[
 				'nonce'               => \wp_create_nonce( 'creatorreactor_oauth_dismiss_banner_nonce' ),
 				'settingsGeneralUrl'  => \admin_url( 'options-general.php' ),
-				'fixError'            => \__( 'Could not apply the fix. Try Settings → General or Integration Checks.', 'creatorreactor' ),
+				'fixError'            => \__( 'Could not apply the fix. Try Settings → General or Integration Checks.', 'wp-creatorreactor' ),
 			]
 		);
 	}
@@ -256,7 +256,7 @@ class Banner {
 	public static function ajax_dismiss_banner() {
 		\check_ajax_referer( 'creatorreactor_oauth_dismiss_banner_nonce', 'security' );
 		if ( ! \current_user_can( 'manage_options' ) ) {
-			\wp_send_json_error( \__( 'Forbidden.', 'creatorreactor' ), 403 );
+			\wp_send_json_error( \__( 'Forbidden.', 'wp-creatorreactor' ), 403 );
 		}
 
 		if ( session_id() == '' && ! headers_sent() ) {

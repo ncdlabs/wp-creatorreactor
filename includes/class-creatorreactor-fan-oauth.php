@@ -806,8 +806,8 @@ class Fan_OAuth {
 
 		if ( ! get_role( $role_slug ) ) {
 			$label = $role_slug === 'creatorreactor_follower'
-				? __( 'CreatorReactor Follower', 'creatorreactor' )
-				: __( 'CreatorReactor Subscriber', 'creatorreactor' );
+				? __( 'CreatorReactor Follower', 'wp-creatorreactor' )
+				: __( 'CreatorReactor Subscriber', 'wp-creatorreactor' );
 			add_role( $role_slug, $label, [ 'read' => true ] );
 		}
 
@@ -963,10 +963,10 @@ class Fan_OAuth {
 			? sanitize_text_field( trim( (string) $identity['uuid'] ) )
 			: '';
 		if ( $email === '' || ! is_email( $email ) ) {
-			return new \WP_Error( 'invalid_email', __( 'Invalid email from Fanvue profile.', 'creatorreactor' ) );
+			return new \WP_Error( 'invalid_email', __( 'Invalid email from Fanvue profile.', 'wp-creatorreactor' ) );
 		}
 		if ( email_exists( $email ) ) {
-			return new \WP_Error( 'exists', __( 'A user with this email already exists.', 'creatorreactor' ) );
+			return new \WP_Error( 'exists', __( 'A user with this email already exists.', 'wp-creatorreactor' ) );
 		}
 		$display = isset( $identity['display'] ) && is_string( $identity['display'] ) ? $identity['display'] : '';
 		$login_base = sanitize_user( current( explode( '@', $email, 2 ) ), true );

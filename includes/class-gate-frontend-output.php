@@ -225,7 +225,7 @@ final class Gate_Frontend_Output {
 				$c  = $el->getAttribute( 'class' );
 				$wt = $el->getAttribute( 'data-widget_type' );
 				if ( strpos( $c, 'elementor-widget-creatorreactor' ) !== false
-					|| ( is_string( $wt ) && strpos( $wt, 'creatorreactor' ) === 0 ) ) {
+					|| ( is_string( $wt ) && strpos( $wt, 'wp-creatorreactor' ) === 0 ) ) {
 					return $el;
 				}
 			}

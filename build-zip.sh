@@ -146,6 +146,9 @@ for d in includes js css templates img assets languages; do
 	fi
 done
 
+# WordPress.org Plugin Check rejects hidden files inside the plugin package (e.g. .gitkeep).
+find "$STAGE/${PLUGIN_SLUG}" -name '.?*' -delete 2>/dev/null || true
+
 (
 	cd "$STAGE"
 	zip -r "$ROOT/$OUTPUT" "$PLUGIN_SLUG" -x "*.DS_Store" "*/.git/*"

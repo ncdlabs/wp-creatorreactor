@@ -54,8 +54,10 @@ class Editor_Blocks_Prompt {
 			return;
 		}
 
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- Read-only admin routing query args; capability checked above.
 		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : '';
 		$tab  = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : '';
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
 		if ( Admin_Settings::PAGE_SLUG === $page && 'dashboard' === $tab ) {
 			delete_option( self::OPTION_INTEGRATION_CHECKS_PENDING );
 			Admin_Settings::run_deferred_activation_roles_only();
@@ -119,7 +121,7 @@ class Editor_Blocks_Prompt {
 			wp_send_json_error( null, 403 );
 		}
 		check_ajax_referer( 'creatorreactor_editor_prompt', 'nonce' );
-		$ack = isset( $_POST['acknowledge_integration'] ) && (string) wp_unslash( $_POST['acknowledge_integration'] ) === '1';
+		$ack = isset( $_POST['acknowledge_integration'] ) && '1' === sanitize_text_field( wp_unslash( (string) $_POST['acknowledge_integration'] ) );
 		if ( $ack ) {
 			Admin_Settings::run_deferred_activation_roles_only();
 		}
@@ -201,7 +203,7 @@ class Editor_Blocks_Prompt {
 					'ignoreAction'     => 'creatorreactor_onboarding_ignore_checks',
 				],
 				'strings' => [
-					'applyError' => __( 'Could not apply all automatic fixes. You can still ignore warnings or adjust settings manually.', 'creatorreactor' ),
+					'applyError' => __( 'Could not apply all automatic fixes. You can still ignore warnings or adjust settings manually.', 'wp-creatorreactor' ),
 				],
 			]
 		);
@@ -216,17 +218,17 @@ class Editor_Blocks_Prompt {
 		$has_g = get_option( self::OPTION_HAS_GUTENBERG, '0' ) === '1';
 
 		if ( $has_e && $has_g ) {
-			$body = __( 'We detected Elementor and the WordPress block editor (Gutenberg) on this site. CreatorReactor includes Elementor widgets in the CreatorReactor category in Elementor, and block editor blocks in the CreatorReactor category in the block inserter.', 'creatorreactor' )
+			$body = __( 'We detected Elementor and the WordPress block editor (Gutenberg) on this site. CreatorReactor includes Elementor widgets in the CreatorReactor category in Elementor, and block editor blocks in the CreatorReactor category in the block inserter.', 'wp-creatorreactor' )
 				. ' '
-				. __( 'The Gutenberg blocks and Elementor widgets will be installed for your site. To see what is available and how to use it, go to CreatorReactor → Settings → Documentation → Gutenberg Blocks and CreatorReactor → Settings → Documentation → Elementor widgets.', 'creatorreactor' );
+				. __( 'The Gutenberg blocks and Elementor widgets will be installed for your site. Open CreatorReactor → Settings → Documentation for the Shortcodes section (blocks and widgets mirror the same gating and login behavior).', 'wp-creatorreactor' );
 		} elseif ( $has_e ) {
-			$body = __( 'We detected Elementor on this site. CreatorReactor includes Elementor widgets in the CreatorReactor category.', 'creatorreactor' )
+			$body = __( 'We detected Elementor on this site. CreatorReactor includes Elementor widgets in the CreatorReactor category.', 'wp-creatorreactor' )
 				. ' '
-				. __( 'The Elementor widgets will be installed for your site. To see what is available and how to use it, go to CreatorReactor → Settings → Documentation → Elementor widgets.', 'creatorreactor' );
+				. __( 'The Elementor widgets will be installed for your site. Open CreatorReactor → Settings → Documentation for the Shortcodes section and embedded user guide.', 'wp-creatorreactor' );
 		} else {
-			$body = __( 'We detected the WordPress block editor (Gutenberg) on this site. CreatorReactor includes block editor blocks in the CreatorReactor category.', 'creatorreactor' )
+			$body = __( 'We detected the WordPress block editor (Gutenberg) on this site. CreatorReactor includes block editor blocks in the CreatorReactor category.', 'wp-creatorreactor' )
 				. ' '
-				. __( 'The Gutenberg blocks will be installed for your site. To see what is available and how to use it, go to CreatorReactor → Settings → Documentation → Gutenberg Blocks.', 'creatorreactor' );
+				. __( 'The Gutenberg blocks will be installed for your site. Open CreatorReactor → Settings → Documentation for the Shortcodes section and embedded user guide.', 'wp-creatorreactor' );
 		}
 
 		?>
@@ -234,14 +236,14 @@ class Editor_Blocks_Prompt {
 			<div class="creatorreactor-modal-backdrop" aria-hidden="true"></div>
 			<div class="creatorreactor-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="creatorreactor-editor-prompt-title">
 				<div class="creatorreactor-modal-header">
-					<h2 id="creatorreactor-editor-prompt-title"><?php esc_html_e( 'CreatorReactor editor blocks', 'creatorreactor' ); ?></h2>
-					<button type="button" class="creatorreactor-modal-close creatorreactor-editor-prompt-close" aria-label="<?php esc_attr_e( 'Close', 'creatorreactor' ); ?>">&times;</button>
+					<h2 id="creatorreactor-editor-prompt-title"><?php esc_html_e( 'CreatorReactor editor blocks', 'wp-creatorreactor' ); ?></h2>
+					<button type="button" class="creatorreactor-modal-close creatorreactor-editor-prompt-close" aria-label="<?php esc_attr_e( 'Close', 'wp-creatorreactor' ); ?>">&times;</button>
 				</div>
 				<div class="creatorreactor-modal-body">
 					<p><?php echo esc_html( $body ); ?></p>
 				</div>
 				<div class="creatorreactor-modal-footer">
-					<button type="button" class="button button-primary creatorreactor-editor-prompt-next"><?php esc_html_e( 'Next', 'creatorreactor' ); ?></button>
+					<button type="button" class="button button-primary creatorreactor-editor-prompt-next"><?php esc_html_e( 'Next', 'wp-creatorreactor' ); ?></button>
 				</div>
 			</div>
 		</div>
@@ -255,7 +257,7 @@ class Editor_Blocks_Prompt {
 			$onboarding_data = Admin_Settings::get_integration_onboarding_modal_data();
 		} catch ( \Throwable $e ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
-				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug-only when WP_DEBUG is on.
 				error_log( 'CreatorReactor editor prompt integration list: ' . $e->getMessage() );
 			}
 		}
@@ -277,15 +279,15 @@ class Editor_Blocks_Prompt {
 			>
 				<div class="creatorreactor-modal-header">
 					<div class="creatorreactor-onboarding-header-text">
-						<h2 id="creatorreactor-onboarding-integration-title"><?php esc_html_e( 'CreatorReactor Setup', 'creatorreactor' ); ?></h2>
-						<p id="creatorreactor-onboarding-integration-subtitle" class="creatorreactor-onboarding-integration-subtitle"><?php esc_html_e( 'Integration Checks', 'creatorreactor' ); ?></p>
+						<h2 id="creatorreactor-onboarding-integration-title"><?php esc_html_e( 'CreatorReactor Setup', 'wp-creatorreactor' ); ?></h2>
+						<p id="creatorreactor-onboarding-integration-subtitle" class="creatorreactor-onboarding-integration-subtitle"><?php esc_html_e( 'Integration Checks', 'wp-creatorreactor' ); ?></p>
 					</div>
-					<button type="button" class="creatorreactor-modal-close creatorreactor-onboarding-integration-close" aria-label="<?php esc_attr_e( 'Close', 'creatorreactor' ); ?>">&times;</button>
+					<button type="button" class="creatorreactor-modal-close creatorreactor-onboarding-integration-close" aria-label="<?php esc_attr_e( 'Close', 'wp-creatorreactor' ); ?>">&times;</button>
 				</div>
 				<div class="creatorreactor-modal-body">
 					<?php if ( ! empty( $remediable_rows ) ) : ?>
-						<p id="creatorreactor-onboarding-integration-intro" class="creatorreactor-onboarding-intro"><?php esc_html_e( 'The following conditions that may cause CreatorReactor to function improperly have been detected. Click Next to auto-repair the issues.', 'creatorreactor' ); ?></p>
-						<div class="creatorreactor-onboarding-check-scroll" tabindex="0" role="region" aria-label="<?php esc_attr_e( 'Issues that will be auto-repaired', 'creatorreactor' ); ?>">
+						<p id="creatorreactor-onboarding-integration-intro" class="creatorreactor-onboarding-intro"><?php esc_html_e( 'The following conditions that may cause CreatorReactor to function improperly have been detected. Click Next to auto-repair the issues.', 'wp-creatorreactor' ); ?></p>
+						<div class="creatorreactor-onboarding-check-scroll" tabindex="0" role="region" aria-label="<?php esc_attr_e( 'Issues that will be auto-repaired', 'wp-creatorreactor' ); ?>">
 							<ul class="creatorreactor-onboarding-check-list">
 								<?php foreach ( $remediable_rows as $row ) : ?>
 									<li>
@@ -296,31 +298,33 @@ class Editor_Blocks_Prompt {
 							</ul>
 						</div>
 					<?php elseif ( $other_red_count > 0 ) : ?>
-						<p id="creatorreactor-onboarding-integration-intro" class="creatorreactor-onboarding-intro"><?php esc_html_e( 'Some integration checks are still failing, but none of them can be auto-repaired from this step. Open CreatorReactor → Settings → Debug → Integration Checks to review them, or use Ignore checks and proceed to continue.', 'creatorreactor' ); ?></p>
+						<p id="creatorreactor-onboarding-integration-intro" class="creatorreactor-onboarding-intro"><?php esc_html_e( 'Some integration checks are still failing, but none of them can be auto-repaired from this step. Open CreatorReactor → Settings → Debug → Integration Checks to review them, or use Ignore checks and proceed to continue.', 'wp-creatorreactor' ); ?></p>
 					<?php else : ?>
-						<p id="creatorreactor-onboarding-integration-intro" class="creatorreactor-onboarding-intro"><?php esc_html_e( 'No failing checks were detected. You can continue to finish setup.', 'creatorreactor' ); ?></p>
+						<p id="creatorreactor-onboarding-integration-intro" class="creatorreactor-onboarding-intro"><?php esc_html_e( 'No failing checks were detected. You can continue to finish setup.', 'wp-creatorreactor' ); ?></p>
 					<?php endif; ?>
 					<?php if ( ! empty( $remediable_rows ) && $other_red_count > 0 ) : ?>
 						<p class="description" style="margin:12px 0 0;flex-shrink:0;">
 							<?php
-							printf(
-								/* translators: %d: number of additional failing checks not auto-repaired here */
-								esc_html( _n(
-									'Note: %d additional issue still appears in Integration Checks and must be addressed separately.',
-									'Note: %d additional issues still appear in Integration Checks and must be addressed separately.',
-									$other_red_count,
-									'creatorreactor'
-								) ),
-								$other_red_count
+							echo esc_html(
+								sprintf(
+									/* translators: %d: number of additional failing checks not auto-repaired here */
+									_n(
+										'Note: %d additional issue still appears in Integration Checks and must be addressed separately.',
+										'Note: %d additional issues still appear in Integration Checks and must be addressed separately.',
+										$other_red_count,
+										'wp-creatorreactor'
+									),
+									(int) $other_red_count
+								)
 							);
 							?>
 						</p>
 					<?php endif; ?>
 				</div>
 				<div class="creatorreactor-modal-footer">
-					<button type="button" class="button creatorreactor-onboarding-integration-cancel"><?php esc_html_e( 'Cancel', 'creatorreactor' ); ?></button>
-					<button type="button" class="button creatorreactor-onboarding-integration-ignore"><?php esc_html_e( 'Ignore checks and proceed', 'creatorreactor' ); ?></button>
-					<button type="button" class="button button-primary creatorreactor-onboarding-integration-next"><?php esc_html_e( 'Next', 'creatorreactor' ); ?></button>
+					<button type="button" class="button creatorreactor-onboarding-integration-cancel"><?php esc_html_e( 'Cancel', 'wp-creatorreactor' ); ?></button>
+					<button type="button" class="button creatorreactor-onboarding-integration-ignore"><?php esc_html_e( 'Ignore checks and proceed', 'wp-creatorreactor' ); ?></button>
+					<button type="button" class="button button-primary creatorreactor-onboarding-integration-next"><?php esc_html_e( 'Next', 'wp-creatorreactor' ); ?></button>
 				</div>
 			</div>
 		</div>

@@ -1,0 +1,25 @@
+# Files and directories excluded from WordPress.org / distribution zips
+# (see https://developer.wordpress.org/cli/commands/dist-archive/ and Plugin Check expectations).
+
+.git
+.gitignore
+.github
+
+# Development & CI only
+tests/
+tools/
+phpcs.xml.dist
+phpunit.xml
+phpunit.xml.dist
+composer.json
+composer.lock
+vendor/
+
+# Local packaging / deploy (not part of the distributed plugin)
+build-zip.sh
+deploy-hostinger.sh
+
+# Editor / OS noise
+.DS_Store
+*.swp
+*~

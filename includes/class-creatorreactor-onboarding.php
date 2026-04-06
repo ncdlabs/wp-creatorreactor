@@ -444,7 +444,7 @@ class Onboarding {
 			return;
 		}
 		if ( ! isset( $_POST['_wpnonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['_wpnonce'] ) ), self::ACTION_SUBMIT ) ) {
-			wp_die( esc_html__( 'Invalid request.', 'creatorreactor' ), '', [ 'response' => 403 ] );
+			wp_die( esc_html__( 'Invalid request.', 'wp-creatorreactor' ), '', [ 'response' => 403 ] );
 		}
 		if ( ! is_user_logged_in() ) {
 			self::handle_submit_nopriv();
@@ -518,10 +518,10 @@ class Onboarding {
 	private static function handle_submit_pending_fanvue( $token ) {
 		$token = is_string( $token ) ? preg_replace( '/[^a-zA-Z0-9]/', '', $token ) : '';
 		if ( $token === '' ) {
-			wp_die( esc_html__( 'Invalid request.', 'creatorreactor' ), '', [ 'response' => 403 ] );
+			wp_die( esc_html__( 'Invalid request.', 'wp-creatorreactor' ), '', [ 'response' => 403 ] );
 		}
 		if ( ! isset( $_POST['_wpnonce'] ) || ! wp_verify_nonce( sanitize_text_field( wp_unslash( $_POST['_wpnonce'] ) ), self::nonce_action_pending( $token ) ) ) {
-			wp_die( esc_html__( 'Invalid request.', 'creatorreactor' ), '', [ 'response' => 403 ] );
+			wp_die( esc_html__( 'Invalid request.', 'wp-creatorreactor' ), '', [ 'response' => 403 ] );
 		}
 		$session = self::get_pending_fanvue_registration( $token );
 		if ( ! is_array( $session ) ) {

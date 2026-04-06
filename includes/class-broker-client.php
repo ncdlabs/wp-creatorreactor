@@ -309,6 +309,7 @@ class Broker_Client {
 			return true;
 		} catch ( \Throwable $e ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug-only when WP_DEBUG is on.
 				error_log( 'CreatorReactor disconnect error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
 			}
 			self::clear_credentials();
@@ -340,12 +341,12 @@ class Broker_Client {
 			if ( ! self::is_configured() ) {
 				return [
 					'success' => false,
-					'message' => __( 'Broker URL and Site ID must be configured for Agency mode.', 'creatorreactor' ),
+					'message' => __( 'Broker URL and Site ID must be configured for Agency mode.', 'wp-creatorreactor' ),
 					'checks' => [
 						[
-							'label' => __( 'Broker URL & Site ID', 'creatorreactor' ),
+							'label' => __( 'Broker URL & Site ID', 'wp-creatorreactor' ),
 							'pass' => false,
-							'message' => __( 'Required: set both in Broker Settings.', 'creatorreactor' ),
+							'message' => __( 'Required: set both in Broker Settings.', 'wp-creatorreactor' ),
 						],
 					],
 				];
@@ -355,12 +356,12 @@ class Broker_Client {
 			if ( ! $jwt ) {
 				return [
 					'success' => false,
-					'message' => __( 'Not connected to broker. Use Connect after saving broker settings.', 'creatorreactor' ),
+					'message' => __( 'Not connected to broker. Use Connect after saving broker settings.', 'wp-creatorreactor' ),
 					'checks' => [
 						[
-							'label' => __( 'Broker session', 'creatorreactor' ),
+							'label' => __( 'Broker session', 'wp-creatorreactor' ),
 							'pass' => false,
-							'message' => __( 'No JWT yet — complete OAuth via Connect.', 'creatorreactor' ),
+							'message' => __( 'No JWT yet — complete OAuth via Connect.', 'wp-creatorreactor' ),
 						],
 					],
 				];
@@ -373,7 +374,7 @@ class Broker_Client {
 					'message' => $result->get_error_message(),
 					'checks' => [
 						[
-							'label' => __( 'CreatorReactor API (via broker)', 'creatorreactor' ),
+							'label' => __( 'CreatorReactor API (via broker)', 'wp-creatorreactor' ),
 							'pass' => false,
 							'message' => $result->get_error_message(),
 						],
@@ -381,16 +382,21 @@ class Broker_Client {
 				];
 			}
 
-			$name = isset( $result['displayName'] ) ? $result['displayName'] : ( isset( $result['handle'] ) ? $result['handle'] : __( 'Unknown', 'creatorreactor' ) );
+			$name = isset( $result['displayName'] ) ? $result['displayName'] : ( isset( $result['handle'] ) ? $result['handle'] : __( 'Unknown', 'wp-creatorreactor' ) );
+
+			/* translators: %s: Connected account display name or handle. */
+			$connected_msg = sprintf( __( 'Connected successfully as %s', 'wp-creatorreactor' ), $name );
+			/* translators: %s: Connected account display name or handle. */
+			$ok_msg = sprintf( __( 'OK (%s)', 'wp-creatorreactor' ), $name );
 
 			return [
 				'success' => true,
-				'message' => sprintf( __( 'Connected successfully as %s', 'creatorreactor' ), $name ),
+				'message' => $connected_msg,
 				'checks' => [
 					[
-						'label' => __( 'CreatorReactor API (via broker)', 'creatorreactor' ),
+						'label' => __( 'CreatorReactor API (via broker)', 'wp-creatorreactor' ),
 						'pass' => true,
-						'message' => sprintf( __( 'OK (%s)', 'creatorreactor' ), $name ),
+						'message' => $ok_msg,
 					],
 				],
 			];
@@ -442,7 +448,7 @@ class Broker_Client {
 				if ( (int) $code === 403 && is_string( $body ) && stripos( $body, 'Insufficient scopes' ) !== false ) {
 					return self::create_wp_error(
 						'api_error',
-						'HTTP 403 — ' . __( 'Insufficient OAuth scopes.', 'creatorreactor' ) . ' ' . CreatorReactor_Client::get_insufficient_scopes_hint_text()
+						'HTTP 403 — ' . __( 'Insufficient OAuth scopes.', 'wp-creatorreactor' ) . ' ' . CreatorReactor_Client::get_insufficient_scopes_hint_text()
 					);
 				}
 				$snippet = is_string( $body ) && $body !== '' ? substr( wp_strip_all_tags( $body ), 0, 500 ) : '';
@@ -453,6 +459,7 @@ class Broker_Client {
 			return json_decode( wp_remote_retrieve_body( $response ), true );
 		} catch ( \Throwable $e ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug-only when WP_DEBUG is on.
 				error_log( 'CreatorReactor api_get error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
 			}
 			return self::create_wp_error( 'api_error', 'API request failed: ' . $e->getMessage() );

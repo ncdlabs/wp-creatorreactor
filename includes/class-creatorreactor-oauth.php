@@ -132,10 +132,10 @@ class CreatorReactor_OAuth {
 		$redirect_uri  = (string) $redirect_uri;
 
 		if ( $client_id === '' ) {
-			return new \WP_Error( 'fanvue_probe_no_client_id', __( 'Client ID is empty.', 'creatorreactor' ) );
+			return new \WP_Error( 'fanvue_probe_no_client_id', __( 'Client ID is empty.', 'wp-creatorreactor' ) );
 		}
 		if ( $client_secret === '' ) {
-			return new \WP_Error( 'fanvue_probe_no_secret', __( 'Client Secret is empty.', 'creatorreactor' ) );
+			return new \WP_Error( 'fanvue_probe_no_secret', __( 'Client Secret is empty.', 'wp-creatorreactor' ) );
 		}
 
 		$token_url   = self::get_token_url_for_options( $opts );
@@ -162,7 +162,7 @@ class CreatorReactor_OAuth {
 				'fanvue_probe_http',
 				sprintf(
 					/* translators: %s: WordPress HTTP error message. */
-					__( 'Could not reach the Fanvue token URL (%s). Check outbound HTTPS from this server.', 'creatorreactor' ),
+					__( 'Could not reach the Fanvue token URL (%s). Check outbound HTTPS from this server.', 'wp-creatorreactor' ),
 					$response->get_error_message()
 				)
 			);
@@ -173,7 +173,7 @@ class CreatorReactor_OAuth {
 		if ( ! is_array( $data ) ) {
 			return new \WP_Error(
 				'fanvue_probe_bad_response',
-				__( 'Fanvue returned an unexpected response. Try again in a moment.', 'creatorreactor' )
+				__( 'Fanvue returned an unexpected response. Try again in a moment.', 'wp-creatorreactor' )
 			);
 		}
 
@@ -190,7 +190,7 @@ class CreatorReactor_OAuth {
 
 		return new \WP_Error(
 			'fanvue_probe_failed',
-			$desc !== '' ? $desc : ( $err !== '' ? $err : __( 'Fanvue rejected the credentials.', 'creatorreactor' ) ),
+			$desc !== '' ? $desc : ( $err !== '' ? $err : __( 'Fanvue rejected the credentials.', 'wp-creatorreactor' ) ),
 			[ 'oauth_error' => $err ]
 		);
 	}
@@ -574,7 +574,7 @@ class CreatorReactor_OAuth {
 					self::settings_redirect_url(
 						[
 							'creatorreactor_oauth' => 'error',
-							'message'        => __( 'OAuth not configured. Set Client ID and Redirect URI in settings.', 'creatorreactor' ),
+							'message'        => __( 'OAuth not configured. Set Client ID and Redirect URI in settings.', 'wp-creatorreactor' ),
 						]
 					)
 				);
@@ -667,7 +667,7 @@ class CreatorReactor_OAuth {
 			}
 
 			if ( ! $code_verifier || ! is_string( $code_verifier ) ) {
-				$msg = __( 'OAuth: Invalid or expired state. Please try connecting again.', 'creatorreactor' );
+				$msg = __( 'OAuth: Invalid or expired state. Please try connecting again.', 'wp-creatorreactor' );
 				Admin_Settings::log_connection( 'error', 'OAuth callback: PKCE/state mismatch or expired (state present, verifier missing).' );
 				Admin_Settings::set_last_error( $msg );
 				wp_safe_redirect(
@@ -737,8 +737,8 @@ class CreatorReactor_OAuth {
 		
 		if ( $client_id === '' || $client_secret === '' ) {
 			$msg = $client_secret === ''
-				? __( 'OAuth Client Secret is missing or not saved. Re-enter the Client Secret from your creatorreactor app, click Save settings, then try Connect again.', 'creatorreactor' )
-				: __( 'OAuth client ID or secret not set.', 'creatorreactor' );
+				? __( 'OAuth Client Secret is missing or not saved. Re-enter the Client Secret from your creatorreactor app, click Save settings, then try Connect again.', 'wp-creatorreactor' )
+				: __( 'OAuth client ID or secret not set.', 'wp-creatorreactor' );
 			Admin_Settings::log_connection( 'error', 'OAuth token exchange: configuration error — ' . $msg );
 			return new \WP_Error( 'config', $msg );
 		}
@@ -785,7 +785,7 @@ class CreatorReactor_OAuth {
 		}
 		if ( ! isset( $data['access_token'] ) || ! is_string( $data['access_token'] ) ) {
 			Admin_Settings::log_connection( 'error', 'OAuth token exchange: HTTP 200 but response missing access_token.' );
-			return new \WP_Error( 'token_exchange', __( 'Invalid token response.', 'creatorreactor' ) );
+			return new \WP_Error( 'token_exchange', __( 'Invalid token response.', 'wp-creatorreactor' ) );
 		}
 
 		$expires_in = isset( $data['expires_in'] ) ? (int) $data['expires_in'] : 3600;
@@ -836,7 +836,7 @@ class CreatorReactor_OAuth {
 
 		if ( is_wp_error( $response ) ) {
 			Admin_Settings::log_connection( 'error', 'OAuth token refresh: transport error — ' . $response->get_error_message() );
-			Admin_Settings::set_last_error( __( 'OAuth refresh failed.', 'creatorreactor' ) );
+			Admin_Settings::set_last_error( __( 'OAuth refresh failed.', 'wp-creatorreactor' ) );
 			return false;
 		}
 
@@ -854,7 +854,7 @@ class CreatorReactor_OAuth {
 				|| stripos( $desc, 'does not match the id during the initial token issuance' ) !== false;
 			if ( $client_mismatch ) {
 				delete_option( self::OPTION_TOKENS );
-				$msg = __( 'Stored OAuth tokens were removed: they were issued for a different Client ID than the one in settings. In your Fanvue app, confirm Client ID and Secret match what you saved here, then click Connect.', 'creatorreactor' );
+				$msg = __( 'Stored OAuth tokens were removed: they were issued for a different Client ID than the one in settings. In your Fanvue app, confirm Client ID and Secret match what you saved here, then click Connect.', 'wp-creatorreactor' );
 				Admin_Settings::set_last_error( $msg );
 				Admin_Settings::log_connection(
 					'info',
@@ -866,7 +866,7 @@ class CreatorReactor_OAuth {
 				'error',
 				'OAuth token refresh: HTTP ' . $code_http . '. ' . preg_replace( '/\s+/', ' ', wp_strip_all_tags( $snippet ) )
 			);
-			Admin_Settings::set_last_error( __( 'OAuth refresh failed.', 'creatorreactor' ) );
+			Admin_Settings::set_last_error( __( 'OAuth refresh failed.', 'wp-creatorreactor' ) );
 			return false;
 		}
 		if ( ! isset( $data['access_token'] ) || ! is_string( $data['access_token'] ) ) {
@@ -1077,6 +1077,7 @@ class CreatorReactor_OAuth {
 			$enc = openssl_encrypt( json_encode( $data ), 'aes-256-gcm', $key, OPENSSL_RAW_DATA, $iv, $tag );
 			if ( $enc === false ) {
 				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug-only when WP_DEBUG is on.
 					error_log( 'CreatorReactor encryption failed' );
 				}
 				return '';
@@ -1084,6 +1085,7 @@ class CreatorReactor_OAuth {
 			return base64_encode( $iv . $tag . $enc );
 		} catch ( \Throwable $e ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug-only when WP_DEBUG is on.
 				error_log( 'CreatorReactor encrypt_tokens error: ' . $e->getMessage() );
 			}
 			return '';
@@ -1109,6 +1111,7 @@ class CreatorReactor_OAuth {
 			return json_decode( $decrypted, true );
 		} catch ( \Throwable $e ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug-only when WP_DEBUG is on.
 				error_log( 'CreatorReactor decrypt_tokens error: ' . $e->getMessage() );
 			}
 			return null;

@@ -15,6 +15,51 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class Shortcodes {
 
+	/** Solid fill for minimal Fanvue OAuth control (front-end, wp-login, admin preview). */
+	public const FANVUE_MINIMAL_OAUTH_BACKGROUND = '#47e961';
+
+	/** Minimal control: logo box (matches Google compact padding). */
+	public const FANVUE_MINIMAL_LINK_PADDING_PX = 9;
+
+	/** Minimal control: `fanvue-logo.webp` display size (transparent glyph on {@see FANVUE_MINIMAL_OAUTH_BACKGROUND}). */
+	public const FANVUE_MINIMAL_ICON_SIZE_PX = 24;
+
+	/**
+	 * Optical vertical nudge for minimal Fanvue mark (px). Negative shifts the glyph up inside the square box.
+	 */
+	public const FANVUE_MINIMAL_ICON_TRANSLATE_Y_PX = -2;
+
+	/**
+	 * Instagram-style gradient for admin previews (approximates Meta brand palette). For production marks use assets from Meta’s Brand Resource Center.
+	 *
+	 * @link https://www.meta.com/brand/resources/instagram/instagram-brand/
+	 */
+	public const INSTAGRAM_BRAND_GRADIENT_CSS = 'linear-gradient(45deg,#f09433,#e6683c,#dc2743,#cc2366,#bc1888)';
+
+	/** Minimal Instagram-style preview control padding (matches Google compact). */
+	public const INSTAGRAM_MINIMAL_LINK_PADDING_PX = 9;
+
+	/** Glyph size in minimal Instagram-style preview (px; matches Google compact icon). */
+	public const INSTAGRAM_MINIMAL_ICON_SIZE_PX = 22;
+
+	/** Optical vertical nudge for minimal Instagram-style glyph in the square box (px). */
+	public const INSTAGRAM_MINIMAL_ICON_TRANSLATE_Y_PX = -1;
+
+	/**
+	 * OnlyFans / OFAuth-style admin preview: dark button (common pairing with creator blue accent).
+	 */
+	public const ONLYFANS_OAUTH_ADMIN_BUTTON_BG = '#0f0f0f';
+
+	/** Accent border / glyph color for OnlyFans-style previews (brand primary). */
+	public const ONLYFANS_OAUTH_ADMIN_ACCENT = '#00AFF0';
+
+	public const ONLYFANS_MINIMAL_LINK_PADDING_PX = 9;
+
+	public const ONLYFANS_MINIMAL_ICON_SIZE_PX = 24;
+
+	/** Optical vertical nudge for minimal OnlyFans-style glyph (px). */
+	public const ONLYFANS_MINIMAL_ICON_TRANSLATE_Y_PX = 0;
+
 	/** @var bool */
 	private static $fanvue_oauth_footer_style_scheduled = false;
 
@@ -89,9 +134,9 @@ class Shortcodes {
 			. '.creatorreactor-fanvue-oauth-text{display:block;margin-top:8px;font-size:14px;font-weight:600;text-align:center}'
 			. '.creatorreactor-fanvue-oauth-link[aria-disabled="true"]{cursor:not-allowed;pointer-events:none;opacity:.55;filter:grayscale(100%)}'
 			. '.creatorreactor-fanvue-oauth-wrap--minimal{margin:0;text-align:inherit}'
-			. '.creatorreactor-fanvue-oauth-link--minimal{display:inline-flex;align-items:center;justify-content:center;width:44px;height:44px;border-radius:50%;background:#8e2d77;color:#fff;font-weight:700;font-size:18px;line-height:1;text-decoration:none;box-sizing:border-box}'
-			. '.creatorreactor-fanvue-oauth-link--minimal .creatorreactor-fanvue-oauth-minimal-mark{display:block}'
-			. '.creatorreactor-fanvue-oauth-link--minimal[aria-disabled="true"]{filter:grayscale(100%)}';
+			. '.creatorreactor-fanvue-oauth-link--minimal{display:inline-flex;align-items:center;justify-content:center;padding:' . (int) self::FANVUE_MINIMAL_LINK_PADDING_PX . 'px;border:0;border-radius:4px;background:' . self::FANVUE_MINIMAL_OAUTH_BACKGROUND . ';text-decoration:none;box-sizing:border-box;line-height:0}'
+			. '.creatorreactor-fanvue-oauth-link--minimal .creatorreactor-fanvue-oauth-img-minimal{display:block;width:' . (int) self::FANVUE_MINIMAL_ICON_SIZE_PX . 'px;height:' . (int) self::FANVUE_MINIMAL_ICON_SIZE_PX . 'px;object-fit:contain;flex-shrink:0;transform:translateY(' . (int) self::FANVUE_MINIMAL_ICON_TRANSLATE_Y_PX . 'px)}'
+			. '.creatorreactor-fanvue-oauth-link--minimal[aria-disabled="true"]{opacity:.55;filter:grayscale(100%)}';
 		$print = static function () use ( $css ) {
 			echo '<style id="creatorreactor-fanvue-oauth-css">' . $css . '</style>'; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped
 		};
@@ -243,21 +288,22 @@ class Shortcodes {
 	 * @param array<string, string> $atts Attributes.
 	 */
 	public static function fanvue_oauth( $atts = [] ) {
-		$atts    = \shortcode_atts( [ 'variant' => 'standard' ], $atts, '' );
-		$variant = ( isset( $atts['variant'] ) && $atts['variant'] === 'minimal' ) ? 'minimal' : 'standard';
+		$default_variant = Admin_Settings::get_fanvue_login_button_variant();
+		$atts            = \shortcode_atts( [ 'variant' => $default_variant ], $atts, '' );
+		$variant         = ( isset( $atts['variant'] ) && $atts['variant'] === 'minimal' ) ? 'minimal' : 'standard';
 
 		if ( Admin_Settings::is_broker_mode() ) {
-			return '<p class="creatorreactor-fanvue-oauth-unavailable">' . esc_html__( 'Login with Fanvue is not available in Agency (broker) mode.', 'creatorreactor' ) . '</p>';
+			return '<p class="creatorreactor-fanvue-oauth-unavailable">' . esc_html__( 'Login with Fanvue is not available in Agency (broker) mode.', 'wp-creatorreactor' ) . '</p>';
 		}
 
 		if ( Role_Impersonation::effective_is_logged_in_for_creatorreactor_gates() ) {
 			$dashboard = admin_url();
 			$home      = home_url( '/' );
 			return '<p class="creatorreactor-fanvue-oauth-wrap creatorreactor-fanvue-oauth-logged-in">'
-				. esc_html__( 'You are already signed in.', 'creatorreactor' ) . ' '
-				. '<a href="' . esc_url( $dashboard ) . '">' . esc_html__( 'Dashboard', 'creatorreactor' ) . '</a>'
+				. esc_html__( 'You are already signed in.', 'wp-creatorreactor' ) . ' '
+				. '<a href="' . esc_url( $dashboard ) . '">' . esc_html__( 'Dashboard', 'wp-creatorreactor' ) . '</a>'
 				. ' <span class="creatorreactor-fanvue-oauth-logged-in-sep" aria-hidden="true">—</span> '
-				. '<a href="' . esc_url( wp_logout_url( $home ) ) . '">' . esc_html__( 'Log out', 'creatorreactor' ) . '</a>'
+				. '<a href="' . esc_url( wp_logout_url( $home ) ) . '">' . esc_html__( 'Log out', 'wp-creatorreactor' ) . '</a>'
 				. '</p>';
 		}
 
@@ -324,7 +370,7 @@ class Shortcodes {
 
 		self::schedule_fanvue_oauth_footer_style();
 
-		$label          = __( 'Log in with Fanvue', 'creatorreactor' );
+		$label          = __( 'Log in with Fanvue', 'wp-creatorreactor' );
 		$site_connected = Admin_Settings::is_connected();
 
 		if ( $variant === 'minimal' ) {
@@ -336,9 +382,10 @@ class Shortcodes {
 			} else {
 				$link_attrs .= ' href="' . esc_url( $href ) . '"';
 			}
+			$logo_url = CREATORREACTOR_PLUGIN_URL . 'img/fanvue-logo.webp';
 			return '<p class="' . esc_attr( $wrap_class ) . '">'
 				. '<a ' . $link_attrs . '>'
-				. '<span class="creatorreactor-fanvue-oauth-minimal-mark" aria-hidden="true">F</span>'
+				. '<img src="' . esc_url( $logo_url ) . '" alt="" class="creatorreactor-fanvue-oauth-img-minimal" width="' . (int) self::FANVUE_MINIMAL_ICON_SIZE_PX . '" height="' . (int) self::FANVUE_MINIMAL_ICON_SIZE_PX . '" decoding="async" />'
 				. '</a></p>';
 		}
 
@@ -358,6 +405,104 @@ class Shortcodes {
 	}
 
 	/**
+	 * Admin settings: non-interactive preview of standard vs minimal Fanvue login control.
+	 *
+	 * @param string $variant `standard` or `minimal`.
+	 * @return string HTML
+	 */
+	public static function fanvue_oauth_admin_preview_chip( $variant ) {
+		$variant = ( $variant === 'minimal' ) ? 'minimal' : 'standard';
+		$label   = __( 'Log in with Fanvue', 'wp-creatorreactor' );
+		if ( $variant === 'minimal' ) {
+			$logo = CREATORREACTOR_PLUGIN_URL . 'img/fanvue-logo.webp';
+			return '<span class="creatorreactor-fanvue-oauth-link creatorreactor-fanvue-oauth-link--minimal creatorreactor-fanvue-oauth--admin-preview">'
+				. '<img src="' . esc_url( $logo ) . '" alt="" class="creatorreactor-fanvue-oauth-img-minimal" width="' . (int) self::FANVUE_MINIMAL_ICON_SIZE_PX . '" height="' . (int) self::FANVUE_MINIMAL_ICON_SIZE_PX . '" decoding="async" />'
+				. '</span>';
+		}
+		$banner = CREATORREACTOR_PLUGIN_URL . 'img/login-fanvue.webp';
+		return '<span class="creatorreactor-fanvue-oauth-link creatorreactor-fanvue-oauth--admin-preview">'
+			. '<img src="' . esc_url( $banner ) . '" alt="" class="creatorreactor-fanvue-oauth-img" width="200" decoding="async" />'
+			. '<span class="creatorreactor-fanvue-oauth-text">' . esc_html( $label ) . '</span>'
+			. '</span>';
+	}
+
+	/**
+	 * Instagram camera glyph for admin previews (white outline + dot; pair with {@see INSTAGRAM_BRAND_GRADIENT_CSS}).
+	 * Proportions follow Meta’s Instagram glyph; use official assets from the Brand Resource Center for print.
+	 *
+	 * @param int $size Width/height in px.
+	 * @return string Raw SVG markup.
+	 * @link https://www.meta.com/brand/resources/instagram/instagram-brand/
+	 */
+	private static function instagram_preview_glyph_svg( $size ) {
+		$w = (int) $size;
+		return '<svg class="creatorreactor-instagram-oauth-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="' . $w . '" height="' . $w . '" fill="none" aria-hidden="true" focusable="false">'
+			. '<rect x="2.25" y="2.25" width="19.5" height="19.5" rx="5" ry="5" stroke="#ffffff" stroke-width="1.75" />'
+			. '<circle cx="12" cy="12" r="4.25" stroke="#ffffff" stroke-width="1.75" />'
+			. '<circle cx="17.25" cy="6.75" r="1.35" fill="#ffffff" />'
+			. '</svg>';
+	}
+
+	/**
+	 * Admin settings: non-interactive preview of standard vs minimal Instagram-style login control (gradient per Meta palette).
+	 *
+	 * @param string $variant `standard` or `minimal`.
+	 * @return string HTML
+	 */
+	public static function instagram_oauth_admin_preview_chip( $variant ) {
+		$variant = ( $variant === 'minimal' ) ? 'minimal' : 'standard';
+		$label   = __( 'Login with Instagram', 'wp-creatorreactor' );
+		if ( $variant === 'minimal' ) {
+			return '<span class="creatorreactor-instagram-oauth-link creatorreactor-instagram-oauth-link--minimal creatorreactor-instagram-oauth--admin-preview">'
+				. self::instagram_preview_glyph_svg( self::INSTAGRAM_MINIMAL_ICON_SIZE_PX )
+				. '</span>';
+		}
+		return '<span class="creatorreactor-instagram-oauth-link creatorreactor-instagram-oauth-link--standard creatorreactor-instagram-oauth--admin-preview">'
+			. self::instagram_preview_glyph_svg( 20 )
+			. '<span class="creatorreactor-instagram-oauth-label">' . esc_html( $label ) . '</span>'
+			. '</span>';
+	}
+
+	/**
+	 * OnlyFans logo mark for admin previews (single-color; pair with brand guidelines).
+	 *
+	 * Path/viewBox match the widely used vector mark (e.g. Simple Icons, CC0).
+	 *
+	 * @param int    $size Width/height in px.
+	 * @param string $fill CSS color for fill.
+	 * @return string Raw SVG markup.
+	 * @link https://onlyfans.com/brand
+	 */
+	private static function onlyfans_preview_glyph_svg( $size, $fill ) {
+		$w = (int) $size;
+		$f = preg_match( '/^#[0-9a-fA-F]{6}$/', (string) $fill ) ? (string) $fill : '#00AFF0';
+		return '<svg class="creatorreactor-onlyfans-oauth-svg" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" width="' . $w . '" height="' . $w . '" fill="' . $f . '" aria-hidden="true" focusable="false">'
+			. '<path d="M24 4.003h-4.015c-3.45 0-5.3.197-6.748 1.957a7.996 7.996 0 1 0 2.103 9.211c3.182-.231 5.39-2.134 6.085-5.173 0 0-2.399.585-4.43 0 4.018-.777 6.333-3.037 7.005-5.995zM5.61 11.999A2.391 2.391 0 0 1 9.28 9.97a2.966 2.966 0 0 1 2.998-2.528h.008c-.92 1.778-1.407 3.352-1.998 5.263A2.392 2.392 0 0 1 5.61 12Zm2.386-7.996a7.996 7.996 0 1 0 7.996 7.996 7.996 7.996 0 0 0-7.996-7.996Zm0 10.394A2.399 2.399 0 1 1 10.395 12a2.396 2.396 0 0 1-2.399 2.398Z"/>'
+			. '</svg>';
+	}
+
+	/**
+	 * Admin settings: non-interactive preview of standard vs minimal OnlyFans / OFAuth-style control.
+	 *
+	 * @param string $variant `standard` or `minimal`.
+	 * @return string HTML
+	 */
+	public static function onlyfans_oauth_admin_preview_chip( $variant ) {
+		$variant = ( $variant === 'minimal' ) ? 'minimal' : 'standard';
+		$label   = __( 'Link OnlyFans account', 'wp-creatorreactor' );
+		$accent  = self::ONLYFANS_OAUTH_ADMIN_ACCENT;
+		if ( $variant === 'minimal' ) {
+			return '<span class="creatorreactor-onlyfans-oauth-link creatorreactor-onlyfans-oauth-link--minimal creatorreactor-onlyfans-oauth--admin-preview">'
+				. self::onlyfans_preview_glyph_svg( self::ONLYFANS_MINIMAL_ICON_SIZE_PX, $accent )
+				. '</span>';
+		}
+		return '<span class="creatorreactor-onlyfans-oauth-link creatorreactor-onlyfans-oauth-link--standard creatorreactor-onlyfans-oauth--admin-preview">'
+			. self::onlyfans_preview_glyph_svg( 22, $accent )
+			. '<span class="creatorreactor-onlyfans-oauth-label">' . esc_html( $label ) . '</span>'
+			. '</span>';
+	}
+
+	/**
 	 * @param array<string, string> $atts Attributes.
 	 */
 	public static function google_oauth( $atts = [] ) {
@@ -365,17 +510,17 @@ class Shortcodes {
 		$variant = ( isset( $atts['variant'] ) && $atts['variant'] === 'minimal' ) ? 'minimal' : 'standard';
 
 		if ( Admin_Settings::is_broker_mode() ) {
-			return '<p class="creatorreactor-google-oauth-unavailable">' . esc_html__( 'Sign in with Google is not available in Agency (broker) mode.', 'creatorreactor' ) . '</p>';
+			return '<p class="creatorreactor-google-oauth-unavailable">' . esc_html__( 'Sign in with Google is not available in Agency (broker) mode.', 'wp-creatorreactor' ) . '</p>';
 		}
 
 		if ( Role_Impersonation::effective_is_logged_in_for_creatorreactor_gates() ) {
 			$dashboard = admin_url();
 			$home      = home_url( '/' );
 			return '<p class="creatorreactor-google-oauth-wrap creatorreactor-google-oauth-logged-in">'
-				. esc_html__( 'You are already signed in.', 'creatorreactor' ) . ' '
-				. '<a href="' . esc_url( $dashboard ) . '">' . esc_html__( 'Dashboard', 'creatorreactor' ) . '</a>'
+				. esc_html__( 'You are already signed in.', 'wp-creatorreactor' ) . ' '
+				. '<a href="' . esc_url( $dashboard ) . '">' . esc_html__( 'Dashboard', 'wp-creatorreactor' ) . '</a>'
 				. ' <span class="creatorreactor-google-oauth-logged-in-sep" aria-hidden="true">—</span> '
-				. '<a href="' . esc_url( wp_logout_url( $home ) ) . '">' . esc_html__( 'Log out', 'creatorreactor' ) . '</a>'
+				. '<a href="' . esc_url( wp_logout_url( $home ) ) . '">' . esc_html__( 'Log out', 'wp-creatorreactor' ) . '</a>'
 				. '</p>';
 		}
 
@@ -441,7 +586,7 @@ class Shortcodes {
 
 		self::schedule_google_oauth_footer_style();
 
-		$label = __( 'Sign in with Google', 'creatorreactor' );
+		$label = __( 'Sign in with Google', 'wp-creatorreactor' );
 		$style = $variant === 'minimal'
 			? 'logo_only'
 			: Admin_Settings::get_google_login_button_style();
@@ -476,7 +621,7 @@ class Shortcodes {
 	 */
 	public static function google_oauth_admin_preview_chip( $style_slug ) {
 		$style_slug = Admin_Settings::sanitize_google_login_button_style( (string) $style_slug );
-		$label      = __( 'Sign in with Google', 'creatorreactor' );
+		$label      = __( 'Sign in with Google', 'wp-creatorreactor' );
 		$class      = 'creatorreactor-google-oauth-link creatorreactor-google-oauth-style--' . sanitize_html_class( $style_slug ) . ' creatorreactor-google-oauth--admin-preview';
 		$inner      = self::google_oauth_button_inner_html( $style_slug, $label );
 		return '<span class="' . esc_attr( $class ) . '">'
@@ -507,10 +652,7 @@ class Shortcodes {
 	 */
 	private static function google_oauth_button_inner_html( $style, $label ) {
 		$style = Admin_Settings::sanitize_google_login_button_style( $style );
-		if ( 'text_outline' === $style ) {
-			return '<span class="creatorreactor-google-oauth-button">' . esc_html( $label ) . '</span>';
-		}
-		$svg = self::google_oauth_brand_svg();
+		$svg   = self::google_oauth_brand_svg();
 		if ( 'logo_only' === $style ) {
 			return '<span class="creatorreactor-google-oauth-button-inner creatorreactor-google-oauth-button-inner--logo-only">' . $svg . '</span>';
 		}
@@ -552,17 +694,6 @@ class Shortcodes {
 .creatorreactor-google-oauth-svg {
 	display: block;
 	flex-shrink: 0;
-}
-.creatorreactor-google-oauth-link.creatorreactor-google-oauth-style--text_outline {
-	color: #1a73e8;
-	border: 1px solid #dadce0;
-	border-radius: 4px;
-	padding: 10px 16px;
-	font-weight: 600;
-	font-size: 14px;
-}
-.creatorreactor-google-oauth-style--text_outline .creatorreactor-google-oauth-button {
-	display: inline-block;
 }
 .creatorreactor-google-oauth-link.creatorreactor-google-oauth-style--standard_light {
 	color: #1f1f1f;

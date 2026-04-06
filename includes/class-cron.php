@@ -111,7 +111,8 @@ class Cron {
 		$schedules[ $key ] = [
 			'interval' => $mins * 60,
 			'display'  => sprintf(
-				esc_html__( 'Every %d minutes', 'creatorreactor' ),
+				/* translators: %d: Cron interval in minutes. */
+				esc_html__( 'Every %d minutes', 'wp-creatorreactor' ),
 				$mins
 			),
 		];
@@ -155,6 +156,7 @@ class Cron {
 			update_option( Admin_Settings::OPTION_LAST_SYNC, [ 'time' => time(), 'success' => $ok ] );
 		} catch ( \Throwable $e ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug-only when WP_DEBUG is on.
 				error_log( 'CreatorReactor run_sync error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
 			}
 			Admin_Settings::set_last_error( 'Sync failed: ' . $e->getMessage() );

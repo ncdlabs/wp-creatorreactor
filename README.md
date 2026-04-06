@@ -11,7 +11,7 @@ WordPress plugin for OAuth, scheduled subscriber/follower sync, and entitlement 
 - WordPress **5.9** or later  
 - PHP **8.1** or later  
 - HTTPS in production (OAuth and token handling)  
-- **Elementor** (optional) — only needed if you use the Elementor widgets; shortcodes and blocks work without it  
+- **Elementor** (optional) — only needed if you use the Elementor widgets; shortcodes and blocks work without it
 
 ## Overview
 
@@ -19,10 +19,12 @@ The plugin stores synced rows in `wp_*creatorreactor_entitlements` (table name c
 
 ## Operating modes
 
-| Mode | Behavior |
-|------|----------|
-| **Creator** (direct) | OAuth and API calls go straight to **Fanvue** (default `auth.fanvue.com` + `api.fanvue.com`). **Required:** OAuth Client ID and Client Secret, redirect URI matching your app, and scopes as shown in **Settings → CreatorReactor**. |
-| **Agency** (broker) | OAuth is handled by an external broker (default broker URL `https://auth.ncdlabs.com`; configurable). **Required:** broker URL and **Site ID** from the broker admin. **Optional:** OAuth Client ID, redirect URI, and scopes — they are only appended to the broker connect URL when set; the client secret is **not** used in Agency mode (authentication uses a JWT after connect). Subscriber/follower sync uses the broker-backed API path. |
+
+| Mode                 | Behavior                                                                                                                                                                                                                                                                                                                                                                                                                                         |
+| -------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| **Creator** (direct) | OAuth and API calls go straight to **Fanvue** (default `auth.fanvue.com` + `api.fanvue.com`). **Required:** OAuth Client ID and Client Secret, redirect URI matching your app, and scopes as shown in **Settings → CreatorReactor**.                                                                                                                                                                                                             |
+| **Agency** (broker)  | OAuth is handled by an external broker (default broker URL `https://auth.ncdlabs.com`; configurable). **Required:** broker URL and **Site ID** from the broker admin. **Optional:** OAuth Client ID, redirect URI, and scopes — they are only appended to the broker connect URL when set; the client secret is **not** used in Agency mode (authentication uses a JWT after connect). Subscriber/follower sync uses the broker-backed API path. |
+
 
 Choose **Creator** or **Agency** under **Authentication Modes** in plugin settings. The broker REST client registers in all modes so OAuth redirects such as `…/broker-callback` always resolve (for example when the Fanvue app redirect URI does not match the current mode).
 
@@ -63,18 +65,20 @@ Broker mode: WordPress → Broker (OAuth / token) → Fanvue API via broker prox
 - **Entitlements API** — PHP helpers to test access and list active subscribers by tier and optional product.  
 - **Shortcodes** — `[follower]`, `[subscriber]`, `[logged_out]`, `[logged_in]`, `[has_tier]`, `[onboarding_incomplete]`, `[onboarding_complete]`, `[fanvue_connected]`, `[fanvue_not_connected]`, `[fanvue_login_button]` (see **Shortcodes** tab in settings).  
 - **Gutenberg** — Blocks in category **CreatorReactor** for follower/subscriber gates, logged-in/logged-out visibility, tier checks, onboarding status, Fanvue connected state, and Login with Fanvue (same rules as shortcodes).  
-- **Elementor** — Widgets in category **CreatorReactor** for the same gate types plus Fanvue OAuth and onboarding form output.  
+- **Elementor** — Widgets in category **CreatorReactor** for the same gate types plus Fanvue OAuth and onboarding form output.
 
 ## WordPress admin
 
 **Settings → CreatorReactor** includes:
 
-| Tab | Purpose |
-|-----|---------|
-| **Dashboard** | Connection status, OAuth start, high-level controls |
-| **Users** | Entitlements table view, sync tooling |
+
+| Tab            | Purpose                                                                    |
+| -------------- | -------------------------------------------------------------------------- |
+| **Dashboard**  | Connection status, OAuth start, high-level controls                        |
+| **Users**      | Entitlements table view, sync tooling                                      |
 | **Shortcodes** | Shortcode/block/widget reference and Fanvue redirect URI for visitor OAuth |
-| **Settings** | OAuth, sync, and product-specific options (sidebar: OAuth, Sync) |
+| **Settings**   | OAuth, sync, and product-specific options (sidebar: OAuth, Sync)           |
+
 
 ## Configuration
 
@@ -86,13 +90,15 @@ Official Fanvue walkthrough: **[OAuth Quick Start](https://api.fanvue.com/docs/a
 
 That guide matches what this plugin implements for **Creator** (direct) mode:
 
-| Fanvue docs | This plugin |
-|-------------|-------------|
-| PKCE with `code_challenge_method=S256` is **required** | Implemented: verifier/challenge generated per authorize request; verifier recovered at callback for token exchange |
-| Authorization request uses `client_id`, `redirect_uri`, `response_type=code`, `scope`, `state`, PKCE params | Same query shape against your configured **Authorization URL** |
+
+| Fanvue docs                                                                                                              | This plugin                                                                                                                               |
+| ------------------------------------------------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| PKCE with `code_challenge_method=S256` is **required**                                                                   | Implemented: verifier/challenge generated per authorize request; verifier recovered at callback for token exchange                        |
+| Authorization request uses `client_id`, `redirect_uri`, `response_type=code`, `scope`, `state`, PKCE params              | Same query shape against your configured **Authorization URL**                                                                            |
 | Token exchange uses `grant_type=authorization_code`, `code`, `redirect_uri`, `code_verifier`, plus client authentication | Implemented via `POST` to your configured **Token URL** with HTTP Basic (`client_id`:`client_secret`) per existing `CreatorReactor_OAuth` |
 
-For **Creator** mode, defaults match Fanvue’s OAuth hosts: **`https://auth.fanvue.com/oauth2/auth`**, **`https://auth.fanvue.com/oauth2/token`**, and API base **`https://api.fanvue.com`**. Override **OAuth → Endpoints** or **API Base URL** in settings only if you need a different environment. Register the same **Redirect URI** in the [Fanvue developer portal](https://fanvue.com/developers/apps).
+
+For **Creator** mode, defaults match Fanvue’s OAuth hosts: `**https://auth.fanvue.com/oauth2/auth`**, `**https://auth.fanvue.com/oauth2/token**`, and API base `**https://api.fanvue.com**`. Override **OAuth → Endpoints** or **API Base URL** in settings only if you need a different environment. Register the same **Redirect URI** in the [Fanvue developer portal](https://fanvue.com/developers/apps).
 
 Default scopes match Fanvue’s quick start: `openid offline_access offline read:self`. If your OAuth app is granted extra scopes (e.g. `read:fan`), add them under **Advanced → Scopes**.
 
@@ -100,7 +106,7 @@ Default scopes match Fanvue’s quick start: `openid offline_access offline read
 
 Namespace: `CreatorReactor\Entitlements`.
 
-Product slugs include `fanvue` (canonical; legacy `creatorreactor` is normalized to this) and `onlyfans` (see `Entitlements::PRODUCT_*`).
+Product slugs include `fanvue` (canonical; legacy `creatorreactor` is normalized to this) and `onlyfans` (see `Entitlements::PRODUCT_`*).
 
 ```php
 // Any active subscription (all products)
@@ -128,7 +134,7 @@ Higher-level wrappers for profile/subscribers/followers (respecting direct vs br
 - OAuth tokens encrypted at rest  
 - PKCE support for the OAuth flow  
 - HTTPS expected for production  
-- Client secret and related fields handled via the plugin’s encrypted storage patterns  
+- Client secret and related fields handled via the plugin’s encrypted storage patterns
 
 ## Repository layout
 
@@ -203,7 +209,7 @@ From the plugin root:
 ./build-zip.sh
 ```
 
-This reads the version from `creatorreactor.php` and writes **`wp-creatorreactor-<version>.zip`** (by default) whose root is a **single folder** `wp-creatorreactor/` containing `creatorreactor.php`, `uninstall.php`, and runtime directories (`includes/`, `js/`, `css/`, `templates/`, `img/`, `assets/`, and `languages/` if present). The zip **filename** matches the folder slug so you do not confuse it with an older `creatorreactor-*.zip` that used a different directory name.
+This reads the version from `creatorreactor.php` and writes `**wp-creatorreactor-<version>.zip**` (by default) whose root is a **single folder** `wp-creatorreactor/` containing `creatorreactor.php`, `uninstall.php`, and runtime directories (`includes/`, `js/`, `css/`, `templates/`, `img/`, `assets/`, and `languages/` if present). The zip **filename** matches the folder slug so you do not confuse it with an older `creatorreactor-*.zip` that used a different directory name.
 
 WordPress treats an upload as the **same** plugin only when that folder name matches the existing path under `wp-content/plugins/` (for example `…/plugins/wp-creatorreactor/creatorreactor.php`). If the names differ, WordPress installs a **second** copy with the same plugin name.
 

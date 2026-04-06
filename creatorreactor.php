@@ -8,7 +8,7 @@
  * Author URI: https://ncdlabs.com
  * License: GPL v2 or later
  * License URI: https://www.gnu.org/licenses/gpl-2.0.html
- * Text Domain: creatorreactor
+ * Text Domain: wp-creatorreactor
  * Domain Path: /languages
  * Requires at least: 5.9
  * Requires PHP: 8.1
@@ -41,7 +41,7 @@ require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-broker-client.php';
  */
 function creatorreactor_load_textdomain() {
 	load_plugin_textdomain(
-		'creatorreactor',
+		'wp-creatorreactor',
 		false,
 		dirname( plugin_basename( __FILE__ ) ) . '/languages'
 	);
@@ -66,14 +66,16 @@ function creatorreactor_init() {
 		\CreatorReactor\Plugin::bootstrap();
 	} catch ( \Throwable $e ) {
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug-only when WP_DEBUG is on.
 			error_log( 'CreatorReactor init error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
 		}
 		try {
 			\CreatorReactor\Admin_Settings::set_critical_error(
-				__( 'Initialization error:', 'creatorreactor' ) . ' ' . $e->getMessage()
+				__( 'Initialization error:', 'wp-creatorreactor' ) . ' ' . $e->getMessage()
 			);
 		} catch ( \Throwable $inner ) {
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug-only when WP_DEBUG is on.
 				error_log( 'CreatorReactor critical error logging failed: ' . $inner->getMessage() );
 			}
 		}
@@ -94,9 +96,10 @@ function creatorreactor_activate() {
 		CreatorReactor\Onboarding::activate_flush_rewrite_rules();
 	} catch ( \Throwable $e ) {
 		CreatorReactor\Admin_Settings::set_critical_error(
-			__( 'Activation error:', 'creatorreactor' ) . ' ' . $e->getMessage() . ' (' . basename( $e->getFile() ) . ':' . $e->getLine() . ')'
+			__( 'Activation error:', 'wp-creatorreactor' ) . ' ' . $e->getMessage() . ' (' . basename( $e->getFile() ) . ':' . $e->getLine() . ')'
 		);
 		if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+			// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug-only when WP_DEBUG is on.
 			error_log( 'CreatorReactor activation error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
 		}
 	}

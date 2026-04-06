@@ -42,7 +42,7 @@ class OFAuth {
 	public static function probe_api_key_for_settings_test( $api_key ) {
 		$api_key = trim( (string) $api_key );
 		if ( $api_key === '' ) {
-			return new \WP_Error( 'ofauth_probe_no_key', __( 'API key is empty.', 'creatorreactor' ) );
+			return new \WP_Error( 'ofauth_probe_no_key', __( 'API key is empty.', 'wp-creatorreactor' ) );
 		}
 
 		$url      = self::API_BASE_URL . '/v2/account';
@@ -61,7 +61,7 @@ class OFAuth {
 				'ofauth_probe_http',
 				sprintf(
 					/* translators: %s: WordPress HTTP error message. */
-					__( 'Could not reach OFAuth (%s). Check outbound HTTPS from this server.', 'creatorreactor' ),
+					__( 'Could not reach OFAuth (%s). Check outbound HTTPS from this server.', 'wp-creatorreactor' ),
 					$response->get_error_message()
 				)
 			);
@@ -71,7 +71,7 @@ class OFAuth {
 		if ( $code === 401 ) {
 			return new \WP_Error(
 				'ofauth_probe_unauthorized',
-				__( 'OFAuth rejected this API key (Unauthorized).', 'creatorreactor' ),
+				__( 'OFAuth rejected this API key (Unauthorized).', 'wp-creatorreactor' ),
 				[ 'http_code' => 401 ]
 			);
 		}
@@ -85,13 +85,13 @@ class OFAuth {
 				$snippet !== ''
 					? sprintf(
 						/* translators: 1: HTTP status code, 2: response snippet */
-						__( 'OFAuth returned HTTP %1$s: %2$s', 'creatorreactor' ),
+						__( 'OFAuth returned HTTP %1$s: %2$s', 'wp-creatorreactor' ),
 						(string) $code,
 						$snippet
 					)
 					: sprintf(
 						/* translators: %s: HTTP status code */
-						__( 'OFAuth returned HTTP %s.', 'creatorreactor' ),
+						__( 'OFAuth returned HTTP %s.', 'wp-creatorreactor' ),
 						(string) $code
 					),
 				[ 'http_code' => $code ]

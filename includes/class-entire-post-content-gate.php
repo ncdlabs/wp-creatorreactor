@@ -77,24 +77,24 @@ final class Entire_Post_Content_Gate {
 		$document->start_controls_section(
 			'creatorreactor_document_gate_control_section',
 			[
-				'label' => esc_html__( 'CreatorReactor', 'creatorreactor' ),
+				'label' => esc_html__( 'CreatorReactor', 'wp-creatorreactor' ),
 				'tab'   => \Elementor\Controls_Manager::TAB_SETTINGS,
 			]
 		);
 		$document->add_control(
 			'creatorreactor_document_gate',
 			[
-				'label'       => esc_html__( 'Gate entire page', 'creatorreactor' ),
+				'label'       => esc_html__( 'Gate entire page', 'wp-creatorreactor' ),
 				'type'        => \Elementor\Controls_Manager::SELECT,
-				'description' => esc_html__( 'Hides the full page body for visitors who do not match (same as wrapping everything in the matching shortcode).', 'creatorreactor' ),
+				'description' => esc_html__( 'Hides the full page body for visitors who do not match (same as wrapping everything in the matching shortcode).', 'wp-creatorreactor' ),
 				'options'     => [
-					''                    => esc_html__( 'None', 'creatorreactor' ),
-					'subscriber'          => esc_html__( 'Subscriber only', 'creatorreactor' ),
-					'follower'            => esc_html__( 'Follower only', 'creatorreactor' ),
-					'logged_in'           => esc_html__( 'Any logged-in user', 'creatorreactor' ),
-					'logged_out'          => esc_html__( 'Logged-out visitors only', 'creatorreactor' ),
-					'fanvue_connected'    => esc_html__( 'Fanvue linked', 'creatorreactor' ),
-					'fanvue_not_connected' => esc_html__( 'Fanvue not linked', 'creatorreactor' ),
+					''                    => esc_html__( 'None', 'wp-creatorreactor' ),
+					'subscriber'          => esc_html__( 'Subscriber only', 'wp-creatorreactor' ),
+					'follower'            => esc_html__( 'Follower only', 'wp-creatorreactor' ),
+					'logged_in'           => esc_html__( 'Any logged-in user', 'wp-creatorreactor' ),
+					'logged_out'          => esc_html__( 'Logged-out visitors only', 'wp-creatorreactor' ),
+					'fanvue_connected'    => esc_html__( 'Fanvue linked', 'wp-creatorreactor' ),
+					'fanvue_not_connected' => esc_html__( 'Fanvue not linked', 'wp-creatorreactor' ),
 				],
 				'default'     => self::get_gate_for_post( $post_id ),
 				'label_block' => true,
@@ -183,7 +183,7 @@ final class Entire_Post_Content_Gate {
 			if ( post_type_exists( $pt ) ) {
 				add_meta_box(
 					'creatorreactor_document_gate',
-					__( 'CreatorReactor: gate entire post', 'creatorreactor' ),
+					__( 'CreatorReactor: gate entire post', 'wp-creatorreactor' ),
 					[ __CLASS__, 'render_meta_box' ],
 					$pt,
 					'side',
@@ -204,18 +204,18 @@ final class Entire_Post_Content_Gate {
 		$current = self::get_gate_for_post( (int) $post->ID );
 		?>
 		<p class="description" style="margin-top:0;">
-			<?php esc_html_e( 'Wraps the full front-end post body (including Elementor output) in the chosen gate. Use when content is not inside CreatorReactor Elementor widgets.', 'creatorreactor' ); ?>
+			<?php esc_html_e( 'Wraps the full front-end post body (including Elementor output) in the chosen gate. Use when content is not inside CreatorReactor Elementor widgets.', 'wp-creatorreactor' ); ?>
 		</p>
 		<p>
-			<label for="creatorreactor_document_gate" class="screen-reader-text"><?php esc_html_e( 'Gate', 'creatorreactor' ); ?></label>
+			<label for="creatorreactor_document_gate" class="screen-reader-text"><?php esc_html_e( 'Gate', 'wp-creatorreactor' ); ?></label>
 			<select name="creatorreactor_document_gate" id="creatorreactor_document_gate" style="width:100%;">
-				<option value="" <?php selected( $current, '' ); ?>><?php esc_html_e( 'None', 'creatorreactor' ); ?></option>
-				<option value="subscriber" <?php selected( $current, 'subscriber' ); ?>><?php esc_html_e( 'Subscriber only', 'creatorreactor' ); ?></option>
-				<option value="follower" <?php selected( $current, 'follower' ); ?>><?php esc_html_e( 'Follower only', 'creatorreactor' ); ?></option>
-				<option value="logged_in" <?php selected( $current, 'logged_in' ); ?>><?php esc_html_e( 'Any logged-in user', 'creatorreactor' ); ?></option>
-				<option value="logged_out" <?php selected( $current, 'logged_out' ); ?>><?php esc_html_e( 'Logged-out visitors only', 'creatorreactor' ); ?></option>
-				<option value="fanvue_connected" <?php selected( $current, 'fanvue_connected' ); ?>><?php esc_html_e( 'Fanvue linked', 'creatorreactor' ); ?></option>
-				<option value="fanvue_not_connected" <?php selected( $current, 'fanvue_not_connected' ); ?>><?php esc_html_e( 'Fanvue not linked', 'creatorreactor' ); ?></option>
+				<option value="" <?php selected( $current, '' ); ?>><?php esc_html_e( 'None', 'wp-creatorreactor' ); ?></option>
+				<option value="subscriber" <?php selected( $current, 'subscriber' ); ?>><?php esc_html_e( 'Subscriber only', 'wp-creatorreactor' ); ?></option>
+				<option value="follower" <?php selected( $current, 'follower' ); ?>><?php esc_html_e( 'Follower only', 'wp-creatorreactor' ); ?></option>
+				<option value="logged_in" <?php selected( $current, 'logged_in' ); ?>><?php esc_html_e( 'Any logged-in user', 'wp-creatorreactor' ); ?></option>
+				<option value="logged_out" <?php selected( $current, 'logged_out' ); ?>><?php esc_html_e( 'Logged-out visitors only', 'wp-creatorreactor' ); ?></option>
+				<option value="fanvue_connected" <?php selected( $current, 'fanvue_connected' ); ?>><?php esc_html_e( 'Fanvue linked', 'wp-creatorreactor' ); ?></option>
+				<option value="fanvue_not_connected" <?php selected( $current, 'fanvue_not_connected' ); ?>><?php esc_html_e( 'Fanvue not linked', 'wp-creatorreactor' ); ?></option>
 			</select>
 		</p>
 		<?php

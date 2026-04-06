@@ -42,17 +42,17 @@
 						null,
 						el(
 							PanelBody,
-							{ title: __('Container visibility', 'creatorreactor'), initialOpen: false },
+							{ title: __('Container visibility', 'wp-creatorreactor'), initialOpen: false },
 							el(SelectControl, {
-								label: __('Container visibility logic', 'creatorreactor'),
+								label: __('Container visibility logic', 'wp-creatorreactor'),
 								value: containerLogic,
 								options: [
 									{
-										label: __('AND (current): hide container if any gate fails', 'creatorreactor'),
+										label: __('AND (current): hide container if any gate fails', 'wp-creatorreactor'),
 										value: 'and'
 									},
 									{
-										label: __('OR: show container if any gate passes', 'creatorreactor'),
+										label: __('OR: show container if any gate passes', 'wp-creatorreactor'),
 										value: 'or'
 									}
 								],
@@ -84,7 +84,7 @@
 
 	registerInner(
 		'creatorreactor/follower',
-		__('CreatorReactor: Follower', 'creatorreactor'),
+		__('CreatorReactor: Follower', 'wp-creatorreactor'),
 		__(
 			'Inner blocks show only for users with an active follower entitlement.',
 			'creatorreactor'
@@ -94,7 +94,7 @@
 
 	registerInner(
 		'creatorreactor/subscriber',
-		__('CreatorReactor: Subscriber', 'creatorreactor'),
+		__('CreatorReactor: Subscriber', 'wp-creatorreactor'),
 		__(
 			'Inner blocks show only for users with an active subscriber entitlement.',
 			'creatorreactor'
@@ -104,37 +104,37 @@
 
 	registerInner(
 		'creatorreactor/logged-out',
-		__('CreatorReactor: Logged out', 'creatorreactor'),
-		__('Inner blocks show only when the visitor is not logged in.', 'creatorreactor'),
+		__('CreatorReactor: Logged out', 'wp-creatorreactor'),
+		__('Inner blocks show only when the visitor is not logged in.', 'wp-creatorreactor'),
 		'visibility'
 	);
 
 	registerInner(
 		'creatorreactor/logged-in',
-		__('CreatorReactor: Logged in', 'creatorreactor'),
-		__('Inner blocks show only when the visitor is logged in.', 'creatorreactor'),
+		__('CreatorReactor: Logged in', 'wp-creatorreactor'),
+		__('Inner blocks show only when the visitor is logged in.', 'wp-creatorreactor'),
 		'admin-users'
 	);
 
 	registerInner(
 		'creatorreactor/fanvue-connected',
-		__('CreatorReactor: Fanvue connected', 'creatorreactor'),
-		__('Inner blocks show only for logged-in users with Fanvue linked.', 'creatorreactor'),
+		__('CreatorReactor: Fanvue connected', 'wp-creatorreactor'),
+		__('Inner blocks show only for logged-in users with Fanvue linked.', 'wp-creatorreactor'),
 		'admin-links'
 	);
 
 	registerInner(
 		'creatorreactor/fanvue-not-connected',
-		__('CreatorReactor: Fanvue not connected', 'creatorreactor'),
-		__('Inner blocks show only for logged-in users without Fanvue linked.', 'creatorreactor'),
+		__('CreatorReactor: Fanvue not connected', 'wp-creatorreactor'),
+		__('Inner blocks show only for logged-in users without Fanvue linked.', 'wp-creatorreactor'),
 		'visibility'
 	);
 
 	blocks.registerBlockType('creatorreactor/fanvue-oauth', {
 		apiVersion: 3,
-		title: __('CreatorReactor: Login with Fanvue', 'creatorreactor'),
+		title: __('CreatorReactor: Login with Fanvue', 'wp-creatorreactor'),
 		description: __(
-			'Displays the Fanvue OAuth login link (Creator/direct mode). For Google sign-in, use the Shortcode block with [standard_google_login_button] or [minimal_google_login_button].',
+			'Displays the Fanvue OAuth login link (Creator/direct mode). For Google sign-in, use the Shortcode block with [standard_google_login_button] or [minimal_google_login_button]. Instagram (Meta) OAuth is configured under plugin Settings only—there is no Instagram login block.',
 			'creatorreactor'
 		),
 		category: 'creatorreactor',
@@ -149,7 +149,7 @@
 				el(
 					'div',
 					{ className: 'creatorreactor-block-hint' },
-					el('strong', null, __('Login with Fanvue', 'creatorreactor')),
+					el('strong', null, __('Login with Fanvue', 'wp-creatorreactor')),
 					' — ',
 					__(
 						'Preview matches the front end (Agency mode shows a notice).',

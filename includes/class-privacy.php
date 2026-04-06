@@ -15,8 +15,6 @@ if ( ! defined( 'ABSPATH' ) ) {
 
 class Privacy {
 
-	const EXPORTER_FRIENDLY_NAME = 'CreatorReactor Data';
-	const ERASER_FRIENDLY_NAME   = 'CreatorReactor Data';
 	const ROWS_PER_PAGE          = 200;
 	const CRON_HOOK_RETENTION_PURGE = 'creatorreactor_privacy_retention_purge';
 
@@ -69,19 +67,19 @@ class Privacy {
 		}
 		$content = '<p>' . esc_html__(
 			'CreatorReactor stores account linkage and entitlement data needed to grant content access, including identifiers (email, external UUID), entitlement status/tier, and selected onboarding profile fields.',
-			'creatorreactor'
+			'wp-creatorreactor'
 		) . '</p>';
 		$content .= '<p>' . esc_html__(
 			'CreatorReactor also stores encrypted OAuth tokens for configured integrations and operational logs (connection and sync logs) with retention limits configured in plugin settings.',
-			'creatorreactor'
+			'wp-creatorreactor'
 		) . '</p>';
 		$content .= '<p>' . esc_html__(
 			'For fan onboarding, a short-lived essential cookie may be used to complete OAuth redirect flows. This cookie is HttpOnly, SameSite=Lax, and expires automatically.',
-			'creatorreactor'
+			'wp-creatorreactor'
 		) . '</p>';
 		$content .= '<p>' . esc_html__(
 			'Data exports and erasure requests can be handled via WordPress Tools > Export Personal Data and Tools > Erase Personal Data.',
-			'creatorreactor'
+			'wp-creatorreactor'
 		) . '</p>';
 		wp_add_privacy_policy_content( 'CreatorReactor', wp_kses_post( $content ) );
 	}
@@ -144,7 +142,7 @@ class Privacy {
 	 */
 	public static function register_exporter( $exporters ) {
 		$exporters['creatorreactor-data'] = [
-			'exporter_friendly_name' => __( self::EXPORTER_FRIENDLY_NAME, 'creatorreactor' ),
+			'exporter_friendly_name' => __( 'CreatorReactor Data', 'wp-creatorreactor' ),
 			'callback'               => [ __CLASS__, 'export_personal_data' ],
 		];
 		return $exporters;
@@ -156,7 +154,7 @@ class Privacy {
 	 */
 	public static function register_eraser( $erasers ) {
 		$erasers['creatorreactor-data'] = [
-			'eraser_friendly_name' => __( self::ERASER_FRIENDLY_NAME, 'creatorreactor' ),
+			'eraser_friendly_name' => __( 'CreatorReactor Data', 'wp-creatorreactor' ),
 			'callback'             => [ __CLASS__, 'erase_personal_data' ],
 		];
 		return $erasers;
@@ -186,7 +184,7 @@ class Privacy {
 				foreach ( $values as $value ) {
 					$data[] = [
 						'group_id'    => 'creatorreactor-user-meta',
-						'group_label' => __( 'CreatorReactor User Meta', 'creatorreactor' ),
+						'group_label' => __( 'CreatorReactor User Meta', 'wp-creatorreactor' ),
 						'item_id'     => 'creatorreactor-user-' . (int) $user->ID,
 						'data'        => [
 							[
@@ -240,7 +238,7 @@ class Privacy {
 			$items_removed = true;
 			$messages[]    = sprintf(
 				/* translators: %d is the number of entitlements rows removed. */
-				__( 'Removed %d entitlement rows.', 'creatorreactor' ),
+				__( 'Removed %d entitlement rows.', 'wp-creatorreactor' ),
 				$deleted_rows
 			);
 		}
@@ -250,7 +248,7 @@ class Privacy {
 			$items_removed = true;
 			$messages[]    = sprintf(
 				/* translators: %d is the number of pending registration rows removed. */
-				__( 'Removed %d pending registration rows.', 'creatorreactor' ),
+				__( 'Removed %d pending registration rows.', 'wp-creatorreactor' ),
 				$deleted_pending
 			);
 		}
@@ -260,7 +258,7 @@ class Privacy {
 			$items_removed = true;
 			$messages[]    = sprintf(
 				/* translators: %d is the number of log entries redacted/removed. */
-				__( 'Removed %d log entries linked to this email.', 'creatorreactor' ),
+				__( 'Removed %d log entries linked to this email.', 'wp-creatorreactor' ),
 				$removed_log_entries
 			);
 		}
@@ -317,7 +315,7 @@ class Privacy {
 				}
 				$items[] = [
 					'group_id'    => 'creatorreactor-entitlements',
-					'group_label' => __( 'CreatorReactor Entitlements', 'creatorreactor' ),
+					'group_label' => __( 'CreatorReactor Entitlements', 'wp-creatorreactor' ),
 					'item_id'     => 'creatorreactor-entitlement-' . $ent_id,
 					'data'        => $item,
 				];
@@ -371,7 +369,7 @@ class Privacy {
 			++$matches;
 			$items[] = [
 				'group_id'    => 'creatorreactor-pending',
-				'group_label' => __( 'CreatorReactor Pending Registration', 'creatorreactor' ),
+				'group_label' => __( 'CreatorReactor Pending Registration', 'wp-creatorreactor' ),
 				'item_id'     => 'creatorreactor-pending-' . $option_name,
 				'data'        => [
 					[
@@ -415,17 +413,19 @@ class Privacy {
 		$table = Entitlements::get_table_name();
 		$uid   = ( $user instanceof \WP_User ) ? (int) $user->ID : 0;
 
-		$where = 'email = %s';
-		$args  = [ $email ];
+		$table_sql = esc_sql( $table );
 		if ( $uid > 0 ) {
-			$where .= ' OR wp_user_id = %d';
-			$args[] = $uid;
+			$sql = $wpdb->prepare(
+				"DELETE FROM `{$table_sql}` WHERE email = %s OR wp_user_id = %d",
+				$email,
+				$uid
+			);
+		} else {
+			$sql = $wpdb->prepare(
+				"DELETE FROM `{$table_sql}` WHERE email = %s",
+				$email
+			);
 		}
-
-		$sql = $wpdb->prepare(
-			"DELETE FROM {$table} WHERE {$where}",
-			$args
-		);
 		$wpdb->query( $sql );
 		return (int) $wpdb->rows_affected;
 	}

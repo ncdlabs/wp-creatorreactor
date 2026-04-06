@@ -141,9 +141,10 @@ final class AdminSettingsSanitizeRegressionTest extends BaseTestCase
         self::assertNotSame('', $opts['creatorreactor_oauth_client_secret']);
     }
 
-    public function testGoogleLoginButtonStyleSanitizesUnknownToTextOutline(): void
+    public function testGoogleLoginButtonStyleSanitizesUnknownToStandardLight(): void
     {
-        self::assertSame('text_outline', Admin_Settings::sanitize_google_login_button_style('not-a-style'));
+        self::assertSame('standard_light', Admin_Settings::sanitize_google_login_button_style('not-a-style'));
+        self::assertSame('standard_light', Admin_Settings::sanitize_google_login_button_style('text_outline'));
         self::assertSame('standard_light', Admin_Settings::sanitize_google_login_button_style('standard_light'));
     }
 
@@ -177,5 +178,71 @@ final class AdminSettingsSanitizeRegressionTest extends BaseTestCase
         ]);
 
         self::assertSame('logo_only', $opts[Admin_Settings::GOOGLE_LOGIN_BUTTON_STYLE_KEY]);
+    }
+
+    public function testFanvueLoginButtonVariantSanitizesUnknownToStandard(): void
+    {
+        self::assertSame('standard', Admin_Settings::sanitize_fanvue_login_button_variant('not-a-variant'));
+        self::assertSame('minimal', Admin_Settings::sanitize_fanvue_login_button_variant('minimal'));
+    }
+
+    public function testSanitizeOptionsStoresFanvueLoginButtonVariantWhenSubmitted(): void
+    {
+        $GLOBALS['creatorreactor_test_raw_options'] = [
+            'broker_mode' => false,
+            'creatorreactor_oauth_client_id' => 'x',
+            'creatorreactor_oauth_client_secret' => 'y',
+        ];
+
+        $opts = Admin_Settings::sanitize_options([
+            'authentication_mode' => 'creator',
+            Admin_Settings::FANVUE_LOGIN_BUTTON_VARIANT_KEY => 'minimal',
+        ]);
+
+        self::assertSame('minimal', $opts[Admin_Settings::FANVUE_LOGIN_BUTTON_VARIANT_KEY]);
+    }
+
+    public function testInstagramLoginButtonVariantSanitizesUnknownToStandard(): void
+    {
+        self::assertSame('standard', Admin_Settings::sanitize_instagram_login_button_variant('not-a-variant'));
+        self::assertSame('minimal', Admin_Settings::sanitize_instagram_login_button_variant('minimal'));
+    }
+
+    public function testSanitizeOptionsStoresInstagramLoginButtonVariantWhenSubmitted(): void
+    {
+        $GLOBALS['creatorreactor_test_raw_options'] = [
+            'broker_mode' => false,
+            'creatorreactor_oauth_client_id' => 'x',
+            'creatorreactor_oauth_client_secret' => 'y',
+        ];
+
+        $opts = Admin_Settings::sanitize_options([
+            'authentication_mode' => 'creator',
+            Admin_Settings::INSTAGRAM_LOGIN_BUTTON_VARIANT_KEY => 'minimal',
+        ]);
+
+        self::assertSame('minimal', $opts[Admin_Settings::INSTAGRAM_LOGIN_BUTTON_VARIANT_KEY]);
+    }
+
+    public function testOnlyfansLoginButtonVariantSanitizesUnknownToStandard(): void
+    {
+        self::assertSame('standard', Admin_Settings::sanitize_onlyfans_login_button_variant('not-a-variant'));
+        self::assertSame('minimal', Admin_Settings::sanitize_onlyfans_login_button_variant('minimal'));
+    }
+
+    public function testSanitizeOptionsStoresOnlyfansLoginButtonVariantWhenSubmitted(): void
+    {
+        $GLOBALS['creatorreactor_test_raw_options'] = [
+            'broker_mode' => false,
+            'creatorreactor_oauth_client_id' => 'x',
+            'creatorreactor_oauth_client_secret' => 'y',
+        ];
+
+        $opts = Admin_Settings::sanitize_options([
+            'authentication_mode' => 'creator',
+            Admin_Settings::ONLYFANS_LOGIN_BUTTON_VARIANT_KEY => 'minimal',
+        ]);
+
+        self::assertSame('minimal', $opts[Admin_Settings::ONLYFANS_LOGIN_BUTTON_VARIANT_KEY]);
     }
 }

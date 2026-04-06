@@ -29,6 +29,7 @@ class Plugin {
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-broker-client.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-creatorreactor-fan-oauth.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-google-oauth.php';
+			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-instagram-oauth.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-ofauth.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-creatorreactor-onboarding.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-creatorreactor-shortcodes.php';
@@ -78,14 +79,16 @@ class Plugin {
 		} catch ( \Throwable $e ) { // @codeCoverageIgnore
 			// @codeCoverageIgnoreStart
 			if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+				// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug-only when WP_DEBUG is on.
 				error_log( 'CreatorReactor bootstrap error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
 			}
 			try {
 				Admin_Settings::set_critical_error(
-					__( 'Bootstrap error:', 'creatorreactor' ) . ' ' . $e->getMessage()
+					__( 'Bootstrap error:', 'wp-creatorreactor' ) . ' ' . $e->getMessage()
 				);
 			} catch ( \Throwable $inner ) {
 				if ( defined( 'WP_DEBUG' ) && WP_DEBUG ) {
+					// phpcs:ignore WordPress.PHP.DevelopmentFunctions.error_log_error_log -- Debug-only when WP_DEBUG is on.
 					error_log( 'CreatorReactor error logging failed: ' . $inner->getMessage() );
 				}
 			}

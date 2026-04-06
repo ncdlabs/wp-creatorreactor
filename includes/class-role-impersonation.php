@@ -93,7 +93,7 @@ final class Role_Impersonation {
 	public static function display_label_for_impersonation_choice( string $slug ): string {
 		$slug = \sanitize_key( $slug );
 		if ( $slug === self::IMPERSONATION_LOGGED_OUT_SLUG ) {
-			return __( 'Logged Out', 'creatorreactor' );
+			return __( 'Logged Out', 'wp-creatorreactor' );
 		}
 		$labels = self::widget_labels_for_creatorreactor_roles();
 		if ( isset( $labels[ $slug ] ) ) {
@@ -113,9 +113,9 @@ final class Role_Impersonation {
 	 */
 	public static function widget_labels_for_creatorreactor_roles(): array {
 		return [
-			'creatorreactor_follower'   => __( 'Follower', 'creatorreactor' ),
-			'creatorreactor_subscriber' => __( 'Subscriber', 'creatorreactor' ),
-			'creatorreactor_null'       => __( 'No Role', 'creatorreactor' ),
+			'creatorreactor_follower'   => __( 'Follower', 'wp-creatorreactor' ),
+			'creatorreactor_subscriber' => __( 'Subscriber', 'wp-creatorreactor' ),
+			'creatorreactor_null'       => __( 'No Role', 'wp-creatorreactor' ),
 		];
 	}
 
@@ -222,12 +222,12 @@ final class Role_Impersonation {
 		}
 		\check_ajax_referer( 'creatorreactor_role_impersonate', 'nonce' );
 		if ( ! \is_user_logged_in() ) {
-			\wp_send_json_error( [ 'message' => __( 'Not logged in.', 'creatorreactor' ) ], 403 );
+			\wp_send_json_error( [ 'message' => __( 'Not logged in.', 'wp-creatorreactor' ) ], 403 );
 		}
 		$user = \wp_get_current_user();
 		$uid  = (int) ( $user ? $user->ID : 0 );
 		if ( $uid < 1 || ! self::user_id_has_administrator_role_in_meta( $uid ) ) {
-			\wp_send_json_error( [ 'message' => __( 'Forbidden.', 'creatorreactor' ) ], 403 );
+			\wp_send_json_error( [ 'message' => __( 'Forbidden.', 'wp-creatorreactor' ) ], 403 );
 		}
 		$role = isset( $_POST['role'] ) ? \sanitize_key( \wp_unslash( (string) $_POST['role'] ) ) : '';
 		if ( $role === '' ) {
@@ -240,7 +240,7 @@ final class Role_Impersonation {
 			);
 		}
 		if ( ! self::is_allowed_impersonation_role( $role ) ) {
-			\wp_send_json_error( [ 'message' => __( 'Invalid role.', 'creatorreactor' ) ], 400 );
+			\wp_send_json_error( [ 'message' => __( 'Invalid role.', 'wp-creatorreactor' ) ], 400 );
 		}
 		self::set_impersonation_cookie( $uid, $role );
 		\wp_send_json_success(
@@ -315,12 +315,12 @@ final class Role_Impersonation {
 				'current'       => $current,
 				'currentLabel'  => ( $current !== null && $current !== '' ) ? self::display_label_for_impersonation_choice( $current ) : '',
 				'i18n'         => [
-					'title'             => __( 'Impersonate Role', 'creatorreactor' ),
-					'selectPlaceholder' => __( 'Select role…', 'creatorreactor' ),
-					'impersonate'       => __( 'Impersonate', 'creatorreactor' ),
-					'stop'              => __( 'Stop impersonating', 'creatorreactor' ),
-					'viewingAs'         => __( 'Viewing as:', 'creatorreactor' ),
-					'error'             => __( 'Something went wrong.', 'creatorreactor' ),
+					'title'             => __( 'Impersonate Role', 'wp-creatorreactor' ),
+					'selectPlaceholder' => __( 'Select role…', 'wp-creatorreactor' ),
+					'impersonate'       => __( 'Impersonate', 'wp-creatorreactor' ),
+					'stop'              => __( 'Stop impersonating', 'wp-creatorreactor' ),
+					'viewingAs'         => __( 'Viewing as:', 'wp-creatorreactor' ),
+					'error'             => __( 'Something went wrong.', 'wp-creatorreactor' ),
 				],
 			]
 		);

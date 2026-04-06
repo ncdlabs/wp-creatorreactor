@@ -72,7 +72,7 @@ class Blocks {
 		}
 		$categories[] = [
 			'slug'  => $slug,
-			'title' => esc_html__( 'CreatorReactor', 'creatorreactor' ),
+			'title' => esc_html__( 'CreatorReactor', 'wp-creatorreactor' ),
 			'icon'  => null,
 		];
 		return $categories;
@@ -117,7 +117,7 @@ class Blocks {
 		);
 
 		if ( function_exists( 'wp_set_script_translations' ) ) {
-			wp_set_script_translations( 'creatorreactor-blocks-editor', 'creatorreactor', CREATORREACTOR_PLUGIN_DIR . 'languages' );
+			wp_set_script_translations( 'creatorreactor-blocks-editor', 'wp-creatorreactor', CREATORREACTOR_PLUGIN_DIR . 'languages' );
 		}
 
 		$inner_shared = [
@@ -136,8 +136,8 @@ class Blocks {
 			array_merge(
 				$inner_shared,
 				[
-					'title'           => __( 'CreatorReactor: Follower', 'creatorreactor' ),
-					'description'     => __( 'Inner blocks visible only to users with an active follower entitlement.', 'creatorreactor' ),
+					'title'           => __( 'CreatorReactor: Follower', 'wp-creatorreactor' ),
+					'description'     => __( 'Inner blocks visible only to users with an active follower entitlement.', 'wp-creatorreactor' ),
 					'icon'            => 'groups',
 					'attributes'     => [
 						'container_logic' => [
@@ -155,8 +155,8 @@ class Blocks {
 			array_merge(
 				$inner_shared,
 				[
-					'title'           => __( 'CreatorReactor: Subscriber', 'creatorreactor' ),
-					'description'     => __( 'Inner blocks visible only to users with an active subscriber entitlement.', 'creatorreactor' ),
+					'title'           => __( 'CreatorReactor: Subscriber', 'wp-creatorreactor' ),
+					'description'     => __( 'Inner blocks visible only to users with an active subscriber entitlement.', 'wp-creatorreactor' ),
 					'icon'            => 'star-filled',
 					'attributes'     => [
 						'container_logic' => [
@@ -174,8 +174,8 @@ class Blocks {
 			array_merge(
 				$inner_shared,
 				[
-					'title'           => __( 'CreatorReactor: Logged out', 'creatorreactor' ),
-					'description'     => __( 'Inner blocks visible only to visitors who are not logged in.', 'creatorreactor' ),
+					'title'           => __( 'CreatorReactor: Logged out', 'wp-creatorreactor' ),
+					'description'     => __( 'Inner blocks visible only to visitors who are not logged in.', 'wp-creatorreactor' ),
 					'icon'            => 'visibility',
 					'attributes'     => [
 						'container_logic' => [
@@ -193,8 +193,8 @@ class Blocks {
 			array_merge(
 				$inner_shared,
 				[
-					'title'           => __( 'CreatorReactor: Logged in', 'creatorreactor' ),
-					'description'     => __( 'Inner blocks visible only to logged-in users.', 'creatorreactor' ),
+					'title'           => __( 'CreatorReactor: Logged in', 'wp-creatorreactor' ),
+					'description'     => __( 'Inner blocks visible only to logged-in users.', 'wp-creatorreactor' ),
 					'icon'            => 'admin-users',
 					'attributes'     => [
 						'container_logic' => [
@@ -212,8 +212,8 @@ class Blocks {
 			array_merge(
 				$inner_shared,
 				[
-					'title'           => __( 'CreatorReactor: Has tier', 'creatorreactor' ),
-					'description'     => __( 'Inner blocks visible only when a logged-in user has an active tier (optional product).', 'creatorreactor' ),
+					'title'           => __( 'CreatorReactor: Has tier', 'wp-creatorreactor' ),
+					'description'     => __( 'Inner blocks visible only when a logged-in user has an active tier (optional product).', 'wp-creatorreactor' ),
 					'icon'            => 'awards',
 					'attributes'      => [
 						'tier'    => [
@@ -239,8 +239,8 @@ class Blocks {
 			array_merge(
 				$inner_shared,
 				[
-					'title'           => __( 'CreatorReactor: Fanvue connected', 'creatorreactor' ),
-					'description'     => __( 'Inner blocks visible only to logged-in users with Fanvue OAuth linked.', 'creatorreactor' ),
+					'title'           => __( 'CreatorReactor: Fanvue connected', 'wp-creatorreactor' ),
+					'description'     => __( 'Inner blocks visible only to logged-in users with Fanvue OAuth linked.', 'wp-creatorreactor' ),
 					'icon'            => 'admin-links',
 					'attributes'     => [
 						'container_logic' => [
@@ -258,8 +258,8 @@ class Blocks {
 			array_merge(
 				$inner_shared,
 				[
-					'title'           => __( 'CreatorReactor: Fanvue not connected', 'creatorreactor' ),
-					'description'     => __( 'Inner blocks visible only to logged-in users without Fanvue OAuth linked.', 'creatorreactor' ),
+					'title'           => __( 'CreatorReactor: Fanvue not connected', 'wp-creatorreactor' ),
+					'description'     => __( 'Inner blocks visible only to logged-in users without Fanvue OAuth linked.', 'wp-creatorreactor' ),
 					'icon'            => 'editor-unlink',
 					'attributes'     => [
 						'container_logic' => [
@@ -276,8 +276,8 @@ class Blocks {
 			'creatorreactor/fanvue-oauth',
 			[
 				'api_version'     => 3,
-				'title'           => __( 'CreatorReactor: Login with Fanvue', 'creatorreactor' ),
-				'description'     => __( 'Renders the Fanvue OAuth login link (Creator/direct mode).', 'creatorreactor' ),
+				'title'           => __( 'CreatorReactor: Login with Fanvue', 'wp-creatorreactor' ),
+				'description'     => __( 'Renders the Fanvue OAuth login control using Login Button Appearance under Settings → Fanvue (Creator/direct mode).', 'wp-creatorreactor' ),
 				'category'        => 'creatorreactor',
 				'icon'            => 'admin-network',
 				'editor_script'   => 'creatorreactor-blocks-editor',

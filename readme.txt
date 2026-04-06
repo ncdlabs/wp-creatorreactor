@@ -1,8 +1,8 @@
 === CreatorReactor ===
-Contributors: ncdlabs
+Contributors: lougrossi
 Tags: oauth, membership, subscribers, elementor, login
 Requires at least: 5.9
-Tested up to: 6.8
+Tested up to: 6.9
 Stable tag: 2.0.64
 Requires PHP: 8.1
 License: GPLv2 or later

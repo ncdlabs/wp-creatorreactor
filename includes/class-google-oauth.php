@@ -147,10 +147,10 @@ class Google_OAuth {
 		$redirect_uri  = (string) $redirect_uri;
 
 		if ( $client_id === '' ) {
-			return new \WP_Error( 'google_probe_no_client_id', __( 'Client ID is empty.', 'creatorreactor' ) );
+			return new \WP_Error( 'google_probe_no_client_id', __( 'Client ID is empty.', 'wp-creatorreactor' ) );
 		}
 		if ( $client_secret === '' ) {
-			return new \WP_Error( 'google_probe_no_secret', __( 'Client Secret is empty.', 'creatorreactor' ) );
+			return new \WP_Error( 'google_probe_no_secret', __( 'Client Secret is empty.', 'wp-creatorreactor' ) );
 		}
 
 		$response = wp_remote_post(
@@ -173,7 +173,7 @@ class Google_OAuth {
 				'google_probe_http',
 				sprintf(
 					/* translators: %s: WordPress HTTP error message. */
-					__( 'Could not reach Google (%s). Check that this server can make outbound HTTPS requests.', 'creatorreactor' ),
+					__( 'Could not reach Google (%s). Check that this server can make outbound HTTPS requests.', 'wp-creatorreactor' ),
 					$response->get_error_message()
 				)
 			);
@@ -184,7 +184,7 @@ class Google_OAuth {
 		if ( ! is_array( $data ) ) {
 			return new \WP_Error(
 				'google_probe_bad_response',
-				__( 'Google returned an unexpected response. Try again in a moment.', 'creatorreactor' )
+				__( 'Google returned an unexpected response. Try again in a moment.', 'wp-creatorreactor' )
 			);
 		}
 
@@ -201,7 +201,7 @@ class Google_OAuth {
 
 		return new \WP_Error(
 			'google_probe_failed',
-			$desc !== '' ? $desc : ( $err !== '' ? $err : __( 'Google rejected the credentials.', 'creatorreactor' ) ),
+			$desc !== '' ? $desc : ( $err !== '' ? $err : __( 'Google rejected the credentials.', 'wp-creatorreactor' ) ),
 			[ 'google_error' => $err ]
 		);
 	}
@@ -437,7 +437,7 @@ class Google_OAuth {
 		$body      = wp_remote_retrieve_body( $response );
 		$data      = json_decode( is_string( $body ) ? $body : '', true );
 		if ( $code_http < 200 || $code_http >= 300 || ! is_array( $data ) ) {
-			return new \WP_Error( 'google_token', __( 'Invalid token response from Google.', 'creatorreactor' ) );
+			return new \WP_Error( 'google_token', __( 'Invalid token response from Google.', 'wp-creatorreactor' ) );
 		}
 		return $data;
 	}
@@ -499,10 +499,10 @@ class Google_OAuth {
 	private static function insert_wp_user_from_google( $email, $name ) {
 		$email = sanitize_email( (string) $email );
 		if ( ! is_email( $email ) ) {
-			return new \WP_Error( 'invalid_email', __( 'Invalid email from Google profile.', 'creatorreactor' ) );
+			return new \WP_Error( 'invalid_email', __( 'Invalid email from Google profile.', 'wp-creatorreactor' ) );
 		}
 		if ( email_exists( $email ) ) {
-			return new \WP_Error( 'exists', __( 'A user with this email already exists.', 'creatorreactor' ) );
+			return new \WP_Error( 'exists', __( 'A user with this email already exists.', 'wp-creatorreactor' ) );
 		}
 		$login_base = sanitize_user( current( explode( '@', $email, 2 ) ), true );
 		if ( $login_base === '' ) {

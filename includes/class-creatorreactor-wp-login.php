@@ -80,7 +80,7 @@ class Login_Page {
 	 * @return string
 	 */
 	public static function filter_login_header_text( $text ) {
-		return __( 'CreatorReactor', 'creatorreactor' );
+		return __( 'CreatorReactor', 'wp-creatorreactor' );
 	}
 
 	/**
@@ -172,23 +172,23 @@ class Login_Page {
 	public static function filter_login_message_fanvue_oauth( $message ) {
 		$raw = self::get_fanvue_oauth_notice_code_from_request();
 		$map = [
-			'nonce'   => __( 'Fanvue sign-in could not start (link expired or invalid). Use the Fanvue button again.', 'creatorreactor' ),
-			'agency'  => __( 'Fanvue visitor login is not available in Agency (broker) mode.', 'creatorreactor' ),
-			'config'  => __( 'Fanvue sign-in is not configured on this site (OAuth Client ID or endpoints). Ask the site administrator to complete CreatorReactor OAuth settings.', 'creatorreactor' ),
-			'denied'  => __( 'Fanvue sign-in was cancelled or denied.', 'creatorreactor' ),
-			'oauth_redirect' => __( 'Fanvue redirect URI does not match this site. In the Fanvue app settings, add the exact visitor (fan) OAuth callback URL shown under CreatorReactor → Settings, then try again.', 'creatorreactor' ),
-			'oauth_client'   => __( 'Fanvue rejected the OAuth client. Check Client ID and Client Secret under Settings → Fanvue → OAuth and that the Fanvue app is active.', 'creatorreactor' ),
-			'oauth_request'  => __( 'Fanvue rejected the sign-in request as invalid. Try the Fanvue button again; if it keeps failing, verify the app’s redirect URLs and OAuth settings.', 'creatorreactor' ),
-			'oauth_error'    => __( 'Fanvue returned an authorization error before sign-in could finish. Try again or ask the site administrator to check CreatorReactor connection logs.', 'creatorreactor' ),
-			'state'   => __( 'Fanvue sign-in could not be verified (session expired or mismatch). Use the Fanvue button to try again.', 'creatorreactor' ),
-			'token'   => __( 'Fanvue did not return a usable token. Check OAuth Client ID, Secret, and redirect URLs under Settings → Fanvue → OAuth, then try again.', 'creatorreactor' ),
-			'profile' => __( 'Fanvue sign-in could not load profile data. Use your WordPress login or try the Fanvue button again.', 'creatorreactor' ),
-			'closed'  => __( 'New accounts are not allowed on this site. An administrator must create your WordPress user or enable registration.', 'creatorreactor' ),
-			'user'    => __( 'Could not create or load your WordPress user after Fanvue sign-in. Contact the site administrator.', 'creatorreactor' ),
-			'missing'         => __( 'Fanvue did not return a complete authorization response. Confirm the redirect URI in your Fanvue app matches this site exactly, then try again.', 'creatorreactor' ),
-			'pending_expired' => __( 'Your Fanvue sign-in session expired before account setup finished. Use Log in with Fanvue again.', 'creatorreactor' ),
+			'nonce'   => __( 'Fanvue sign-in could not start (link expired or invalid). Use the Fanvue button again.', 'wp-creatorreactor' ),
+			'agency'  => __( 'Fanvue visitor login is not available in Agency (broker) mode.', 'wp-creatorreactor' ),
+			'config'  => __( 'Fanvue sign-in is not configured on this site (OAuth Client ID or endpoints). Ask the site administrator to complete CreatorReactor OAuth settings.', 'wp-creatorreactor' ),
+			'denied'  => __( 'Fanvue sign-in was cancelled or denied.', 'wp-creatorreactor' ),
+			'oauth_redirect' => __( 'Fanvue redirect URI does not match this site. In the Fanvue app settings, add the exact visitor (fan) OAuth callback URL shown under CreatorReactor → Settings, then try again.', 'wp-creatorreactor' ),
+			'oauth_client'   => __( 'Fanvue rejected the OAuth client. Check Client ID and Client Secret under Settings → Fanvue → OAuth and that the Fanvue app is active.', 'wp-creatorreactor' ),
+			'oauth_request'  => __( 'Fanvue rejected the sign-in request as invalid. Try the Fanvue button again; if it keeps failing, verify the app’s redirect URLs and OAuth settings.', 'wp-creatorreactor' ),
+			'oauth_error'    => __( 'Fanvue returned an authorization error before sign-in could finish. Try again or ask the site administrator to check CreatorReactor connection logs.', 'wp-creatorreactor' ),
+			'state'   => __( 'Fanvue sign-in could not be verified (session expired or mismatch). Use the Fanvue button to try again.', 'wp-creatorreactor' ),
+			'token'   => __( 'Fanvue did not return a usable token. Check OAuth Client ID, Secret, and redirect URLs under Settings → Fanvue → OAuth, then try again.', 'wp-creatorreactor' ),
+			'profile' => __( 'Fanvue sign-in could not load profile data. Use your WordPress login or try the Fanvue button again.', 'wp-creatorreactor' ),
+			'closed'  => __( 'New accounts are not allowed on this site. An administrator must create your WordPress user or enable registration.', 'wp-creatorreactor' ),
+			'user'    => __( 'Could not create or load your WordPress user after Fanvue sign-in. Contact the site administrator.', 'wp-creatorreactor' ),
+			'missing'         => __( 'Fanvue did not return a complete authorization response. Confirm the redirect URI in your Fanvue app matches this site exactly, then try again.', 'wp-creatorreactor' ),
+			'pending_expired' => __( 'Your Fanvue sign-in session expired before account setup finished. Use Log in with Fanvue again.', 'wp-creatorreactor' ),
 		];
-		$text = isset( $map[ $raw ] ) ? $map[ $raw ] : __( 'Fanvue sign-in did not finish. Use the Fanvue button to try again.', 'creatorreactor' );
+		$text = isset( $map[ $raw ] ) ? $map[ $raw ] : __( 'Fanvue sign-in did not finish. Use the Fanvue button to try again.', 'wp-creatorreactor' );
 		$box  = '<div class="creatorreactor-fanvue-login-notice" role="alert"><p style="margin:0;">' . esc_html( $text ) . '</p></div>';
 		return $message . $box;
 	}
@@ -237,22 +237,22 @@ class Login_Page {
 	public static function filter_login_message_google_oauth( $message ) {
 		$raw = self::get_google_oauth_notice_code_from_request();
 		$map = [
-			'nonce'           => __( 'Google sign-in could not start (link expired or invalid). Use Sign in with Google again.', 'creatorreactor' ),
-			'agency'          => __( 'Google sign-in is not available in Agency (broker) mode.', 'creatorreactor' ),
-			'config'          => __( 'Google sign-in is not configured. Ask the site administrator to add OAuth credentials under Settings → Google.', 'creatorreactor' ),
-			'denied'          => __( 'Google sign-in was cancelled or denied.', 'creatorreactor' ),
-			'oauth_redirect'  => __( 'Google redirect URI does not match this site. In Google Cloud Console, set the Authorized redirect URI to the value shown under Settings → Google.', 'creatorreactor' ),
-			'oauth_client'    => __( 'Google rejected the OAuth client. Check Client ID and Client Secret under Settings → Google.', 'creatorreactor' ),
-			'oauth_request'   => __( 'Google rejected the sign-in request. Try Sign in with Google again.', 'creatorreactor' ),
-			'oauth_error'     => __( 'Google returned an authorization error. Try again or ask the site administrator to check connection logs.', 'creatorreactor' ),
-			'state'           => __( 'Google sign-in could not be verified (session expired). Use Sign in with Google again.', 'creatorreactor' ),
-			'token'           => __( 'Google did not return a usable token. Check OAuth settings under Settings → Google.', 'creatorreactor' ),
-			'profile'         => __( 'Google sign-in could not load profile data. Try again or use your WordPress login.', 'creatorreactor' ),
-			'closed'          => __( 'New accounts are not allowed on this site. An administrator must create your WordPress user or enable registration.', 'creatorreactor' ),
-			'user'            => __( 'Could not create or load your WordPress user after Google sign-in. Contact the site administrator.', 'creatorreactor' ),
-			'missing'         => __( 'Google did not return a complete authorization response. Confirm the redirect URI in Google Cloud Console matches this site.', 'creatorreactor' ),
+			'nonce'           => __( 'Google sign-in could not start (link expired or invalid). Use Sign in with Google again.', 'wp-creatorreactor' ),
+			'agency'          => __( 'Google sign-in is not available in Agency (broker) mode.', 'wp-creatorreactor' ),
+			'config'          => __( 'Google sign-in is not configured. Ask the site administrator to add OAuth credentials under Settings → Google.', 'wp-creatorreactor' ),
+			'denied'          => __( 'Google sign-in was cancelled or denied.', 'wp-creatorreactor' ),
+			'oauth_redirect'  => __( 'Google redirect URI does not match this site. In Google Cloud Console, set the Authorized redirect URI to the value shown under Settings → Google.', 'wp-creatorreactor' ),
+			'oauth_client'    => __( 'Google rejected the OAuth client. Check Client ID and Client Secret under Settings → Google.', 'wp-creatorreactor' ),
+			'oauth_request'   => __( 'Google rejected the sign-in request. Try Sign in with Google again.', 'wp-creatorreactor' ),
+			'oauth_error'     => __( 'Google returned an authorization error. Try again or ask the site administrator to check connection logs.', 'wp-creatorreactor' ),
+			'state'           => __( 'Google sign-in could not be verified (session expired). Use Sign in with Google again.', 'wp-creatorreactor' ),
+			'token'           => __( 'Google did not return a usable token. Check OAuth settings under Settings → Google.', 'wp-creatorreactor' ),
+			'profile'         => __( 'Google sign-in could not load profile data. Try again or use your WordPress login.', 'wp-creatorreactor' ),
+			'closed'          => __( 'New accounts are not allowed on this site. An administrator must create your WordPress user or enable registration.', 'wp-creatorreactor' ),
+			'user'            => __( 'Could not create or load your WordPress user after Google sign-in. Contact the site administrator.', 'wp-creatorreactor' ),
+			'missing'         => __( 'Google did not return a complete authorization response. Confirm the redirect URI in Google Cloud Console matches this site.', 'wp-creatorreactor' ),
 		];
-		$text = isset( $map[ $raw ] ) ? $map[ $raw ] : __( 'Google sign-in did not finish. Use Sign in with Google to try again.', 'creatorreactor' );
+		$text = isset( $map[ $raw ] ) ? $map[ $raw ] : __( 'Google sign-in did not finish. Use Sign in with Google to try again.', 'wp-creatorreactor' );
 		$box  = '<div class="creatorreactor-google-login-notice" role="alert"><p style="margin:0;">' . esc_html( $text ) . '</p></div>';
 		return $message . $box;
 	}
@@ -276,7 +276,11 @@ class Login_Page {
 		$script_handle = 'creatorreactor-login-social-js';
 		wp_register_style( $style_handle, false, [], CREATORREACTOR_VERSION );
 		wp_enqueue_style( $style_handle );
-		$css = <<<'CSS'
+		$fanvue_minimal_oauth_bg = Shortcodes::FANVUE_MINIMAL_OAUTH_BACKGROUND;
+		$fanvue_minimal_pad      = Shortcodes::FANVUE_MINIMAL_LINK_PADDING_PX;
+		$fanvue_minimal_icon     = Shortcodes::FANVUE_MINIMAL_ICON_SIZE_PX;
+		$fanvue_minimal_icon_ty  = Shortcodes::FANVUE_MINIMAL_ICON_TRANSLATE_Y_PX;
+		$css = <<<CSS
 .creatorreactor-wp-login-split {
 	display: flex;
 	flex-direction: row;
@@ -335,6 +339,29 @@ class Login_Page {
 	height: auto;
 	max-width: min(220px, 100%);
 	width: auto;
+}
+.creatorreactor-wp-login-split-social .creatorreactor-fanvue-oauth-wrap--minimal {
+	margin: 0;
+}
+.creatorreactor-wp-login-split-social .creatorreactor-fanvue-oauth-link--minimal {
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	padding: {$fanvue_minimal_pad}px;
+	border: 0;
+	border-radius: 4px;
+	background: {$fanvue_minimal_oauth_bg};
+	text-decoration: none;
+	box-sizing: border-box;
+	line-height: 0;
+}
+.creatorreactor-wp-login-split-social .creatorreactor-fanvue-oauth-link--minimal .creatorreactor-fanvue-oauth-img-minimal {
+	display: block;
+	width: {$fanvue_minimal_icon}px;
+	height: {$fanvue_minimal_icon}px;
+	object-fit: contain;
+	flex-shrink: 0;
+	transform: translateY({$fanvue_minimal_icon_ty}px);
 }
 #login:has(.creatorreactor-wp-login-split) {
 	max-width: 720px;

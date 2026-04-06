@@ -109,18 +109,18 @@ class CreatorReactor_Client {
 		$base = rtrim( $opts['creatorreactor_api_base_url'] ?? CreatorReactor_OAuth::API_BASE_URL, '/' );
 
 		$checks[] = [
-			'label' => __( 'OAuth Client ID', 'creatorreactor' ),
+			'label' => __( 'OAuth Client ID', 'wp-creatorreactor' ),
 			'pass' => $client_id,
-			'message' => $client_id ? __( 'Configured', 'creatorreactor' ) : __( 'Not configured', 'creatorreactor' ),
+			'message' => $client_id ? __( 'Configured', 'wp-creatorreactor' ) : __( 'Not configured', 'wp-creatorreactor' ),
 		];
 		if ( ! $client_id ) {
 			$all_passed = false;
 		}
 
 		$checks[] = [
-			'label' => __( 'OAuth Client Secret', 'creatorreactor' ),
+			'label' => __( 'OAuth Client Secret', 'wp-creatorreactor' ),
 			'pass' => $client_secret,
-			'message' => $client_secret ? __( 'Configured', 'creatorreactor' ) : __( 'Not configured', 'creatorreactor' ),
+			'message' => $client_secret ? __( 'Configured', 'wp-creatorreactor' ) : __( 'Not configured', 'wp-creatorreactor' ),
 		];
 		if ( ! $client_secret ) {
 			$all_passed = false;
@@ -143,9 +143,11 @@ class CreatorReactor_Client {
 				$code = wp_remote_retrieve_response_code( $response );
 				$api_reachable = $code > 0;
 				if ( $code === 401 ) {
-					$api_message = sprintf( __( '%1$s — HTTP %2$d (reachable, auth required)', 'creatorreactor' ), $base, $code );
+					/* translators: 1: API base URL, 2: HTTP status code. */
+					$api_message = sprintf( __( '%1$s — HTTP %2$d (reachable, auth required)', 'wp-creatorreactor' ), $base, $code );
 				} else {
-					$api_message = sprintf( __( '%1$s — HTTP %2$d', 'creatorreactor' ), $base, $code );
+					/* translators: 1: API base URL, 2: HTTP status code. */
+					$api_message = sprintf( __( '%1$s — HTTP %2$d', 'wp-creatorreactor' ), $base, $code );
 				}
 				if ( ! $api_reachable ) {
 					$all_passed = false;
@@ -156,16 +158,16 @@ class CreatorReactor_Client {
 			$all_passed = false;
 		}
 		$checks[] = [
-			'label' => __( 'API Endpoint Reachable', 'creatorreactor' ),
+			'label' => __( 'API Endpoint Reachable', 'wp-creatorreactor' ),
 			'pass' => $api_reachable,
-			'message' => $api_message ?: ( $api_reachable ? __( 'OK', 'creatorreactor' ) : __( 'Failed', 'creatorreactor' ) ),
+			'message' => $api_message ?: ( $api_reachable ? __( 'OK', 'wp-creatorreactor' ) : __( 'Failed', 'wp-creatorreactor' ) ),
 		];
 
 		$token = self::get_access_token();
 		$checks[] = [
-			'label' => __( 'OAuth Token', 'creatorreactor' ),
+			'label' => __( 'OAuth Token', 'wp-creatorreactor' ),
 			'pass' => ! empty( $token ),
-			'message' => ! empty( $token ) ? __( 'Valid', 'creatorreactor' ) : __( 'Not authenticated', 'creatorreactor' ),
+			'message' => ! empty( $token ) ? __( 'Valid', 'wp-creatorreactor' ) : __( 'Not authenticated', 'wp-creatorreactor' ),
 		];
 		if ( ! $token ) {
 			$all_passed = false;
@@ -191,24 +193,28 @@ class CreatorReactor_Client {
 						$body = json_decode( wp_remote_retrieve_body( $response ), true );
 						$name = isset( $body['displayName'] ) ? $body['displayName'] : ( isset( $body['handle'] ) ? $body['handle'] : null );
 						if ( $name ) {
-							$oauth_message = sprintf( __( 'Connected as %s', 'creatorreactor' ), $name );
+							/* translators: %s: Connected account display name or handle. */
+							$oauth_message = sprintf( __( 'Connected as %s', 'wp-creatorreactor' ), $name );
 						} else {
-							$oauth_message = __( 'Authenticated', 'creatorreactor' );
+							$oauth_message = __( 'Authenticated', 'wp-creatorreactor' );
 						}
 						if ( ! is_string( $version_header ) || $version_header === '' ) {
-							$oauth_message .= __( ' (without API version header)', 'creatorreactor' );
+							$oauth_message .= __( ' (without API version header)', 'wp-creatorreactor' );
 						}
 					} elseif ( $code === 401 ) {
-						$oauth_message = __( 'Token expired or invalid', 'creatorreactor' );
+						$oauth_message = __( 'Token expired or invalid', 'wp-creatorreactor' );
 						$all_passed = false;
 					} elseif ( $code === 403 ) {
 						$oauth_valid = true;
-						$oauth_message = sprintf( __( 'Authenticated, but access denied for %s (HTTP 403)', 'creatorreactor' ), $endpoint ?: '/me' );
+						/* translators: %s: OAuth probe path or URL that returned HTTP 403. */
+						$oauth_message = sprintf( __( 'Authenticated, but access denied for %s (HTTP 403)', 'wp-creatorreactor' ), $endpoint ?: '/me' );
 					} elseif ( $code === 404 ) {
-						$oauth_message = sprintf( __( 'No OAuth verification endpoint found (last tried %s)', 'creatorreactor' ), $endpoint ?: '/me' );
+						/* translators: %s: Last tried OAuth verification path or URL. */
+						$oauth_message = sprintf( __( 'No OAuth verification endpoint found (last tried %s)', 'wp-creatorreactor' ), $endpoint ?: '/me' );
 						$all_passed = false;
 					} else {
-						$oauth_message = sprintf( __( 'HTTP %d', 'creatorreactor' ), $code );
+						/* translators: %d: HTTP status code. */
+						$oauth_message = sprintf( __( 'HTTP %d', 'wp-creatorreactor' ), $code );
 						$all_passed = false;
 					}
 				}
@@ -217,7 +223,7 @@ class CreatorReactor_Client {
 				$all_passed = false;
 			}
 			$checks[] = [
-				'label' => __( 'OAuth Credentials', 'creatorreactor' ),
+				'label' => __( 'OAuth Credentials', 'wp-creatorreactor' ),
 				'pass' => $oauth_valid,
 				'message' => $oauth_message,
 			];
@@ -225,7 +231,7 @@ class CreatorReactor_Client {
 
 		return [
 			'success' => $all_passed,
-			'message' => $all_passed ? __( 'All checks passed', 'creatorreactor' ) : __( 'Some checks failed', 'creatorreactor' ),
+			'message' => $all_passed ? __( 'All checks passed', 'wp-creatorreactor' ) : __( 'Some checks failed', 'wp-creatorreactor' ),
 			'checks' => $checks,
 		];
 	}
@@ -254,7 +260,7 @@ class CreatorReactor_Client {
 	 * Short hint when Fanvue returns 403 insufficient scopes for list APIs (read:fan).
 	 */
 	public static function get_insufficient_scopes_hint_text() {
-		return __( 'Add read:fan to OAuth Scopes in Settings → Fanvue → OAuth if missing, save, then disconnect OAuth and connect again—existing tokens do not pick up new scopes. Subscriber and follower lists require read:fan on both the Fanvue app and this field.', 'creatorreactor' );
+		return __( 'Add read:fan to OAuth Scopes in Settings → Fanvue → OAuth if missing, save, then disconnect OAuth and connect again—existing tokens do not pick up new scopes. Subscriber and follower lists require read:fan on both the Fanvue app and this field.', 'wp-creatorreactor' );
 	}
 
 	/**
@@ -262,7 +268,7 @@ class CreatorReactor_Client {
 	 */
 	private static function format_list_endpoint_http_error( $list_label, $code, $body_response ) {
 		if ( (int) $code === 403 && self::response_indicates_insufficient_scopes( $body_response ) ) {
-			return $list_label . ': HTTP 403 — ' . __( 'Insufficient OAuth scopes.', 'creatorreactor' ) . ' ' . self::get_insufficient_scopes_hint_text();
+			return $list_label . ': HTTP 403 — ' . __( 'Insufficient OAuth scopes.', 'wp-creatorreactor' ) . ' ' . self::get_insufficient_scopes_hint_text();
 		}
 		$snippet = is_string( $body_response ) && $body_response !== '' ? substr( wp_strip_all_tags( $body_response ), 0, 500 ) : '';
 		return $list_label . ': HTTP ' . $code . ( $snippet !== '' ? '. Response: ' . $snippet : '' );
@@ -308,7 +314,7 @@ class CreatorReactor_Client {
 			$token = $this->get_access_token();
 			if ( ! $token ) {
 				if ( ! $quiet ) {
-					Admin_Settings::set_last_error( __( 'No OAuth token. Connect to creatorreactor in the OAuth tab, then run Sync again.', 'creatorreactor' ) );
+					Admin_Settings::set_last_error( __( 'No OAuth token. Connect to creatorreactor in the OAuth tab, then run Sync again.', 'wp-creatorreactor' ) );
 				}
 				return null;
 			}
@@ -364,7 +370,7 @@ class CreatorReactor_Client {
 			];
 		} catch ( \Throwable $e ) {
 			if ( ! $quiet ) {
-				Admin_Settings::set_critical_error( __( 'List subscribers failed:', 'creatorreactor' ) . ' ' . $e->getMessage() . ' (' . basename( $e->getFile() ) . ':' . $e->getLine() . ')' );
+				Admin_Settings::set_critical_error( __( 'List subscribers failed:', 'wp-creatorreactor' ) . ' ' . $e->getMessage() . ' (' . basename( $e->getFile() ) . ':' . $e->getLine() . ')' );
 				Admin_Settings::set_last_error( $e->getMessage() );
 			}
 			return null;
@@ -376,7 +382,7 @@ class CreatorReactor_Client {
 			$token = $this->get_access_token();
 			if ( ! $token ) {
 				if ( ! $quiet ) {
-					Admin_Settings::set_last_error( __( 'No OAuth token. Connect to creatorreactor in the OAuth tab, then run Sync again.', 'creatorreactor' ) );
+					Admin_Settings::set_last_error( __( 'No OAuth token. Connect to creatorreactor in the OAuth tab, then run Sync again.', 'wp-creatorreactor' ) );
 				}
 				return null;
 			}
@@ -426,7 +432,7 @@ class CreatorReactor_Client {
 			];
 		} catch ( \Throwable $e ) {
 			if ( ! $quiet ) {
-				Admin_Settings::set_critical_error( __( 'List followers failed:', 'creatorreactor' ) . ' ' . $e->getMessage() . ' (' . basename( $e->getFile() ) . ':' . $e->getLine() . ')' );
+				Admin_Settings::set_critical_error( __( 'List followers failed:', 'wp-creatorreactor' ) . ' ' . $e->getMessage() . ' (' . basename( $e->getFile() ) . ':' . $e->getLine() . ')' );
 				Admin_Settings::set_last_error( $e->getMessage() );
 			}
 			return null;
@@ -942,7 +948,7 @@ class CreatorReactor_Client {
 
 			return $any_ok;
 		} catch ( \Throwable $e ) {
-			Admin_Settings::set_critical_error( __( 'Sync subscribers failed:', 'creatorreactor' ) . ' ' . $e->getMessage() . ' (' . basename( $e->getFile() ) . ':' . $e->getLine() . ')' );
+			Admin_Settings::set_critical_error( __( 'Sync subscribers failed:', 'wp-creatorreactor' ) . ' ' . $e->getMessage() . ' (' . basename( $e->getFile() ) . ':' . $e->getLine() . ')' );
 			Admin_Settings::set_last_error( $e->getMessage() );
 			return false;
 		}
