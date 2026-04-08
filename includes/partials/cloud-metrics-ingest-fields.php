@@ -1,8 +1,8 @@
 <?php
 /**
- * CreatorReactor Cloud — Metrics ingest (read-only URL + bearer token).
+ * CreatorReactor Cloud — Metrics ingest (read-only URL + bearer token + global sync schedule).
  *
- * Expected variables: $option_name, $opts, $metrics_resolved_url.
+ * Expected variables: $option_name, $opts, $metrics_resolved_url, $broker_mode.
  *
  * @package CreatorReactor
  */
@@ -19,6 +19,7 @@ $display_url        = is_string( $metrics_resolved_url ) ? $metrics_resolved_url
 ?>
 <div class="creatorreactor-cloud-configuration">
 	<div class="creatorreactor-settings-block">
+		<h3><?php esc_html_e( 'Metrics endpoint', 'wp-creatorreactor' ); ?></h3>
 		<table class="form-table">
 			<tr>
 				<th scope="row"><label for="creatorreactor_metrics_ingest_url"><?php esc_html_e( 'Metrics ingest URL', 'wp-creatorreactor' ); ?></label></th>
@@ -31,9 +32,12 @@ $display_url        = is_string( $metrics_resolved_url ) ? $metrics_resolved_url
 				<th scope="row"><label for="creatorreactor_metrics_ingest_token"><?php esc_html_e( 'Metrics ingest token', 'wp-creatorreactor' ); ?></label></th>
 				<td>
 					<input type="password" id="creatorreactor_metrics_ingest_token" class="regular-text code" name="<?php echo esc_attr( $option_name ); ?>[creatorreactor_metrics_ingest_token]" value="<?php echo esc_attr( $metrics_token_val ); ?>" autocomplete="off" placeholder="<?php echo esc_attr( __( 'Bearer token (leave masked to keep)', 'wp-creatorreactor' ) ); ?>" />
-					<p class="description"><?php esc_html_e( 'Bearer secret shared with the data-ingestion service (Authorization: Bearer). It is not your CreatorReactor Cloud login—those credentials are for OAuth/Fanvue APIs; this token only authorizes this site’s plugin to the metrics edge. Stored encrypted; leave the masked value to keep the existing token. Optional if CREATORREACTOR_METRICS_INGEST_TOKEN is set in the environment.', 'wp-creatorreactor' ); ?></p>
+					<p class="description"><?php esc_html_e( 'Bearer secret shared with the data-ingestion service (Authorization: Bearer). It is not your CreatorReactor Cloud account password; platform OAuth credentials are configured under OAuth Settings. This token only authorizes this site’s plugin to the metrics edge. Stored encrypted; leave the masked value to keep the existing token. Optional if CREATORREACTOR_METRICS_INGEST_TOKEN is set in the environment.', 'wp-creatorreactor' ); ?></p>
 				</td>
 			</tr>
 		</table>
+	</div>
+	<div id="creatorreactor-cloud-metrics-schedule-dynamic" class="creatorreactor-auth-mode-dynamic" tabindex="-1">
+		<?php include CREATORREACTOR_PLUGIN_DIR . 'includes/partials/cloud-metrics-schedule-fields.php'; ?>
 	</div>
 </div>

@@ -1,10 +1,9 @@
 <?php
 /**
- * OnlyFans tab: OAuth + OFAuth Configuration, Sync subtab, Login Button Appearance (OAuth subtab only).
+ * OnlyFans tab: OAuth + OFAuth Configuration, Login Button Appearance.
  *
  * Expected variables: $option_name, $opts, $api_key_mask, $webhook_secret_mask,
- * $onlyfans_active_subtab, $webhook_url, $settings_cancel_url,
- * $onlyfans_ofauth_instructions_expanded (bool: true = render instructions <details> open).
+ * $webhook_url, $settings_cancel_url, $onlyfans_ofauth_instructions_expanded (bool).
  *
  * @package CreatorReactor
  */
@@ -19,7 +18,7 @@ $of_mode = Admin_Settings::get_onlyfans_oauth_button_size_mode();
 ?>
 <div id="creatorreactor-onlyfans-settings-dynamic">
 <div class="creatorreactor-settings-form-card creatorreactor-onlyfans-settings-primary-card">
-	<div class="creatorreactor-settings-panel <?php echo 'oauth' === $onlyfans_active_subtab ? 'is-active' : ''; ?>" data-subtab="oauth">
+	<div class="creatorreactor-settings-panel is-active" data-subtab="oauth">
 		<h2><?php esc_html_e( 'OAuth', 'wp-creatorreactor' ); ?></h2>
 		<div class="creatorreactor-settings-block">
 			<details class="creatorreactor-mode-notice direct creatorreactor-google-instructions"<?php echo ! empty( $onlyfans_ofauth_instructions_expanded ) ? ' open' : ''; ?>>
@@ -122,20 +121,12 @@ $of_mode = Admin_Settings::get_onlyfans_oauth_button_size_mode();
 			</table>
 		</div>
 	</div>
-	<div class="creatorreactor-settings-panel <?php echo 'sync' === $onlyfans_active_subtab ? 'is-active' : ''; ?>" data-subtab="sync">
-		<h2><?php esc_html_e( 'Sync', 'wp-creatorreactor' ); ?></h2>
-		<div id="creatorreactor-onlyfans-sync-dynamic" class="creatorreactor-auth-mode-dynamic" tabindex="-1">
-			<?php include CREATORREACTOR_PLUGIN_DIR . 'includes/partials/sync-auth-mode-fields.php'; ?>
-		</div>
-	</div>
-	<?php if ( 'sync' === $onlyfans_active_subtab ) : ?>
 	<div class="creatorreactor-settings-actions">
 		<a class="button" href="<?php echo esc_url( $settings_cancel_url ); ?>"><?php esc_html_e( 'Cancel', 'wp-creatorreactor' ); ?></a>
 		<?php submit_button( __( 'Save Settings', 'wp-creatorreactor' ) ); ?>
 	</div>
-	<?php endif; ?>
 </div>
-<div class="creatorreactor-settings-form-card creatorreactor-provider-login-appearance-card creatorreactor-onlyfans-login-appearance-card" <?php echo 'sync' === $onlyfans_active_subtab ? 'hidden' : ''; ?>>
+<div class="creatorreactor-settings-form-card creatorreactor-provider-login-appearance-card creatorreactor-onlyfans-login-appearance-card">
 	<div class="creatorreactor-settings-panel is-active" data-subtab="onlyfans-oauth-appearance">
 		<h2><?php esc_html_e( 'Login Button Appearance', 'wp-creatorreactor' ); ?></h2>
 		<div class="creatorreactor-settings-block">
@@ -152,11 +143,9 @@ $of_mode = Admin_Settings::get_onlyfans_oauth_button_size_mode();
 			?>
 		</div>
 	</div>
-	<?php if ( 'oauth' === $onlyfans_active_subtab ) : ?>
 	<div class="creatorreactor-settings-actions">
 		<a class="button" href="<?php echo esc_url( $settings_cancel_url ); ?>"><?php esc_html_e( 'Cancel', 'wp-creatorreactor' ); ?></a>
 		<?php submit_button( __( 'Save Settings', 'wp-creatorreactor' ) ); ?>
 	</div>
-	<?php endif; ?>
 </div>
 </div>
