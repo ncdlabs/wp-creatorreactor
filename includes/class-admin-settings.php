@@ -4824,16 +4824,6 @@ class Admin_Settings {
 								echo $tz_choice_markup; // phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- same as wp_timezone_choice().
 								?>
 							</select>
-							<script>
-							(function(){
-								var s=document.getElementById('creatorreactor_display_timezone');
-								if(!s)return;
-								try{
-									var z=Intl.DateTimeFormat().resolvedOptions().timeZone,o=s.querySelector('option[value="browser"]');
-									if(o&&z){o.textContent=<?php echo wp_json_encode( __( 'System Time', 'wp-creatorreactor' ) ); ?>+' ('+z+')';}
-								}catch(e){}
-							})();
-							</script>
 							<p class="description"><?php esc_html_e( 'Controls how timestamps are displayed in the Users page and Debug tab / Logging', 'wp-creatorreactor' ); ?></p>
 						</td>
 					</tr>
@@ -7099,6 +7089,13 @@ class Admin_Settings {
 	 */
 	public static function enqueue_admin_display_timezone_cookie() {
 		if ( ! is_admin() || ! current_user_can( 'manage_options' ) ) {
+			return;
+		}
+		// phpcs:disable WordPress.Security.NonceVerification.Recommended -- Read-only routing query args; capability checked above.
+		$page = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : '';
+		$tab  = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : '';
+		// phpcs:enable WordPress.Security.NonceVerification.Recommended
+		if ( self::PAGE_SETTINGS_SLUG === $page && 'general' === $tab ) {
 			return;
 		}
 		$cookie_name = self::COOKIE_ADMIN_DISPLAY_TZ;
