@@ -289,7 +289,7 @@ class Admin_Settings {
 	}
 
 	/**
-	 * Settings screen URL for one social login provider (unified Social login tab + sidebar).
+	 * Settings screen URL for one social login provider (OAuth Settings tab + sidebar).
 	 *
 	 * @param string $slug Provider slug (e.g. tiktok, bluesky).
 	 * @return string
@@ -8387,6 +8387,11 @@ class Admin_Settings {
 		.creatorreactor-settings-container { display: flex; gap: 20px; }
 		.creatorreactor-settings-sidebar { width: 160px; flex-shrink: 0; }
 		.creatorreactor-settings-sidebar--social-oauth { width: 200px; }
+		.creatorreactor-oauth-settings-sidebar-divider {
+			height: 1px;
+			margin: 10px 0;
+			background: #dcdcde;
+		}
 		.creatorreactor-sidebar-nav { display: flex; flex-direction: column; }
 		.creatorreactor-sidebar-link { display: block; padding: 12px 14px; border-bottom: 1px solid #eee; color: #50575e; text-decoration: none; font-weight: 500; }
 		.creatorreactor-sidebar-link.is-active { background: #faf3f8; color: var(--cr-accent, #8e2d77); border-left: 3px solid var(--cr-accent, #8e2d77); }
@@ -10367,7 +10372,7 @@ class Admin_Settings {
 					'args'      => [ 'tab' => 'instagram' ],
 				],
 				'social_oauth' => [
-					'label'     => __( 'Social login', 'wp-creatorreactor' ),
+					'label'     => __( 'OAuth Settings', 'wp-creatorreactor' ),
 					'page_slug' => self::PAGE_SETTINGS_SLUG,
 					'args'      => [
 						'tab'             => 'social_oauth',
@@ -10719,7 +10724,12 @@ class Admin_Settings {
 		<div class="creatorreactor-tab-panel <?php echo 'social_oauth' === $active_tab ? 'is-active' : ''; ?>" data-tab="social_oauth">
 			<div class="creatorreactor-settings-container creatorreactor-social-oauth-settings-layout">
 				<div class="creatorreactor-settings-sidebar creatorreactor-settings-sidebar--social-oauth">
-					<nav class="creatorreactor-sidebar-nav" aria-label="<?php esc_attr_e( 'Social login providers', 'wp-creatorreactor' ); ?>">
+					<nav class="creatorreactor-sidebar-nav" aria-label="<?php esc_attr_e( 'OAuth providers', 'wp-creatorreactor' ); ?>">
+						<a href="<?php echo esc_url( self::admin_page_url( [ 'tab' => 'settings', 'subtab' => 'oauth' ], self::PAGE_SETTINGS_SLUG ) ); ?>" class="creatorreactor-sidebar-link creatorreactor-sidebar-link--oauth-other-tab"><?php esc_html_e( 'Fanvue', 'wp-creatorreactor' ); ?></a>
+						<a href="<?php echo esc_url( self::admin_page_url( [ 'tab' => 'google' ], self::PAGE_SETTINGS_SLUG ) ); ?>" class="creatorreactor-sidebar-link creatorreactor-sidebar-link--oauth-other-tab"><?php esc_html_e( 'Google', 'wp-creatorreactor' ); ?></a>
+						<a href="<?php echo esc_url( self::admin_page_url( [ 'tab' => 'instagram' ], self::PAGE_SETTINGS_SLUG ) ); ?>" class="creatorreactor-sidebar-link creatorreactor-sidebar-link--oauth-other-tab"><?php esc_html_e( 'Instagram', 'wp-creatorreactor' ); ?></a>
+						<a href="<?php echo esc_url( self::admin_page_url( [ 'tab' => 'onlyfans', 'subtab' => 'oauth' ], self::PAGE_SETTINGS_SLUG ) ); ?>" class="creatorreactor-sidebar-link creatorreactor-sidebar-link--oauth-other-tab"><?php esc_html_e( 'OnlyFans', 'wp-creatorreactor' ); ?></a>
+						<div class="creatorreactor-oauth-settings-sidebar-divider" role="separator" aria-hidden="true"></div>
 						<?php foreach ( $settings_social_slugs as $social_nav_slug ) : ?>
 							<a href="<?php echo esc_url( self::admin_social_oauth_settings_url( $social_nav_slug ) ); ?>" class="creatorreactor-sidebar-link <?php echo $social_nav_slug === $active_social_provider ? 'is-active' : ''; ?>"><?php echo esc_html( Shortcodes::social_oauth_provider_label( $social_nav_slug ) ); ?></a>
 						<?php endforeach; ?>
