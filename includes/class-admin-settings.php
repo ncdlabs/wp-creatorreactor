@@ -263,7 +263,7 @@ class Admin_Settings {
 		if ( ! current_user_can( 'manage_options' ) ) {
 			return $links;
 		}
-		$url                              = self::admin_page_url( [ 'tab' => 'settings', 'subtab' => 'oauth' ], self::PAGE_SETTINGS_SLUG );
+		$url                              = self::admin_oauth_settings_url( 'fanvue', [ 'subtab' => 'oauth' ] );
 		$links['creatorreactor_settings'] = sprintf(
 			'<a href="%s">%s</a>',
 			esc_url( $url ),
@@ -289,24 +289,53 @@ class Admin_Settings {
 	}
 
 	/**
-	 * Settings screen URL for one social login provider (OAuth Settings tab + sidebar).
+	 * Core OAuth provider keys shown first in OAuth Settings (Fanvue + third-party gateways).
 	 *
-	 * @param string $slug Provider slug (e.g. tiktok, bluesky).
+	 * @return string[]
+	 */
+	public static function oauth_settings_core_provider_slugs() {
+		return [ 'fanvue', 'google', 'instagram', 'onlyfans' ];
+	}
+
+	/**
+	 * All OAuth Settings sidebar keys: core providers plus generic social + Bluesky slugs.
+	 *
+	 * @return string[]
+	 */
+	public static function oauth_settings_all_provider_slugs() {
+		return array_merge( self::oauth_settings_core_provider_slugs(), self::all_settings_social_oauth_slugs() );
+	}
+
+	/**
+	 * Settings screen URL for OAuth Settings (unified tab + sidebar).
+	 *
+	 * @param string               $provider    Provider key (fanvue, google, tiktok, bluesky, …).
+	 * @param array<string, scalar> $extra_query Optional query args (e.g. subtab for Fanvue / OnlyFans).
+	 * @return string
+	 */
+	private static function admin_oauth_settings_url( $provider, array $extra_query = [] ) {
+		$provider = sanitize_key( (string) $provider );
+		if ( ! in_array( $provider, self::oauth_settings_all_provider_slugs(), true ) ) {
+			$provider = 'fanvue';
+		}
+		return self::admin_page_url(
+			array_merge(
+				[
+					'tab'            => 'social_oauth',
+					'oauth_provider' => $provider,
+				],
+				$extra_query
+			),
+			self::PAGE_SETTINGS_SLUG
+		);
+	}
+
+	/**
+	 * @param string $slug Social OAuth slug (e.g. tiktok).
 	 * @return string
 	 */
 	private static function admin_social_oauth_settings_url( $slug ) {
-		$slug  = sanitize_key( (string) $slug );
-		$slugs = self::all_settings_social_oauth_slugs();
-		if ( $slug === '' || ! in_array( $slug, $slugs, true ) ) {
-			$slug = ! empty( $slugs[0] ) ? $slugs[0] : 'tiktok';
-		}
-		return self::admin_page_url(
-			[
-				'tab'             => 'social_oauth',
-				'social_provider' => $slug,
-			],
-			self::PAGE_SETTINGS_SLUG
-		);
+		return self::admin_oauth_settings_url( $slug );
 	}
 
 	/**
@@ -6894,13 +6923,8 @@ class Admin_Settings {
 	 */
 	private static function render_fanvue_login_button_appearance_fields( $active_subtab ) {
 		$option_name   = self::OPTION_NAME;
-		$cancel_url    = self::admin_page_url(
-			[
-				'tab'    => 'settings',
-				'subtab' => in_array( $active_subtab, [ 'oauth', 'sync' ], true ) ? $active_subtab : 'oauth',
-			],
-			self::PAGE_SETTINGS_SLUG
-		);
+		$st            = in_array( $active_subtab, [ 'oauth', 'sync' ], true ) ? $active_subtab : 'oauth';
+		$cancel_url    = self::admin_oauth_settings_url( 'fanvue', [ 'subtab' => $st ] );
 		$fv_mode      = self::get_fanvue_oauth_button_size_mode();
 		$site_general = self::get_oauth_logo_button_general_size();
 		?>
@@ -7073,13 +7097,8 @@ class Admin_Settings {
 	private static function render_onlyfans_settings_fields( array $opts, $api_key_mask, $webhook_secret_mask, $onlyfans_active_subtab = 'oauth' ) {
 		$option_name         = self::OPTION_NAME;
 		$webhook_url         = OFAuth::get_webhook_url();
-		$settings_cancel_url = self::admin_page_url(
-			[
-				'tab'    => 'onlyfans',
-				'subtab' => in_array( $onlyfans_active_subtab, [ 'oauth', 'sync' ], true ) ? $onlyfans_active_subtab : 'oauth',
-			],
-			self::PAGE_SETTINGS_SLUG
-		);
+		$of_st               = in_array( $onlyfans_active_subtab, [ 'oauth', 'sync' ], true ) ? $onlyfans_active_subtab : 'oauth';
+		$settings_cancel_url = self::admin_oauth_settings_url( 'onlyfans', [ 'subtab' => $of_st ] );
 		$onlyfans_ofauth_instructions_expanded = ! self::is_onlyfans_ofauth_configured_from_opts( $opts );
 		include CREATORREACTOR_PLUGIN_DIR . 'includes/partials/onlyfans-settings-fields.php';
 	}
@@ -7570,13 +7589,6 @@ class Admin_Settings {
 			max-width: min(220px, 100%);
 			width: auto;
 			margin: 0 auto;
-		}
-		.creatorreactor-fanvue-oauth--admin-preview .creatorreactor-fanvue-oauth-text {
-			display: block;
-			margin-top: 8px;
-			font-size: 14px;
-			font-weight: 500;
-			text-align: center;
 		}
 		.creatorreactor-mode-notice p { margin: 0; font-size: 13px; }
 		.creatorreactor-mode-notice > p:first-child { margin-bottom: 8px; }
@@ -8638,7 +8650,6 @@ class Admin_Settings {
 		$css .= sprintf(
 			' .creatorreactor-onlyfans-oauth--admin-preview.creatorreactor-onlyfans-oauth-link--standard{display:inline-flex;align-items:center;gap:12px;min-height:40px;padding:10px 16px;border-radius:4px;border:1px solid %1$s;background:%2$s;color:#fff;font-size:14px;font-weight:500;line-height:1.35;box-sizing:border-box;text-decoration:none;box-shadow:0 1px 3px rgba(0,0,0,.2);}' .
 			' .creatorreactor-onlyfans-oauth--admin-preview.creatorreactor-onlyfans-oauth-link--standard .creatorreactor-onlyfans-oauth-svg{flex-shrink:0;display:block;width:20px;height:20px;}' .
-			' .creatorreactor-onlyfans-oauth--admin-preview.creatorreactor-onlyfans-oauth-link--standard .creatorreactor-onlyfans-oauth-label{color:#fff;}' .
 			' .creatorreactor-onlyfans-oauth--admin-preview.creatorreactor-onlyfans-oauth-link--minimal{display:inline-flex;align-items:center;justify-content:center;width:%3$dpx;height:%3$dpx;min-width:%3$dpx;min-height:%3$dpx;padding:0;border:1px solid #2a2a2a;border-radius:4px;background:%2$s;box-sizing:border-box;line-height:0;box-shadow:0 1px 3px rgba(0,0,0,.2);}' .
 			' .creatorreactor-onlyfans-oauth--admin-preview.creatorreactor-onlyfans-oauth-link--minimal .creatorreactor-onlyfans-oauth-svg{display:block;width:%4$dpx;height:%4$dpx;flex-shrink:0;transform:translateY(%5$dpx);}',
 			Shortcodes::ONLYFANS_OAUTH_ADMIN_ACCENT,

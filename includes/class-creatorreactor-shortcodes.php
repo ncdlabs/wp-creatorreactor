@@ -167,7 +167,6 @@ class Shortcodes {
 		}
 		$box = (int) self::OAUTH_COMPACT_BOX_PX;
 		$css = '.creatorreactor-fanvue-oauth-link{cursor:pointer;pointer-events:auto;line-height:1.35;text-decoration:none;color:#8e2d77}'
-			. '.creatorreactor-fanvue-oauth-text{display:block;margin-top:8px;font-size:14px;font-weight:500;text-align:center}'
 			. '.creatorreactor-fanvue-oauth-link[aria-disabled="true"]{cursor:not-allowed;pointer-events:none;opacity:.55;filter:grayscale(100%)}'
 			. '.creatorreactor-fanvue-oauth-wrap--minimal{margin:0;text-align:inherit}'
 			. '.creatorreactor-fanvue-oauth-link--minimal{display:inline-flex;align-items:center;justify-content:center;width:' . $box . 'px;height:' . $box . 'px;min-width:' . $box . 'px;min-height:' . $box . 'px;padding:0;border:0;border-radius:4px;background:' . self::FANVUE_MINIMAL_OAUTH_BACKGROUND . ';text-decoration:none;box-sizing:border-box;line-height:0}'
@@ -436,7 +435,6 @@ class Shortcodes {
 		return '<p class="creatorreactor-fanvue-oauth-wrap">'
 			. '<a ' . $link_attrs . '>'
 			. '<img src="' . esc_url( $img_url ) . '" alt="" class="creatorreactor-fanvue-oauth-img" width="220" decoding="async" />'
-			. '<span class="creatorreactor-fanvue-oauth-text">' . esc_html( $label ) . '</span>'
 			. '</a></p>';
 	}
 
@@ -448,7 +446,6 @@ class Shortcodes {
 	 */
 	public static function fanvue_oauth_admin_preview_chip( $variant ) {
 		$variant = ( $variant === 'minimal' ) ? 'minimal' : 'standard';
-		$label   = __( 'Log in with Fanvue', 'wp-creatorreactor' );
 		if ( $variant === 'minimal' ) {
 			$logo = CREATORREACTOR_PLUGIN_URL . 'img/fanvue-logo.webp';
 			return '<span class="creatorreactor-fanvue-oauth-link creatorreactor-fanvue-oauth-link--minimal creatorreactor-fanvue-oauth--admin-preview">'
@@ -458,7 +455,6 @@ class Shortcodes {
 		$banner = CREATORREACTOR_PLUGIN_URL . 'img/login-fanvue.webp';
 		return '<span class="creatorreactor-fanvue-oauth-link creatorreactor-fanvue-oauth--admin-preview">'
 			. '<img src="' . esc_url( $banner ) . '" alt="" class="creatorreactor-fanvue-oauth-img" width="220" decoding="async" />'
-			. '<span class="creatorreactor-fanvue-oauth-text">' . esc_html( $label ) . '</span>'
 			. '</span>';
 	}
 
@@ -487,7 +483,6 @@ class Shortcodes {
 	 */
 	public static function instagram_oauth_admin_preview_chip( $variant ) {
 		$variant = ( $variant === 'minimal' ) ? 'minimal' : 'standard';
-		$label   = __( 'Login with Instagram', 'wp-creatorreactor' );
 		if ( $variant === 'minimal' ) {
 			return '<span class="creatorreactor-instagram-oauth-link creatorreactor-instagram-oauth-link--minimal creatorreactor-instagram-oauth--admin-preview">'
 				. self::instagram_preview_glyph_svg( self::INSTAGRAM_MINIMAL_ICON_SIZE_PX )
@@ -495,7 +490,6 @@ class Shortcodes {
 		}
 		return '<span class="creatorreactor-instagram-oauth-link creatorreactor-instagram-oauth-link--standard creatorreactor-instagram-oauth--admin-preview">'
 			. self::instagram_preview_glyph_svg( 20 )
-			. '<span class="creatorreactor-instagram-oauth-label">' . esc_html( $label ) . '</span>'
 			. '</span>';
 	}
 
@@ -525,7 +519,6 @@ class Shortcodes {
 	 */
 	public static function onlyfans_oauth_admin_preview_chip( $variant ) {
 		$variant = ( $variant === 'minimal' ) ? 'minimal' : 'standard';
-		$label   = __( 'Link OnlyFans account', 'wp-creatorreactor' );
 		$accent  = self::ONLYFANS_OAUTH_ADMIN_ACCENT;
 		if ( $variant === 'minimal' ) {
 			return '<span class="creatorreactor-onlyfans-oauth-link creatorreactor-onlyfans-oauth-link--minimal creatorreactor-onlyfans-oauth--admin-preview">'
@@ -534,7 +527,6 @@ class Shortcodes {
 		}
 		return '<span class="creatorreactor-onlyfans-oauth-link creatorreactor-onlyfans-oauth-link--standard creatorreactor-onlyfans-oauth--admin-preview">'
 			. self::onlyfans_preview_glyph_svg( 20, $accent )
-			. '<span class="creatorreactor-onlyfans-oauth-label">' . esc_html( $label ) . '</span>'
 			. '</span>';
 	}
 
@@ -635,7 +627,7 @@ class Shortcodes {
 			$link_attrs .= ' href="' . esc_url( $href ) . '"';
 		}
 
-		$inner = self::google_oauth_button_inner_html( $style, $label );
+		$inner = self::google_oauth_button_inner_html( $style );
 
 		$wrap_class = 'creatorreactor-google-oauth-wrap';
 		if ( $variant === 'minimal' ) {
@@ -657,9 +649,8 @@ class Shortcodes {
 	 */
 	public static function google_oauth_admin_preview_chip( $style_slug ) {
 		$style_slug = Admin_Settings::sanitize_google_login_button_style( (string) $style_slug );
-		$label      = __( 'Sign in with Google', 'wp-creatorreactor' );
 		$class      = 'creatorreactor-google-oauth-link creatorreactor-google-oauth-style--' . sanitize_html_class( $style_slug ) . ' creatorreactor-google-oauth--admin-preview';
-		$inner      = self::google_oauth_button_inner_html( $style_slug, $label );
+		$inner      = self::google_oauth_button_inner_html( $style_slug );
 		return '<span class="' . esc_attr( $class ) . '">'
 			// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- inner uses esc_html for text; SVG is static trusted markup.
 			. $inner
@@ -683,10 +674,9 @@ class Shortcodes {
 
 	/**
 	 * @param string $style Sanitized style slug.
-	 * @param string $label Accessible button label (translated).
-	 * @return string Inner HTML for the Google control.
+	 * @return string Inner HTML for the Google control (brand mark only; use link aria-label for accessibility).
 	 */
-	private static function google_oauth_button_inner_html( $style, $label ) {
+	private static function google_oauth_button_inner_html( $style ) {
 		$style = Admin_Settings::sanitize_google_login_button_style( $style );
 		$svg   = self::google_oauth_brand_svg();
 		if ( 'logo_only' === $style ) {
@@ -694,7 +684,6 @@ class Shortcodes {
 		}
 		return '<span class="creatorreactor-google-oauth-button-inner">'
 			. '<span class="creatorreactor-google-oauth-icon">' . $svg . '</span>'
-			. '<span class="creatorreactor-google-oauth-label">' . esc_html( $label ) . '</span>'
 			. '</span>';
 	}
 
@@ -888,20 +877,12 @@ CSS;
 	}
 
 	/**
-	 * @param string $slug    Provider slug.
-	 * @param string $label   Provider name for “Sign in with …”.
-	 * @param bool   $minimal Logo-only row.
+	 * @param string $slug Provider slug.
 	 * @return string
 	 */
-	private static function social_oauth_button_inner_html( $slug, $label, $minimal ) {
+	private static function social_oauth_button_inner_html( $slug ) {
 		$svg = self::social_oauth_brand_glyph_svg( $slug );
-		if ( $minimal ) {
-			return '<span class="creatorreactor-social-oauth-button-inner creatorreactor-social-oauth-button-inner--logo-only">' . $svg . '</span>';
-		}
-		return '<span class="creatorreactor-social-oauth-button-inner">'
-			. '<span class="creatorreactor-social-oauth-icon">' . $svg . '</span>'
-			. '<span class="creatorreactor-social-oauth-label">' . esc_html( sprintf( /* translators: %s: provider name (e.g. TikTok) */ __( 'Sign in with %s', 'wp-creatorreactor' ), $label ) ) . '</span>'
-			. '</span>';
+		return '<span class="creatorreactor-social-oauth-button-inner creatorreactor-social-oauth-button-inner--logo-only">' . $svg . '</span>';
 	}
 
 	/**
@@ -914,7 +895,6 @@ CSS;
 	public static function social_oauth_admin_preview_chip( $slug, $preview_size ) {
 		$slug         = sanitize_key( (string) $slug );
 		$preview_size = ( 'compact' === (string) $preview_size ) ? 'compact' : 'full';
-		$label        = self::social_oauth_provider_label( $slug );
 		$base         = 'creatorreactor-social-oauth-link creatorreactor-social-oauth-link--' . sanitize_html_class( $slug ) . ' creatorreactor-social-oauth--admin-preview';
 		if ( 'compact' === $preview_size ) {
 			return '<span class="' . esc_attr( $base . ' creatorreactor-social-oauth-link--minimal' ) . '">'
@@ -925,7 +905,6 @@ CSS;
 		return '<span class="' . esc_attr( $base . ' creatorreactor-social-oauth-link--standard' ) . '">'
 			// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static SVG.
 			. self::social_oauth_brand_glyph_svg( $slug )
-			. '<span class="creatorreactor-social-oauth-label">' . esc_html( sprintf( /* translators: %s: provider name */ __( 'Sign in with %s', 'wp-creatorreactor' ), $label ) ) . '</span>'
 			. '</span>';
 	}
 
@@ -1046,7 +1025,7 @@ CSS;
 		} else {
 			$link_attrs .= ' href="' . esc_url( $href ) . '"';
 		}
-		$inner = self::social_oauth_button_inner_html( $slug, $plabel, $minimal );
+		$inner = self::social_oauth_button_inner_html( $slug );
 
 		$wrap_class = 'creatorreactor-social-oauth-wrap creatorreactor-social-oauth-wrap--' . sanitize_html_class( $slug );
 		if ( $minimal ) {
@@ -1089,7 +1068,7 @@ CSS;
 		$css .= '.creatorreactor-social-oauth-button-inner{display:inline-flex;align-items:center;gap:10px}';
 		$css .= '.creatorreactor-social-oauth-icon .creatorreactor-social-oauth-svg,.creatorreactor-social-oauth-link--standard .creatorreactor-social-oauth-svg{width:20px;height:20px}';
 		$css .= '.creatorreactor-social-oauth-link--minimal{width:' . $box . 'px;height:' . $box . 'px;min-width:' . $box . 'px;min-height:' . $box . 'px;padding:0;border:1px solid rgba(0,0,0,.12)}';
-		$css .= '.creatorreactor-social-oauth-link--minimal .creatorreactor-social-oauth-button-inner--logo-only{display:flex;align-items:center;justify-content:center;line-height:0}';
+		$css .= '.creatorreactor-social-oauth-link--minimal .creatorreactor-social-oauth-button-inner--logo-only,.creatorreactor-social-oauth-link--standard .creatorreactor-social-oauth-button-inner--logo-only{display:flex;align-items:center;justify-content:center;line-height:0}';
 		$css .= '.creatorreactor-social-oauth-link--minimal .creatorreactor-social-oauth-svg{width:' . $cico . 'px;height:' . $cico . 'px}';
 		$css .= '.creatorreactor-wp-login-social .creatorreactor-social-oauth-wrap{margin:12px 0 0}';
 		foreach ( $colors as $slug => $c ) {

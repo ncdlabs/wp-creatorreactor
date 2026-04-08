@@ -427,12 +427,6 @@ class Login_Page {
 	text-decoration: none;
 	color: #8e2d77;
 }
-.creatorreactor-fanvue-oauth-text {
-	display: block;
-	margin-top: 8px;
-	font-size: 14px;
-	font-weight: 500;
-}
 .creatorreactor-fanvue-oauth-logged-in {
 	margin: 0;
 	text-align: center;
