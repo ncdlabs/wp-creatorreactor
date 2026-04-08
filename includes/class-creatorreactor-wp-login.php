@@ -16,6 +16,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 class Login_Page {
 
 	/**
+	 * Which provider slug is surfacing a social OAuth notice (see {@see maybe_add_social_oauth_login_notice}).
+	 *
+	 * @var string
+	 */
+	private static $social_oauth_notice_slug = '';
+
+	/**
 	 * Fix duplicate path slashes in redirect_to before wp-login.php reads superglobals (e.g. .../wp-admin//).
 	 */
 	public static function normalize_request_redirect_to() {
@@ -42,6 +49,7 @@ class Login_Page {
 		add_action( 'login_form_login', [ __CLASS__, 'on_login_form_login' ] );
 		add_action( 'login_init', [ __CLASS__, 'maybe_add_fanvue_oauth_login_notice' ] );
 		add_action( 'login_init', [ __CLASS__, 'maybe_add_google_oauth_login_notice' ] );
+		add_action( 'login_init', [ __CLASS__, 'maybe_add_social_oauth_login_notice' ] );
 		add_filter( 'login_redirect', [ __CLASS__, 'force_home_login_redirect' ], 20, 3 );
 		add_action( 'login_enqueue_scripts', [ __CLASS__, 'enqueue_login_branding_assets' ], 5 );
 		add_filter( 'login_headerurl', [ __CLASS__, 'filter_login_header_url' ] );
@@ -258,6 +266,102 @@ class Login_Page {
 	}
 
 	/**
+	 * @param string $slug Provider slug (e.g. tiktok, bluesky).
+	 * @return string Sanitized code or ''.
+	 */
+	private static function get_social_oauth_notice_code_from_request( $slug ) {
+		$q = Social_OAuth_Registry::query_arg( $slug );
+		if ( isset( $_GET[ $q ] ) && is_string( $_GET[ $q ] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return sanitize_key( wp_unslash( $_GET[ $q ] ) ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		}
+		if ( ! isset( $_GET['redirect_to'] ) || ! is_string( $_GET['redirect_to'] ) ) { // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+			return '';
+		}
+		$raw     = wp_unslash( $_GET['redirect_to'] ); // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+		$decoded = rawurldecode( $raw );
+		$parts   = wp_parse_url( $decoded );
+		if ( empty( $parts['query'] ) || ! is_string( $parts['query'] ) ) {
+			return '';
+		}
+		parse_str( $parts['query'], $qs );
+		if ( empty( $qs[ $q ] ) || ! is_string( $qs[ $q ] ) ) {
+			return '';
+		}
+		return sanitize_key( $qs[ $q ] );
+	}
+
+	/**
+	 * Surface generic social OAuth return codes on wp-login (creatorreactor_{slug}=…).
+	 */
+	public static function maybe_add_social_oauth_login_notice() {
+		foreach ( Admin_Settings::all_settings_social_oauth_slugs() as $slug ) {
+			if ( self::get_social_oauth_notice_code_from_request( $slug ) !== '' ) {
+				self::$social_oauth_notice_slug = (string) $slug;
+				$action = isset( $_GET['action'] ) ? sanitize_key( wp_unslash( $_GET['action'] ) ) : 'login'; // phpcs:ignore WordPress.Security.NonceVerification.Recommended
+				if ( 'login' === $action ) {
+					add_filter( 'login_message', [ __CLASS__, 'filter_login_message_social_oauth' ], 10, 1 );
+				}
+				return;
+			}
+		}
+	}
+
+	/**
+	 * @param string $message Existing login message HTML.
+	 * @return string
+	 */
+	public static function filter_login_message_social_oauth( $message ) {
+		$slug = sanitize_key( self::$social_oauth_notice_slug );
+		if ( $slug === '' ) {
+			return $message;
+		}
+		$raw = self::get_social_oauth_notice_code_from_request( $slug );
+		$cfg = Social_OAuth_Registry::get_config( $slug );
+		$label = 'bluesky' === $slug
+			? __( 'Bluesky', 'wp-creatorreactor' )
+			: ( is_array( $cfg ) && ! empty( $cfg['label'] ) ? (string) $cfg['label'] : $slug );
+		$map   = [
+			'nonce'          => sprintf(
+				/* translators: %s: Provider name */
+				__( '%s sign-in could not start (link expired or invalid). Try the button again.', 'wp-creatorreactor' ),
+				$label
+			),
+			'agency'         => sprintf(
+				/* translators: %s: Provider name */
+				__( '%s sign-in is not available in Agency (broker) mode.', 'wp-creatorreactor' ),
+				$label
+			),
+			'config'         => sprintf(
+				/* translators: %s: Provider name */
+				__( '%s sign-in is not configured. Ask the site administrator to add OAuth credentials.', 'wp-creatorreactor' ),
+				$label
+			),
+			'denied'         => sprintf(
+				/* translators: %s: Provider name */
+				__( '%s sign-in was cancelled or denied.', 'wp-creatorreactor' ),
+				$label
+			),
+			'oauth_redirect' => __( 'Redirect URI does not match this site. Use the exact callback URL from plugin settings in your OAuth app.', 'wp-creatorreactor' ),
+			'oauth_client'   => __( 'The provider rejected the OAuth client. Check Client ID and Client Secret.', 'wp-creatorreactor' ),
+			'oauth_request'  => __( 'The provider rejected the sign-in request. Try again.', 'wp-creatorreactor' ),
+			'oauth_error'    => __( 'The provider returned an authorization error. Try again or contact the site administrator.', 'wp-creatorreactor' ),
+			'state'          => __( 'Sign-in could not be verified (session expired). Try the button again.', 'wp-creatorreactor' ),
+			'token'          => __( 'Could not exchange the authorization code for a token. Check OAuth settings.', 'wp-creatorreactor' ),
+			'profile'        => __( 'Could not load profile data after sign-in. Try again or use your WordPress login.', 'wp-creatorreactor' ),
+			'closed'         => __( 'New accounts are not allowed on this site. An administrator must create your WordPress user or enable registration.', 'wp-creatorreactor' ),
+			'user'           => __( 'Could not create or load your WordPress user after sign-in. Contact the site administrator.', 'wp-creatorreactor' ),
+			'missing'        => __( 'The authorization response was incomplete. Confirm the redirect URI in your OAuth app matches this site.', 'wp-creatorreactor' ),
+		];
+		$text = isset( $map[ $raw ] ) ? $map[ $raw ] : sprintf(
+			/* translators: %s: Provider name */
+			__( '%s sign-in did not finish. Use the button to try again.', 'wp-creatorreactor' ),
+			$label
+		);
+		$box  = '<div class="creatorreactor-social-oauth-login-notice" role="alert"><p style="margin:0;">' . esc_html( $text ) . '</p></div>';
+		return $message . $box;
+	}
+
+	/**
 	 * Register hooks for the primary login screen only (not lost password, etc.).
 	 */
 	public static function on_login_form_login() {
@@ -277,7 +381,7 @@ class Login_Page {
 		wp_register_style( $style_handle, false, [], CREATORREACTOR_VERSION );
 		wp_enqueue_style( $style_handle );
 		$fanvue_minimal_oauth_bg = Shortcodes::FANVUE_MINIMAL_OAUTH_BACKGROUND;
-		$fanvue_minimal_pad      = Shortcodes::FANVUE_MINIMAL_LINK_PADDING_PX;
+		$fanvue_minimal_box      = Shortcodes::OAUTH_COMPACT_BOX_PX;
 		$fanvue_minimal_icon     = Shortcodes::FANVUE_MINIMAL_ICON_SIZE_PX;
 		$fanvue_minimal_icon_ty  = Shortcodes::FANVUE_MINIMAL_ICON_TRANSLATE_Y_PX;
 		$css = <<<CSS
@@ -327,7 +431,7 @@ class Login_Page {
 	display: block;
 	margin-top: 8px;
 	font-size: 14px;
-	font-weight: 600;
+	font-weight: 500;
 }
 .creatorreactor-fanvue-oauth-logged-in {
 	margin: 0;
@@ -347,7 +451,11 @@ class Login_Page {
 	display: inline-flex;
 	align-items: center;
 	justify-content: center;
-	padding: {$fanvue_minimal_pad}px;
+	width: {$fanvue_minimal_box}px;
+	height: {$fanvue_minimal_box}px;
+	min-width: {$fanvue_minimal_box}px;
+	min-height: {$fanvue_minimal_box}px;
+	padding: 0;
 	border: 0;
 	border-radius: 4px;
 	background: {$fanvue_minimal_oauth_bg};
@@ -369,6 +477,7 @@ class Login_Page {
 }
 CSS;
 		$css .= Shortcodes::get_google_oauth_button_css();
+		$css .= Shortcodes::get_social_oauth_button_css();
 		wp_add_inline_style( $style_handle, $css );
 
 		wp_register_script( $script_handle, false, [], CREATORREACTOR_VERSION, true );
@@ -385,6 +494,10 @@ JS;
 		echo do_shortcode( '[fanvue_login_button]' );
 		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- shortcode HTML (same as post content).
 		echo do_shortcode( '[google_login_button]' );
+		foreach ( Admin_Settings::all_settings_social_oauth_slugs() as $social_slug ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- shortcode HTML (same as post content).
+			echo do_shortcode( '[' . $social_slug . '_login_button]' );
+		}
 		echo '</div>';
 	}
 }

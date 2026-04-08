@@ -29,6 +29,9 @@ class Plugin {
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-broker-client.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-creatorreactor-fan-oauth.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-google-oauth.php';
+			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-social-oauth-registry.php';
+			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-social-oauth.php';
+			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-bluesky-oauth.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-instagram-oauth.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-ofauth.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-creatorreactor-onboarding.php';
@@ -41,6 +44,7 @@ class Plugin {
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-entire-post-content-gate.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-role-impersonation.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-viewer-state.php';
+			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-activation-timezone-modal.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-editor-blocks-prompt.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-creatorreactor-banner.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-privacy.php';
@@ -54,6 +58,8 @@ class Plugin {
 			CreatorReactor_OAuth::init();
 			Fan_OAuth::init();
 			Google_OAuth::init();
+			Social_OAuth::init();
+			Bluesky_OAuth::init();
 			OFAuth::init();
 			Onboarding::init();
 			Cron::init();
@@ -61,6 +67,7 @@ class Plugin {
 			Shortcodes::init();
 			Login_Page::init();
 			Blocks::init();
+			Activation_Timezone_Modal::init();
 			Editor_Blocks_Prompt::init();
 			Gated_Content_Cache::init();
 			Entire_Post_Content_Gate::init();

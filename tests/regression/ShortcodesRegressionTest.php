@@ -118,8 +118,32 @@ final class ShortcodesRegressionTest extends BaseTestCase
                 ->with($tag, [Shortcodes::class, $method]);
         }
 
+        $social_slugs = [
+            'tiktok',
+            'x_twitter',
+            'snapchat',
+            'linkedin',
+            'pinterest',
+            'reddit',
+            'twitch',
+            'discord',
+            'mastodon',
+            'bluesky',
+        ];
+        foreach ($social_slugs as $slug) {
+            foreach (["standard_{$slug}_login_button", "minimal_{$slug}_login_button", "{$slug}_login_button"] as $tag) {
+                Functions\expect('add_shortcode')
+                    ->once()
+                    ->withArgs(
+                        static function ($t, $cb) use ($tag): bool {
+                            return $t === $tag && is_callable($cb);
+                        }
+                    );
+            }
+        }
+
         Shortcodes::register();
-        self::assertCount(count($expect), $expect);
+        self::assertCount(13, $expect);
     }
 
     public function testInitRegistersRegisterHookOnInitAction(): void

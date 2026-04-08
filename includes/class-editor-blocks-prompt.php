@@ -138,6 +138,9 @@ class Editor_Blocks_Prompt {
 	}
 
 	public static function should_show_modal() {
+		if ( class_exists( '\CreatorReactor\Activation_Timezone_Modal', false ) && Activation_Timezone_Modal::is_pending() ) {
+			return false;
+		}
 		if ( ! is_admin() || ! current_user_can( 'manage_options' ) ) {
 			return false;
 		}

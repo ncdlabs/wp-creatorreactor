@@ -3,7 +3,7 @@
  * Plugin Name: CreatorReactor
  * Plugin URI: https://github.com/ncdlabs/creatorreactor
  * Description: OAuth integration, sync, and entitlements for creator products (CreatorReactor, with support for additional products such as OnlyFans).
- * Version: 2.0.64
+ * Version: 2.0.66
  * Author: Lou Grossi
  * Author URI: https://ncdlabs.com
  * License: GPL v2 or later
@@ -22,7 +22,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
-define( 'CREATORREACTOR_VERSION', '2.0.64' );
+define( 'CREATORREACTOR_VERSION', '2.0.66' );
 define( 'CREATORREACTOR_PLUGIN_DIR', plugin_dir_path( __FILE__ ) );
 define( 'CREATORREACTOR_PLUGIN_URL', plugin_dir_url( __FILE__ ) );
 define( 'CREATORREACTOR_TABLE_ENTITLEMENTS', 'creatorreactor_entitlements' );
@@ -103,7 +103,9 @@ function creatorreactor_activate() {
 			error_log( 'CreatorReactor activation error: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine() );
 		}
 	}
+	require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-activation-timezone-modal.php';
 	require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-editor-blocks-prompt.php';
+	CreatorReactor\Activation_Timezone_Modal::on_activation();
 	CreatorReactor\Editor_Blocks_Prompt::on_activation();
 }
 register_activation_hook( __FILE__, 'creatorreactor_activate' );

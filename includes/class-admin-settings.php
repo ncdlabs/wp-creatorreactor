@@ -14,6 +14,13 @@ if ( ! defined( 'ABSPATH' ) ) {
 	exit;
 }
 
+if ( ! class_exists( __NAMESPACE__ . '\\Social_OAuth_Registry', false ) ) {
+	require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-social-oauth-registry.php';
+}
+if ( ! class_exists( __NAMESPACE__ . '\\Social_OAuth', false ) ) {
+	require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-social-oauth.php';
+}
+
 class Admin_Settings {
 
 	const OPTION_NAME                 = 'creatorreactor_settings';
@@ -36,7 +43,38 @@ class Admin_Settings {
 	const LOG_TYPE_ERROR              = 'error';
 	const OPTION_TIERS               = 'creatorreactor_tiers';
 	const OPTION_SUBSCRIPTION_TIERS  = 'creatorreactor_subscription_tiers';
-	const ENCRYPTED_FIELDS            = [ 'creatorreactor_oauth_client_id', 'creatorreactor_oauth_client_secret', 'creatorreactor_cloud_password', 'creatorreactor_metrics_ingest_token', 'creatorreactor_ofauth_api_key', 'creatorreactor_ofauth_webhook_secret', 'creatorreactor_google_oauth_client_id', 'creatorreactor_google_oauth_client_secret', 'creatorreactor_instagram_oauth_client_id', 'creatorreactor_instagram_oauth_client_secret' ];
+	const ENCRYPTED_FIELDS            = [
+		'creatorreactor_oauth_client_id',
+		'creatorreactor_oauth_client_secret',
+		'creatorreactor_cloud_password',
+		'creatorreactor_metrics_ingest_token',
+		'creatorreactor_ofauth_api_key',
+		'creatorreactor_ofauth_webhook_secret',
+		'creatorreactor_google_oauth_client_id',
+		'creatorreactor_google_oauth_client_secret',
+		'creatorreactor_instagram_oauth_client_id',
+		'creatorreactor_instagram_oauth_client_secret',
+		'creatorreactor_tiktok_oauth_client_id',
+		'creatorreactor_tiktok_oauth_client_secret',
+		'creatorreactor_x_twitter_oauth_client_id',
+		'creatorreactor_x_twitter_oauth_client_secret',
+		'creatorreactor_snapchat_oauth_client_id',
+		'creatorreactor_snapchat_oauth_client_secret',
+		'creatorreactor_linkedin_oauth_client_id',
+		'creatorreactor_linkedin_oauth_client_secret',
+		'creatorreactor_pinterest_oauth_client_id',
+		'creatorreactor_pinterest_oauth_client_secret',
+		'creatorreactor_reddit_oauth_client_id',
+		'creatorreactor_reddit_oauth_client_secret',
+		'creatorreactor_twitch_oauth_client_id',
+		'creatorreactor_twitch_oauth_client_secret',
+		'creatorreactor_discord_oauth_client_id',
+		'creatorreactor_discord_oauth_client_secret',
+		'creatorreactor_mastodon_oauth_client_id',
+		'creatorreactor_mastodon_oauth_client_secret',
+		'creatorreactor_bluesky_oauth_client_id',
+		'creatorreactor_bluesky_oauth_client_secret',
+	];
 	/** Option key: appearance of Sign in with Google on wp-login and the shortcode. */
 	const GOOGLE_LOGIN_BUTTON_STYLE_KEY = 'creatorreactor_google_login_button_style';
 	/** Option key: site-wide Default Login Button Style (Compact vs Full) under Settings → General. */
@@ -117,6 +155,19 @@ class Admin_Settings {
 	}
 
 	/**
+	 * Markup for copy-to-clipboard icon buttons (Debug logs / schema; img/icon-copy.png).
+	 *
+	 * @return string
+	 */
+	private static function admin_copy_icon_img() {
+		$url = CREATORREACTOR_PLUGIN_URL . 'img/icon-copy.png';
+		if ( defined( 'CREATORREACTOR_VERSION' ) ) {
+			$url = add_query_arg( 'ver', CREATORREACTOR_VERSION, $url );
+		}
+		return '<img class="creatorreactor-icon-copy" src="' . esc_url( $url ) . '" alt="" width="20" height="20" decoding="async" />';
+	}
+
+	/**
 	 * Top-level wp-admin menu icon: CR monogram SVG (replaces generic dashicon).
 	 *
 	 * Uses a data URI so the SVG renders like core Dashicons without relying on .svg MIME delivery.
@@ -186,6 +237,9 @@ class Admin_Settings {
 		add_action( 'wp_ajax_creatorreactor_onboarding_ignore_checks', [ __CLASS__, 'ajax_onboarding_ignore_failing_checks' ] );
 		add_action( 'wp_ajax_creatorreactor_debug_schema_manifest', [ __CLASS__, 'ajax_debug_schema_manifest' ] );
 		add_action( 'wp_ajax_creatorreactor_google_oauth_validate', [ __CLASS__, 'ajax_google_oauth_validate_config' ] );
+		add_action( 'wp_ajax_creatorreactor_social_oauth_validate', [ __CLASS__, 'ajax_social_oauth_validate_config' ] );
+		add_action( 'admin_post_creatorreactor_disable_social_oauth', [ __CLASS__, 'handle_disable_social_oauth' ] );
+		add_action( 'admin_post_creatorreactor_test_social_oauth', [ __CLASS__, 'handle_test_social_oauth' ] );
 		add_action( 'wp_ajax_creatorreactor_instagram_oauth_validate', [ __CLASS__, 'ajax_instagram_oauth_validate_config' ] );
 		add_action( 'wp_ajax_creatorreactor_fanvue_oauth_validate', [ __CLASS__, 'ajax_fanvue_oauth_validate_config' ] );
 		add_action( 'wp_ajax_creatorreactor_onlyfans_ofauth_validate', [ __CLASS__, 'ajax_onlyfans_ofauth_validate_config' ] );
@@ -235,6 +289,27 @@ class Admin_Settings {
 	}
 
 	/**
+	 * Settings screen URL for one social login provider (unified Social login tab + sidebar).
+	 *
+	 * @param string $slug Provider slug (e.g. tiktok, bluesky).
+	 * @return string
+	 */
+	private static function admin_social_oauth_settings_url( $slug ) {
+		$slug  = sanitize_key( (string) $slug );
+		$slugs = self::all_settings_social_oauth_slugs();
+		if ( $slug === '' || ! in_array( $slug, $slugs, true ) ) {
+			$slug = ! empty( $slugs[0] ) ? $slugs[0] : 'tiktok';
+		}
+		return self::admin_page_url(
+			[
+				'tab'             => 'social_oauth',
+				'social_provider' => $slug,
+			],
+			self::PAGE_SETTINGS_SLUG
+		);
+	}
+
+	/**
 	 * Integration-check "Fix" actions: titles, explanations, and whether the browser runs AJAX or navigates away.
 	 *
 	 * @return array<string, array{type: string, title: string, message: string, redirect_url?: string}>
@@ -262,12 +337,12 @@ class Admin_Settings {
 			'social_login_enable_wp_login'    => [
 				'type'    => 'ajax',
 				'title'   => __( 'Enable social login on wp-login', 'wp-creatorreactor' ),
-				'message' => __( 'Fanvue and/or Google sign-in is already saved in this plugin. This will turn on “Add social login button to the WordPress login page?” in the plugin’s Settings (General tab) so wp-login shows the configured provider button(s).', 'wp-creatorreactor' ),
+				'message' => __( 'At least one social sign-in provider is already saved in this plugin. This will turn on “Add social login button to the WordPress login page?” in the plugin’s Settings (General tab) so wp-login shows the configured provider button(s).', 'wp-creatorreactor' ),
 			],
 			'social_login_configure_oauth'    => [
 				'type'          => 'redirect',
-				'title'         => __( 'Configure social login (Fanvue and/or Google)', 'wp-creatorreactor' ),
-				'message'       => __( 'Social login on wp-login needs at least one provider in Creator mode: Fanvue OAuth (Settings → Fanvue) and/or Google (Settings → Google). Save credentials, then open Settings → Debug to run checks again or use Fix on the social login check to enable the wp-login option.', 'wp-creatorreactor' ),
+				'title'         => __( 'Configure social login (Fanvue, Google, or another OAuth tab)', 'wp-creatorreactor' ),
+				'message'       => __( 'Social login on wp-login needs at least one provider in Creator mode (Fanvue, Google, TikTok, X, Bluesky, Mastodon, etc.—each has its own Settings tab). Save credentials, then open Settings → Debug to run checks again or use Fix on the social login check to enable the wp-login option.', 'wp-creatorreactor' ),
 				'redirect_url'  => $social_setup_url,
 			],
 			'open_plugins_registration_conflict' => [
@@ -382,7 +457,7 @@ class Admin_Settings {
 				if ( ! self::is_fan_social_login_configured() ) {
 					return new \WP_Error(
 						'oauth',
-						__( 'No social login provider is configured. Add Fanvue OAuth (Client ID and Secret) and/or Google sign-in under Settings → Google.', 'wp-creatorreactor' )
+						__( 'No social login provider is configured. Add Fanvue OAuth, Google sign-in, or another social OAuth provider under the matching Settings tab.', 'wp-creatorreactor' )
 					);
 				}
 				$sanitized = self::sanitize_options( [ 'replace_wp_login_with_social' => 1 ] );
@@ -888,25 +963,19 @@ class Admin_Settings {
 	}
 
 	/**
-	 * GET /v1/schema from the configured schema service (CreatorReactor Cloud).
+	 * GET JSON from a full schema service URL (manifest, envelope, entity schemas, etc.).
 	 *
-	 * @param bool $cache_bust When true, append a cache-busting query argument for refresh requests.
+	 * @param string $url Full URL (already cache-busted when needed).
 	 * @return array{ok:bool,http_code:int,spec_version:string,body:string,error:string,request_url:string}
 	 */
-	private static function fetch_schema_service_manifest( $cache_bust = false ) {
-		$base = self::get_schema_service_url_for_requests();
-		$url  = $base . '/v1/schema';
-		if ( $cache_bust ) {
-			$url = add_query_arg( '_cr', (string) time(), $url );
-		}
-
+	private static function fetch_schema_service_url( $url ) {
 		$response = wp_remote_get(
 			$url,
 			[
 				'timeout' => 20,
 				'headers' => [
-					'Accept'          => 'application/json',
-					'Cache-Control'   => 'no-cache',
+					'Accept'        => 'application/json',
+					'Cache-Control' => 'no-cache',
 				],
 			]
 		);
@@ -962,6 +1031,38 @@ class Admin_Settings {
 	}
 
 	/**
+	 * GET /v1/schema from the configured schema service (CreatorReactor Cloud).
+	 *
+	 * @param bool $cache_bust When true, append a cache-busting query argument for refresh requests.
+	 * @return array{ok:bool,http_code:int,spec_version:string,body:string,error:string,request_url:string}
+	 */
+	private static function fetch_schema_service_manifest( $cache_bust = false ) {
+		$base = self::get_schema_service_url_for_requests();
+		$url  = $base . '/v1/schema';
+		if ( $cache_bust ) {
+			$url = add_query_arg( '_cr', (string) time(), $url );
+		}
+		return self::fetch_schema_service_url( $url );
+	}
+
+	/**
+	 * GET a schema document path (e.g. /v1/schema/envelope/v1) from the configured schema service.
+	 *
+	 * @param string $path Path beginning with / (e.g. /v1/schema/envelope/v1).
+	 * @param bool   $cache_bust When true, append a cache-busting query argument for refresh requests.
+	 * @return array{ok:bool,http_code:int,spec_version:string,body:string,error:string,request_url:string}
+	 */
+	private static function fetch_schema_service_document( $path, $cache_bust = false ) {
+		$base = self::get_schema_service_url_for_requests();
+		$path = '/' . ltrim( (string) $path, '/' );
+		$url  = $base . $path;
+		if ( $cache_bust ) {
+			$url = add_query_arg( '_cr', (string) time(), $url );
+		}
+		return self::fetch_schema_service_url( $url );
+	}
+
+	/**
 	 * AJAX: fetch schema manifest JSON from the configured schema service (same as Debug tab initial load).
 	 */
 	public static function ajax_debug_schema_manifest() {
@@ -970,8 +1071,14 @@ class Admin_Settings {
 			wp_send_json_error( [ 'message' => __( 'Forbidden.', 'wp-creatorreactor' ) ], 403 );
 		}
 
-		$result = self::fetch_schema_service_manifest( true );
-		wp_send_json_success( $result );
+		$manifest = self::fetch_schema_service_manifest( true );
+		$envelope = self::fetch_schema_service_document( '/v1/schema/envelope/v1', true );
+		wp_send_json_success(
+			[
+				'manifest' => $manifest,
+				'envelope' => $envelope,
+			]
+		);
 	}
 
 	/**
@@ -1052,6 +1159,132 @@ class Admin_Settings {
 		}
 
 		return __( 'Double-check your OAuth client type is “Web application”, the consent screen is configured, and API restrictions on the client (if any) allow Google Sign-In / OAuth.', 'wp-creatorreactor' );
+	}
+
+	/**
+	 * AJAX: verify generic social OAuth client ID / secret (TikTok, X, …) before saving.
+	 */
+	public static function ajax_social_oauth_validate_config() {
+		check_ajax_referer( 'creatorreactor_social_oauth_save', 'nonce' );
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_send_json_error( [ 'message' => __( 'Forbidden.', 'wp-creatorreactor' ) ], 403 );
+		}
+		if ( self::is_broker_mode() ) {
+			wp_send_json_success( [ 'skip' => true ] );
+		}
+		$slug = isset( $_POST['provider_slug'] ) ? sanitize_key( wp_unslash( $_POST['provider_slug'] ) ) : '';
+		if ( $slug === '' || ! in_array( $slug, self::all_settings_social_oauth_slugs(), true ) ) {
+			wp_send_json_error( [ 'message' => __( 'Invalid provider.', 'wp-creatorreactor' ) ], 400 );
+		}
+		if ( 'bluesky' === $slug ) {
+			wp_send_json_success(
+				[
+					'skip'    => true,
+					'message' => __( 'Use Save Settings to store Bluesky credentials; the configuration check runs after atproto OAuth is fully configured.', 'wp-creatorreactor' ),
+				]
+			);
+		}
+		$client_id = isset( $_POST['client_id'] ) ? trim( sanitize_text_field( wp_unslash( $_POST['client_id'] ) ) ) : '';
+		$secret_in = isset( $_POST['client_secret'] ) ? (string) wp_unslash( $_POST['client_secret'] ) : '';
+		$secret_unchanged = isset( $_POST['secret_unchanged'] ) && (string) wp_unslash( $_POST['secret_unchanged'] ) === '1';
+		if ( $client_id === '' ) {
+			wp_send_json_success( [ 'skip' => true ] );
+		}
+		$opts = self::get_options();
+		$sec_key = Social_OAuth_Registry::option_client_secret( $slug );
+		if ( $secret_unchanged || trim( $secret_in ) === '********' ) {
+			$client_secret = isset( $opts[ $sec_key ] ) ? trim( (string) $opts[ $sec_key ] ) : '';
+		} else {
+			$client_secret = trim( $secret_in );
+		}
+		if ( $client_secret === '' ) {
+			wp_send_json_error(
+				[
+					'message'     => __( 'Enter the Client Secret so we can verify your app, or clear the Client ID if you are removing this provider.', 'wp-creatorreactor' ),
+					'remediation' => __( 'Copy the client secret from the provider’s developer console and paste it here.', 'wp-creatorreactor' ),
+				]
+			);
+		}
+		if ( 'mastodon' === $slug ) {
+			$inst = isset( $_POST['mastodon_instance'] ) ? trim( wp_unslash( $_POST['mastodon_instance'] ) ) : '';
+			if ( $inst === '' ) {
+				$inst = isset( $opts['creatorreactor_mastodon_instance'] ) ? trim( (string) $opts['creatorreactor_mastodon_instance'] ) : '';
+			}
+			$opts['creatorreactor_mastodon_instance'] = esc_url_raw( $inst );
+		}
+		$redirect = Social_OAuth::get_callback_redirect_uri( $slug );
+		$probe    = Social_OAuth::probe_client_credentials_for_settings_test( $slug, $client_id, $client_secret, $redirect, $opts );
+		if ( is_wp_error( $probe ) ) {
+			wp_send_json_error(
+				[
+					'message'     => $probe->get_error_message(),
+					'remediation' => __( 'Confirm the Client ID, Client Secret, and redirect URI match the app registration. For Mastodon, verify the instance URL.', 'wp-creatorreactor' ),
+				]
+			);
+		}
+		wp_send_json_success(
+			[
+				'message' => __( 'Credentials look valid. Click Acknowledge below to save your settings.', 'wp-creatorreactor' ),
+			]
+		);
+	}
+
+	/**
+	 * Sanitize encrypted client id/secret and button size for all social OAuth provider tabs.
+	 *
+	 * @param array<string, mixed> $input    Raw POST input.
+	 * @param array<string, mixed> $raw_opts Previous options.
+	 * @param array<string, mixed> $opts     Options being built (by ref).
+	 */
+	private static function sanitize_social_oauth_provider_options( $input, $raw_opts, &$opts ) {
+		foreach ( self::all_settings_social_oauth_slugs() as $slug ) {
+			$id_key   = Social_OAuth_Registry::option_client_id( $slug );
+			$sec_key  = Social_OAuth_Registry::option_client_secret( $slug );
+			$mode_key = Social_OAuth_Registry::option_button_size_mode( $slug );
+			if ( isset( $input[ $id_key ] ) ) {
+				$rid = sanitize_text_field( wp_unslash( $input[ $id_key ] ) );
+				$opts[ $id_key ] = $rid === '' ? '' : self::encrypt_value( $rid );
+			} else {
+				$opts[ $id_key ] = isset( $raw_opts[ $id_key ] ) ? $raw_opts[ $id_key ] : '';
+			}
+			$sec_in = isset( $input[ $sec_key ] ) ? (string) wp_unslash( $input[ $sec_key ] ) : '';
+			if ( $sec_in === '********' || $sec_in === '' ) {
+				$opts[ $sec_key ] = isset( $raw_opts[ $sec_key ] ) ? $raw_opts[ $sec_key ] : '';
+			} else {
+				$enc_s = self::encrypt_value( $sec_in );
+				if ( $enc_s === '' ) {
+					add_settings_error(
+						self::OPTION_NAME,
+						'social_oauth_secret_encrypt_failed_' . $slug,
+						sprintf(
+							/* translators: %s: provider slug */
+							__( 'Could not encrypt OAuth Client Secret for %s. The previous secret was kept.', 'wp-creatorreactor' ),
+							$slug
+						)
+					);
+					$opts[ $sec_key ] = isset( $raw_opts[ $sec_key ] ) ? $raw_opts[ $sec_key ] : '';
+				} else {
+					$opts[ $sec_key ] = $enc_s;
+				}
+			}
+			if ( isset( $input[ $mode_key ] ) ) {
+				$opts[ $mode_key ] = self::normalize_oauth_button_size_mode_from_posted_choice(
+					wp_unslash( $input[ $mode_key ] ),
+					$opts
+				);
+			} elseif ( array_key_exists( $mode_key, $raw_opts ) ) {
+				$opts[ $mode_key ] = self::sanitize_oauth_button_size_mode( $raw_opts[ $mode_key ] );
+			} else {
+				$opts[ $mode_key ] = 'general';
+			}
+		}
+		if ( isset( $input['creatorreactor_mastodon_instance'] ) ) {
+			$opts['creatorreactor_mastodon_instance'] = esc_url_raw( trim( wp_unslash( $input['creatorreactor_mastodon_instance'] ) ) );
+		} elseif ( isset( $raw_opts['creatorreactor_mastodon_instance'] ) ) {
+			$opts['creatorreactor_mastodon_instance'] = esc_url_raw( trim( (string) $raw_opts['creatorreactor_mastodon_instance'] ) );
+		} else {
+			$opts['creatorreactor_mastodon_instance'] = '';
+		}
 	}
 
 	/**
@@ -2105,6 +2338,10 @@ class Admin_Settings {
 			}
 		}
 
+		self::sanitize_social_oauth_provider_options( $input, $raw_opts, $opts );
+
+		$opts['creatorreactor_bluesky_oauth_enabled'] = ! empty( $input['creatorreactor_bluesky_oauth_enabled'] );
+
 		if ( array_key_exists( self::OAUTH_LOGO_BUTTON_GENERAL_SIZE_KEY, $input ) ) {
 			$opts[ self::OAUTH_LOGO_BUTTON_GENERAL_SIZE_KEY ] = self::sanitize_oauth_logo_button_general_size( wp_unslash( $input[ self::OAUTH_LOGO_BUTTON_GENERAL_SIZE_KEY ] ) );
 		} else {
@@ -2293,7 +2530,7 @@ class Admin_Settings {
 				add_settings_error(
 					self::OPTION_NAME,
 					'creatorreactor_social_login_not_configured',
-					__( 'The WordPress login page option was turned off because no social login provider is configured. Add Fanvue OAuth (Client ID and Client Secret) or Google sign-in credentials under Settings → Google.', 'wp-creatorreactor' )
+					__( 'The WordPress login page option was turned off because no social login provider is configured. Add Fanvue OAuth, Google sign-in, or another social OAuth provider under the matching Settings tab.', 'wp-creatorreactor' )
 				);
 			}
 			$opts['replace_wp_login_with_social'] = false;
@@ -2317,11 +2554,35 @@ class Admin_Settings {
 		$g_id      = isset( $opts['creatorreactor_google_oauth_client_id'] ) ? trim( (string) $opts['creatorreactor_google_oauth_client_id'] ) : '';
 		$g_secret  = isset( $opts['creatorreactor_google_oauth_client_secret'] ) ? trim( (string) $opts['creatorreactor_google_oauth_client_secret'] ) : '';
 		$google_ok = $g_id !== '' && $g_secret !== '';
-		return $fanvue_ok || $google_ok;
+		if ( $fanvue_ok || $google_ok ) {
+			return true;
+		}
+		foreach ( self::all_settings_social_oauth_slugs() as $slug ) {
+			if ( 'bluesky' === $slug ) {
+				if ( ! empty( $opts['creatorreactor_bluesky_oauth_enabled'] ) ) {
+					return true;
+				}
+				continue;
+			}
+			$oid = isset( $opts[ Social_OAuth_Registry::option_client_id( $slug ) ] ) ? trim( (string) $opts[ Social_OAuth_Registry::option_client_id( $slug ) ] ) : '';
+			$osec = isset( $opts[ Social_OAuth_Registry::option_client_secret( $slug ) ] ) ? trim( (string) $opts[ Social_OAuth_Registry::option_client_secret( $slug ) ] ) : '';
+			if ( $oid === '' || $osec === '' ) {
+				continue;
+			}
+			if ( 'mastodon' === $slug ) {
+				$inst = isset( $opts['creatorreactor_mastodon_instance'] ) ? trim( (string) $opts['creatorreactor_mastodon_instance'] ) : '';
+				if ( $inst !== '' ) {
+					return true;
+				}
+				continue;
+			}
+			return true;
+		}
+		return false;
 	}
 
 	/**
-	 * True when the plugin has at least one configured social (Fanvue and/or Google) OAuth app for visitor login in Creator mode.
+	 * True when the plugin has at least one configured social OAuth app for visitor login in Creator mode (Fanvue, Google, or another social provider tab).
 	 */
 	public static function is_fan_social_login_configured() {
 		return self::is_fan_social_login_configured_from_opts( self::get_options() );
@@ -2338,6 +2599,44 @@ class Admin_Settings {
 		$id = isset( $o['creatorreactor_google_oauth_client_id'] ) ? trim( (string) $o['creatorreactor_google_oauth_client_id'] ) : '';
 		$sec = isset( $o['creatorreactor_google_oauth_client_secret'] ) ? trim( (string) $o['creatorreactor_google_oauth_client_secret'] ) : '';
 		return $id !== '' && $sec !== '';
+	}
+
+	/**
+	 * Slugs with Settings tabs for generic + Bluesky social OAuth (see {@see Social_OAuth_Registry} and Bluesky_OAuth).
+	 *
+	 * @return string[]
+	 */
+	public static function all_settings_social_oauth_slugs() {
+		return array_merge( Social_OAuth_Registry::generic_slugs(), [ 'bluesky' ] );
+	}
+
+	/**
+	 * Whether a social OAuth provider has saved Client ID and Secret (and Mastodon: instance URL).
+	 *
+	 * @param string $slug Provider slug (e.g. tiktok, bluesky).
+	 */
+	public static function is_social_oauth_provider_configured( $slug ) {
+		if ( self::is_broker_mode() ) {
+			return false;
+		}
+		$slug = sanitize_key( (string) $slug );
+		if ( $slug === '' ) {
+			return false;
+		}
+		if ( 'bluesky' === $slug ) {
+			$o = self::get_options();
+			return ! empty( $o['creatorreactor_bluesky_oauth_enabled'] );
+		}
+		$o  = self::get_options();
+		$id = isset( $o[ Social_OAuth_Registry::option_client_id( $slug ) ] ) ? trim( (string) $o[ Social_OAuth_Registry::option_client_id( $slug ) ] ) : '';
+		$sec = isset( $o[ Social_OAuth_Registry::option_client_secret( $slug ) ] ) ? trim( (string) $o[ Social_OAuth_Registry::option_client_secret( $slug ) ] ) : '';
+		if ( $id === '' || $sec === '' ) {
+			return false;
+		}
+		if ( 'mastodon' === $slug ) {
+			return Social_OAuth::normalize_mastodon_base_from_opts( $o ) !== '';
+		}
+		return true;
 	}
 
 	/**
@@ -2588,6 +2887,25 @@ class Admin_Settings {
 	}
 
 	/**
+	 * @param array<string, mixed> $opts Sanitized options.
+	 * @param string               $slug Provider slug (e.g. tiktok, bluesky).
+	 * @return string `standard` or `minimal`.
+	 */
+	public static function resolve_social_oauth_login_button_variant_from_opts( array $opts, $slug ) {
+		$slug     = sanitize_key( (string) $slug );
+		$mode_key = Social_OAuth_Registry::option_button_size_mode( $slug );
+		$mode     = array_key_exists( $mode_key, $opts )
+			? self::sanitize_oauth_button_size_mode( $opts[ $mode_key ] )
+			: 'general';
+		$general = self::oauth_logo_button_general_size_from_opts( $opts );
+		if ( 'general' === $mode ) {
+			return 'compact' === $general ? 'minimal' : 'standard';
+		}
+
+		return 'compact' === $mode ? 'minimal' : 'standard';
+	}
+
+	/**
 	 * Effective Google button style for front end (includes logo-only when compact).
 	 *
 	 * @param array<string, mixed> $opts Sanitized options.
@@ -2673,6 +2991,9 @@ class Admin_Settings {
 	 * @param string $site_general  Default Login Button Style (compact|full).
 	 * @param string $compact_preview_html Preview HTML for compact.
 	 * @param string $full_preview_html    Preview HTML for full.
+	 * @param array<string, mixed> $ui Optional. Keys: show_default_pill (bool), legend (string), legend_class (string),
+	 *                                 description (string, absent = provider default copy; empty string = no paragraph),
+	 *                                 radiogroup_aria_label (string), fieldset_extra_classes (string).
 	 */
 	public static function render_oauth_logo_button_size_mode_fieldset(
 		$option_name,
@@ -2680,17 +3001,31 @@ class Admin_Settings {
 		$stored_mode,
 		$site_general,
 		$compact_preview_html,
-		$full_preview_html
+		$full_preview_html,
+		array $ui = []
 	) {
-		$rows = [
+		$show_default_pill = array_key_exists( 'show_default_pill', $ui ) ? (bool) $ui['show_default_pill'] : true;
+		$legend_text       = isset( $ui['legend'] ) ? (string) $ui['legend'] : __( 'Logo button appearance', 'wp-creatorreactor' );
+		$legend_class      = isset( $ui['legend_class'] ) ? trim( (string) $ui['legend_class'] ) : '';
+		$aria_label        = isset( $ui['radiogroup_aria_label'] ) ? (string) $ui['radiogroup_aria_label'] : __( 'Logo button appearance', 'wp-creatorreactor' );
+		$fs_extra          = isset( $ui['fieldset_extra_classes'] ) ? ' ' . trim( (string) $ui['fieldset_extra_classes'] ) : '';
+		$rows              = [
 			'compact' => __( 'Compact', 'wp-creatorreactor' ),
 			'full'    => __( 'Full', 'wp-creatorreactor' ),
 		];
 		?>
-		<fieldset class="creatorreactor-google-login-style-fieldset creatorreactor-oauth-logo-size-mode-fieldset">
-			<legend><?php esc_html_e( 'Logo button appearance', 'wp-creatorreactor' ); ?></legend>
-			<p class="description"><?php esc_html_e( 'Pick compact or full for this provider. The row that matches Default Login Button Style (General settings) is tagged “Default”; choosing that row follows the site default.', 'wp-creatorreactor' ); ?></p>
-			<div class="creatorreactor-fanvue-login-style-grid" role="radiogroup" aria-label="<?php esc_attr_e( 'Logo button appearance', 'wp-creatorreactor' ); ?>">
+		<fieldset class="creatorreactor-google-login-style-fieldset creatorreactor-oauth-logo-size-mode-fieldset<?php echo $fs_extra !== '' ? esc_attr( $fs_extra ) : ''; ?>">
+			<?php if ( $legend_class !== '' ) : ?>
+				<legend class="<?php echo esc_attr( $legend_class ); ?>"><?php echo esc_html( $legend_text ); ?></legend>
+			<?php else : ?>
+				<legend><?php echo esc_html( $legend_text ); ?></legend>
+			<?php endif; ?>
+			<?php if ( ! array_key_exists( 'description', $ui ) ) : ?>
+				<p class="description"><?php esc_html_e( 'Pick compact or full for this provider. The row that matches Default Login Button Style (General settings) is tagged “Default”; choosing that row follows the site default.', 'wp-creatorreactor' ); ?></p>
+			<?php elseif ( (string) $ui['description'] !== '' ) : ?>
+				<p class="description"><?php echo esc_html( (string) $ui['description'] ); ?></p>
+			<?php endif; ?>
+			<div class="creatorreactor-fanvue-login-style-grid" role="radiogroup" aria-label="<?php echo esc_attr( $aria_label ); ?>">
 				<?php foreach ( $rows as $slug => $row_label ) : ?>
 					<label class="creatorreactor-fanvue-login-style-option">
 						<span class="creatorreactor-fanvue-login-style-option-head">
@@ -2702,7 +3037,7 @@ class Admin_Settings {
 							/>
 							<span class="creatorreactor-fanvue-login-style-option-label">
 								<?php echo esc_html( $row_label ); ?>
-								<?php if ( $slug === $site_general ) : ?>
+								<?php if ( $show_default_pill && $slug === $site_general ) : ?>
 									<span class="creatorreactor-oauth-default-pill"><?php esc_html_e( 'Default', 'wp-creatorreactor' ); ?></span>
 								<?php endif; ?>
 							</span>
@@ -3123,6 +3458,26 @@ class Admin_Settings {
 		if ( ! array_key_exists( self::OAUTH_LOGO_BUTTON_GENERAL_SIZE_KEY, $opts ) ) {
 			$opts[ self::OAUTH_LOGO_BUTTON_GENERAL_SIZE_KEY ] = 'full';
 		}
+		if ( ! array_key_exists( 'creatorreactor_bluesky_oauth_enabled', $opts ) ) {
+			$opts['creatorreactor_bluesky_oauth_enabled'] = false;
+		}
+		if ( ! array_key_exists( 'creatorreactor_mastodon_instance', $opts ) ) {
+			$opts['creatorreactor_mastodon_instance'] = '';
+		}
+		foreach ( self::all_settings_social_oauth_slugs() as $slug ) {
+			$idk = Social_OAuth_Registry::option_client_id( $slug );
+			$sec = Social_OAuth_Registry::option_client_secret( $slug );
+			$mod = Social_OAuth_Registry::option_button_size_mode( $slug );
+			if ( ! array_key_exists( $idk, $opts ) ) {
+				$opts[ $idk ] = '';
+			}
+			if ( ! array_key_exists( $sec, $opts ) ) {
+				$opts[ $sec ] = '';
+			}
+			if ( ! array_key_exists( $mod, $opts ) ) {
+				$opts[ $mod ] = 'general';
+			}
+		}
 		update_option( self::OPTION_NAME, $opts );
 	}
 
@@ -3322,6 +3677,109 @@ class Admin_Settings {
 		self::log_connection( 'info', 'OnlyFans OFAuth: API key and webhook secret cleared (dashboard Disable).' );
 
 		wp_safe_redirect( self::admin_page_url( [ 'tab' => 'dashboard', 'gateway_disabled' => 'onlyfans' ] ) );
+		exit;
+	}
+
+	/**
+	 * Clear one social OAuth provider’s credentials (Settings tab Disable).
+	 */
+	public static function handle_disable_social_oauth() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Unauthorized.', 'wp-creatorreactor' ) );
+		}
+		check_admin_referer( 'creatorreactor_disable_social_oauth' );
+		$slug = isset( $_POST['provider_slug'] ) ? sanitize_key( wp_unslash( $_POST['provider_slug'] ) ) : '';
+		if ( $slug === '' || ! in_array( $slug, self::all_settings_social_oauth_slugs(), true ) ) {
+			wp_safe_redirect( self::admin_page_url( [ 'tab' => 'general' ], self::PAGE_SETTINGS_SLUG ) );
+			exit;
+		}
+		$opts = get_option( self::OPTION_NAME, [] );
+		if ( ! is_array( $opts ) ) {
+			$opts = [];
+		}
+		$opts[ Social_OAuth_Registry::option_client_id( $slug ) ]     = '';
+		$opts[ Social_OAuth_Registry::option_client_secret( $slug ) ] = '';
+		if ( 'mastodon' === $slug ) {
+			$opts['creatorreactor_mastodon_instance'] = '';
+		}
+		if ( 'bluesky' === $slug ) {
+			$opts['creatorreactor_bluesky_oauth_enabled'] = false;
+		}
+		update_option( self::OPTION_NAME, $opts );
+		self::flush_creatorreactor_settings_cache();
+		self::log_connection( 'info', 'Social OAuth (' . $slug . '): credentials cleared (Disable).' );
+		wp_safe_redirect( self::admin_social_oauth_settings_url( $slug ) );
+		exit;
+	}
+
+	/**
+	 * Run credential probe from dashboard gateway row (optional hook).
+	 */
+	public static function handle_test_social_oauth() {
+		if ( ! current_user_can( 'manage_options' ) ) {
+			wp_die( esc_html__( 'Unauthorized.', 'wp-creatorreactor' ) );
+		}
+		check_admin_referer( 'creatorreactor_test_social_oauth' );
+		$slug = isset( $_POST['provider_slug'] ) ? sanitize_key( wp_unslash( $_POST['provider_slug'] ) ) : '';
+		if ( $slug === '' || ! in_array( $slug, self::all_settings_social_oauth_slugs(), true ) ) {
+			wp_safe_redirect( self::admin_page_url( [ 'tab' => 'dashboard', 'gateway_test' => '1' ] ) );
+			exit;
+		}
+		if ( self::is_broker_mode() ) {
+			self::set_gateway_dashboard_notice(
+				[
+					'success' => false,
+					'message' => __( 'Social OAuth is not used in Agency mode.', 'wp-creatorreactor' ),
+					'fix_url' => self::admin_page_url( [ 'tab' => 'general' ], self::PAGE_SETTINGS_SLUG ),
+				]
+			);
+			wp_safe_redirect( self::admin_page_url( [ 'tab' => 'dashboard', 'gateway_test' => '1' ] ) );
+			exit;
+		}
+		$opts = self::get_options();
+		$id   = isset( $opts[ Social_OAuth_Registry::option_client_id( $slug ) ] ) ? trim( (string) $opts[ Social_OAuth_Registry::option_client_id( $slug ) ] ) : '';
+		$sec  = isset( $opts[ Social_OAuth_Registry::option_client_secret( $slug ) ] ) ? trim( (string) $opts[ Social_OAuth_Registry::option_client_secret( $slug ) ] ) : '';
+		if ( $id === '' || $sec === '' ) {
+			self::set_gateway_dashboard_notice(
+				[
+					'success' => false,
+					'message' => __( 'Add OAuth credentials for this provider, then run Test again.', 'wp-creatorreactor' ),
+					'fix_url' => self::admin_social_oauth_settings_url( $slug ),
+				]
+			);
+			wp_safe_redirect( self::admin_page_url( [ 'tab' => 'dashboard', 'gateway_test' => '1' ] ) );
+			exit;
+		}
+		if ( 'bluesky' === $slug ) {
+			self::set_gateway_dashboard_notice(
+				[
+					'success' => true,
+					'message' => __( 'Bluesky uses atproto OAuth — use the provider tab instructions and Save Settings.', 'wp-creatorreactor' ),
+					'fix_url' => self::admin_social_oauth_settings_url( 'bluesky' ),
+				]
+			);
+			wp_safe_redirect( self::admin_page_url( [ 'tab' => 'dashboard', 'gateway_test' => '1' ] ) );
+			exit;
+		}
+		$redirect = Social_OAuth::get_callback_redirect_uri( $slug );
+		$probe    = Social_OAuth::probe_client_credentials_for_settings_test( $slug, $id, $sec, $redirect, $opts );
+		if ( is_wp_error( $probe ) ) {
+			self::set_gateway_dashboard_notice(
+				[
+					'success' => false,
+					'message' => $probe->get_error_message(),
+					'fix_url' => self::admin_social_oauth_settings_url( $slug ),
+				]
+			);
+		} else {
+			self::set_gateway_dashboard_notice(
+				[
+					'success' => true,
+					'message' => __( 'OAuth credentials were accepted by the provider’s token endpoint.', 'wp-creatorreactor' ),
+				]
+			);
+		}
+		wp_safe_redirect( self::admin_page_url( [ 'tab' => 'dashboard', 'gateway_test' => '1' ] ) );
 		exit;
 	}
 
@@ -4003,8 +4461,8 @@ class Admin_Settings {
 						<p><?php esc_html_e( 'General tab controls site-wide behavior independent of OAuth credentials.', 'wp-creatorreactor' ); ?></p>
 						<h4><?php esc_html_e( 'Key options', 'wp-creatorreactor' ); ?></h4>
 						<ul>
-							<li><?php esc_html_e( 'WordPress login: Fanvue and/or Google social buttons when those providers are configured', 'wp-creatorreactor' ); ?></li>
-							<li><?php esc_html_e( 'Instagram OAuth is configured on Settings → Instagram (Meta app ID and secret); it does not add a button to wp-login—visitor sign-in on the login page remains Fanvue and/or Google when enabled.', 'wp-creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'WordPress login: Fanvue, Google, and any configured social OAuth tab (TikTok, X, Bluesky, etc.) show buttons when credentials are saved.', 'wp-creatorreactor' ); ?></li>
+							<li><?php esc_html_e( 'Instagram OAuth is configured on Settings → Instagram (Meta app ID and secret); it does not add a button to wp-login—visitor sign-in on the login page uses Fanvue, Google, and the other social tabs when enabled.', 'wp-creatorreactor' ); ?></li>
 							<li><?php esc_html_e( 'Admin timezone display for user/sync timestamps', 'wp-creatorreactor' ); ?></li>
 						</ul>
 						<p><?php esc_html_e( 'Recommendation: keep timezone aligned with your operations team so sync and error timelines are easy to correlate.', 'wp-creatorreactor' ); ?></p>
@@ -4314,22 +4772,27 @@ class Admin_Settings {
 							<?php endif; ?>
 						</td>
 					</tr>
-					<tr class="creatorreactor-settings-row-dbs">
+					<tr>
 						<th scope="row"><?php esc_html_e( 'Default Login Button Style', 'wp-creatorreactor' ); ?></th>
 						<td>
-							<fieldset class="creatorreactor-default-button-style-fieldset">
-								<legend class="screen-reader-text"><?php esc_html_e( 'Default Login Button Style', 'wp-creatorreactor' ); ?></legend>
-								<div class="creatorreactor-auth-mode-segmented" role="radiogroup" aria-label="<?php esc_attr_e( 'Default Login Button Style', 'wp-creatorreactor' ); ?>">
-									<label class="<?php echo 'compact' === $oauth_logo_general ? 'is-selected' : ''; ?>">
-										<input type="radio" class="creatorreactor-dbs-size-input" name="<?php echo esc_attr( self::OPTION_NAME ); ?>[<?php echo esc_attr( self::OAUTH_LOGO_BUTTON_GENERAL_SIZE_KEY ); ?>]" value="compact" <?php checked( $oauth_logo_general, 'compact' ); ?> />
-										<span><?php esc_html_e( 'Compact', 'wp-creatorreactor' ); ?></span>
-									</label>
-									<label class="<?php echo 'full' === $oauth_logo_general ? 'is-selected' : ''; ?>">
-										<input type="radio" class="creatorreactor-dbs-size-input" name="<?php echo esc_attr( self::OPTION_NAME ); ?>[<?php echo esc_attr( self::OAUTH_LOGO_BUTTON_GENERAL_SIZE_KEY ); ?>]" value="full" <?php checked( $oauth_logo_general, 'full' ); ?> />
-										<span><?php esc_html_e( 'Full', 'wp-creatorreactor' ); ?></span>
-									</label>
-								</div>
-							</fieldset>
+							<?php
+							self::render_oauth_logo_button_size_mode_fieldset(
+								self::OPTION_NAME,
+								self::OAUTH_LOGO_BUTTON_GENERAL_SIZE_KEY,
+								$oauth_logo_general,
+								$oauth_logo_general,
+								Shortcodes::fanvue_oauth_admin_preview_chip( 'minimal' ),
+								Shortcodes::fanvue_oauth_admin_preview_chip( 'standard' ),
+								[
+									'show_default_pill'       => false,
+									'legend'                  => __( 'Default Login Button Style', 'wp-creatorreactor' ),
+									'legend_class'            => 'screen-reader-text',
+									'description'             => __( 'Sets the default width for social login buttons site-wide. Individual providers can override this under their own Login Button Appearance settings.', 'wp-creatorreactor' ),
+									'radiogroup_aria_label'   => __( 'Default Login Button Style', 'wp-creatorreactor' ),
+									'fieldset_extra_classes'  => ' creatorreactor-default-button-style-fieldset',
+								]
+							);
+							?>
 						</td>
 					</tr>
 					<tr>
@@ -4791,8 +5254,8 @@ class Admin_Settings {
 				'label'    => __( 'Social login flow is ready on WordPress login', 'wp-creatorreactor' ),
 				'status'   => $social_login_on ? 'green' : 'red',
 				'message'  => $social_login_on
-					? __( 'Pass: At least one social provider (Fanvue and/or Google) is configured and wp-login social buttons are enabled.', 'wp-creatorreactor' )
-					: __( 'Fail: Configure Fanvue OAuth and/or Google sign-in, then enable “Add social login button to the WordPress login page?” in CreatorReactor → Settings → General.', 'wp-creatorreactor' ),
+					? __( 'Pass: At least one social provider is configured and wp-login social buttons are enabled.', 'wp-creatorreactor' )
+					: __( 'Fail: Configure Fanvue, Google, or another social OAuth tab, then enable “Add social login button to the WordPress login page?” in CreatorReactor → Settings → General.', 'wp-creatorreactor' ),
 				'fix_id'   => $social_fix_id,
 			],
 			[
@@ -5254,7 +5717,10 @@ class Admin_Settings {
 							data-copy-title="<?php echo esc_attr( $debug_logs_copy_title ); ?>"
 							aria-label="<?php echo esc_attr( $debug_logs_copy_title ); ?>"
 						>
-							<span class="dashicons dashicons-clipboard" aria-hidden="true"></span>
+							<?php
+							// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- self-contained img tag; URL escaped in helper.
+							echo self::admin_copy_icon_img();
+							?>
 						</button>
 					</div>
 					<div class="creatorreactor-debug-chrome-box__body creatorreactor-debug-log-box__body">
@@ -5348,10 +5814,11 @@ class Admin_Settings {
 				opacity: 0.45;
 				cursor: not-allowed;
 			}
-			button.creatorreactor-debug-icon-btn .dashicons {
+			button.creatorreactor-debug-icon-btn .creatorreactor-icon-copy {
 				width: 20px;
 				height: 20px;
-				font-size: 20px;
+				display: block;
+				object-fit: contain;
 			}
 			#creatorreactor-debug-tag-filters .creatorreactor-debug-tag {
 				border-radius: 999px;
@@ -5488,7 +5955,9 @@ class Admin_Settings {
 		</script>
 		<?php
 		$schema_manifest = self::fetch_schema_service_manifest( false );
+		$schema_envelope = self::fetch_schema_service_document( '/v1/schema/envelope/v1', false );
 		$schema_req_url  = isset( $schema_manifest['request_url'] ) ? (string) $schema_manifest['request_url'] : '';
+		$envelope_req_url = isset( $schema_envelope['request_url'] ) ? (string) $schema_envelope['request_url'] : '';
 		$schema_spec_for_title = $schema_manifest['spec_version'] !== '' ? (string) $schema_manifest['spec_version'] : '—';
 		$schema_pre_text   = '';
 		if ( $schema_manifest['ok'] ) {
@@ -5499,8 +5968,19 @@ class Admin_Settings {
 				$schema_pre_text .= "\n\n" . $schema_manifest['body'];
 			}
 		}
+		$envelope_pre_text = '';
+		if ( $schema_envelope['ok'] ) {
+			$envelope_pre_text = $schema_envelope['body'];
+		} elseif ( $schema_envelope['error'] !== '' ) {
+			$envelope_pre_text = $schema_envelope['error'];
+			if ( $schema_envelope['body'] !== '' && $schema_envelope['body'] !== $schema_envelope['error'] ) {
+				$envelope_pre_text .= "\n\n" . $schema_envelope['body'];
+			}
+		}
 		$schema_copy_title    = __( 'Copy schema manifest to clipboard', 'wp-creatorreactor' );
+		$envelope_copy_title  = __( 'Copy envelope JSON Schema to clipboard', 'wp-creatorreactor' );
 		$schema_copy_disabled = trim( (string) $schema_pre_text ) === '';
+		$envelope_copy_disabled = trim( (string) $envelope_pre_text ) === '';
 		?>
 		<div id="creatorreactor-debug-schema-card" class="creatorreactor-section creatorreactor-debug-schema-card">
 			<div class="creatorreactor-debug-schema-head">
@@ -5514,14 +5994,18 @@ class Admin_Settings {
 					<span class="dashicons dashicons-update" aria-hidden="true"></span>
 				</button>
 			</div>
-			<p class="description"><?php esc_html_e( 'Manifest from GET /v1/schema on the schema service URL configured under CreatorReactor Cloud → Schema service.', 'wp-creatorreactor' ); ?></p>
+			<p class="description"><?php esc_html_e( 'Manifest (index of published artifacts) from GET /v1/schema, plus the full shared envelope from GET /v1/schema/envelope/v1 — CreatorReactor Cloud → Schema service.', 'wp-creatorreactor' ); ?></p>
 			<details class="creatorreactor-debug-schema-connection">
 				<summary class="creatorreactor-debug-schema-connection-summary"><?php esc_html_e( 'Connection details', 'wp-creatorreactor' ); ?></summary>
 				<dl class="creatorreactor-debug-schema-connection-dl">
-					<dt><?php esc_html_e( 'Request URL', 'wp-creatorreactor' ); ?></dt>
-					<dd id="creatorreactor-debug-schema-connection-url" class="creatorreactor-debug-schema-connection-dd"><?php echo esc_html( $schema_req_url !== '' ? $schema_req_url : '—' ); ?></dd>
-					<dt><?php esc_html_e( 'HTTP status', 'wp-creatorreactor' ); ?></dt>
-					<dd id="creatorreactor-debug-schema-connection-code" class="creatorreactor-debug-schema-connection-dd"><?php echo esc_html( (string) (int) $schema_manifest['http_code'] ); ?></dd>
+					<dt><?php esc_html_e( 'Manifest URL', 'wp-creatorreactor' ); ?></dt>
+					<dd id="creatorreactor-debug-schema-connection-url-manifest" class="creatorreactor-debug-schema-connection-dd"><?php echo esc_html( $schema_req_url !== '' ? $schema_req_url : '—' ); ?></dd>
+					<dt><?php esc_html_e( 'Manifest HTTP', 'wp-creatorreactor' ); ?></dt>
+					<dd id="creatorreactor-debug-schema-connection-code-manifest" class="creatorreactor-debug-schema-connection-dd"><?php echo esc_html( (string) (int) $schema_manifest['http_code'] ); ?></dd>
+					<dt><?php esc_html_e( 'Envelope URL', 'wp-creatorreactor' ); ?></dt>
+					<dd id="creatorreactor-debug-schema-connection-url-envelope" class="creatorreactor-debug-schema-connection-dd"><?php echo esc_html( $envelope_req_url !== '' ? $envelope_req_url : '—' ); ?></dd>
+					<dt><?php esc_html_e( 'Envelope HTTP', 'wp-creatorreactor' ); ?></dt>
+					<dd id="creatorreactor-debug-schema-connection-code-envelope" class="creatorreactor-debug-schema-connection-dd"><?php echo esc_html( (string) (int) $schema_envelope['http_code'] ); ?></dd>
 				</dl>
 			</details>
 			<div class="creatorreactor-debug-chrome-box creatorreactor-debug-schema-chrome-box">
@@ -5530,24 +6014,47 @@ class Admin_Settings {
 					echo esc_html(
 						sprintf(
 							/* translators: %s: Schema spec version or em dash. */
-							__( 'Spec %s', 'wp-creatorreactor' ),
+							__( 'Spec %s — manifest', 'wp-creatorreactor' ),
 							$schema_spec_for_title
 						)
 					);
 					?></span>
 					<button
 						type="button"
-						id="creatorreactor-debug-copy-schema"
+						id="creatorreactor-debug-copy-schema-manifest"
 						class="creatorreactor-debug-icon-btn creatorreactor-debug-copy-icon"
 						<?php echo $schema_copy_disabled ? 'disabled' : ''; ?>
 						title="<?php echo esc_attr( $schema_copy_title ); ?>"
 						data-copy-title="<?php echo esc_attr( $schema_copy_title ); ?>"
 						aria-label="<?php echo esc_attr( $schema_copy_title ); ?>"
 					>
-						<span class="dashicons dashicons-clipboard" aria-hidden="true"></span>
+						<?php
+						// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- self-contained img tag; URL escaped in helper.
+						echo self::admin_copy_icon_img();
+						?>
 					</button>
 				</div>
 				<pre id="creatorreactor-debug-schema-body" class="creatorreactor-debug-schema-body"><?php echo esc_html( $schema_pre_text ); ?></pre>
+			</div>
+			<div class="creatorreactor-debug-chrome-box creatorreactor-debug-schema-chrome-box creatorreactor-debug-schema-chrome-box--envelope">
+				<div class="creatorreactor-debug-schema-content-head">
+					<span class="creatorreactor-debug-schema-spec-title"><?php esc_html_e( 'Envelope JSON Schema — GET /v1/schema/envelope/v1', 'wp-creatorreactor' ); ?></span>
+					<button
+						type="button"
+						id="creatorreactor-debug-copy-schema-envelope"
+						class="creatorreactor-debug-icon-btn creatorreactor-debug-copy-icon"
+						<?php echo $envelope_copy_disabled ? 'disabled' : ''; ?>
+						title="<?php echo esc_attr( $envelope_copy_title ); ?>"
+						data-copy-title="<?php echo esc_attr( $envelope_copy_title ); ?>"
+						aria-label="<?php echo esc_attr( $envelope_copy_title ); ?>"
+					>
+						<?php
+						// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- self-contained img tag; URL escaped in helper.
+						echo self::admin_copy_icon_img();
+						?>
+					</button>
+				</div>
+				<pre id="creatorreactor-debug-schema-envelope-body" class="creatorreactor-debug-schema-body"><?php echo esc_html( $envelope_pre_text ); ?></pre>
 			</div>
 		</div>
 		<style>
@@ -5611,6 +6118,9 @@ class Admin_Settings {
 				margin-top: 12px;
 				min-height: 80px;
 				padding: 0;
+			}
+			.creatorreactor-debug-schema-chrome-box--envelope {
+				margin-top: 16px;
 			}
 			.creatorreactor-debug-schema-content-head {
 				display: flex;
@@ -5687,37 +6197,59 @@ class Admin_Settings {
 		<script>
 			(function() {
 				var btn = document.getElementById("creatorreactor-debug-schema-refresh");
-				var copySchemaBtn = document.getElementById("creatorreactor-debug-copy-schema");
+				var copyManifestBtn = document.getElementById("creatorreactor-debug-copy-schema-manifest");
+				var copyEnvelopeBtn = document.getElementById("creatorreactor-debug-copy-schema-envelope");
 				var specTitleEl = document.getElementById("creatorreactor-debug-schema-spec-title");
-				var connUrlEl = document.getElementById("creatorreactor-debug-schema-connection-url");
-				var connCodeEl = document.getElementById("creatorreactor-debug-schema-connection-code");
-				var bodyEl = document.getElementById("creatorreactor-debug-schema-body");
+				var connUrlManifestEl = document.getElementById("creatorreactor-debug-schema-connection-url-manifest");
+				var connCodeManifestEl = document.getElementById("creatorreactor-debug-schema-connection-code-manifest");
+				var connUrlEnvelopeEl = document.getElementById("creatorreactor-debug-schema-connection-url-envelope");
+				var connCodeEnvelopeEl = document.getElementById("creatorreactor-debug-schema-connection-code-envelope");
+				var manifestBodyEl = document.getElementById("creatorreactor-debug-schema-body");
+				var envelopeBodyEl = document.getElementById("creatorreactor-debug-schema-envelope-body");
 				var cfg = window.creatorreactorDebugSchema;
-				if (!bodyEl) {
+				if (!manifestBodyEl) {
 					return;
 				}
-				function applySchemaConnectionFromResult(d) {
+				function applySchemaConnectionFromResult(d, kind) {
 					if (!d) {
 						return;
 					}
-					if (connUrlEl && d.request_url !== undefined) {
-						connUrlEl.textContent = d.request_url ? String(d.request_url) : "\u2014";
+					var isEnv = kind === "envelope";
+					var urlEl = isEnv ? connUrlEnvelopeEl : connUrlManifestEl;
+					var codeEl = isEnv ? connCodeEnvelopeEl : connCodeManifestEl;
+					if (urlEl && d.request_url !== undefined) {
+						urlEl.textContent = d.request_url ? String(d.request_url) : "\u2014";
 					}
-					if (connCodeEl && d.http_code !== undefined) {
-						connCodeEl.textContent = String(parseInt(d.http_code, 10) || 0);
+					if (codeEl && d.http_code !== undefined) {
+						codeEl.textContent = String(parseInt(d.http_code, 10) || 0);
 					}
-					if (specTitleEl && d.spec_version !== undefined) {
+					if (!isEnv && specTitleEl && d.spec_version !== undefined) {
 						var spec = d.spec_version ? String(d.spec_version) : "\u2014";
-						var tpl = (cfg && cfg.i18n && cfg.i18n.specTitle) ? cfg.i18n.specTitle : "Spec %s";
+						var tpl = (cfg && cfg.i18n && cfg.i18n.specTitleManifest) ? cfg.i18n.specTitleManifest : "Spec %s \u2014 manifest";
 						specTitleEl.textContent = tpl.replace("%s", spec);
 					}
 				}
-				function updateSchemaCopyEnabled() {
-					if (!copySchemaBtn) {
+				function fillSchemaPreFromResult(preEl, d) {
+					if (!preEl || !d) {
 						return;
 					}
-					var t = (bodyEl.textContent || "").trim();
-					copySchemaBtn.disabled = t === "";
+					if (d.ok) {
+						preEl.textContent = d.body || "";
+					} else {
+						var errText = d.error || "";
+						if (d.body && d.body !== errText) {
+							errText = errText ? (errText + "\n\n" + d.body) : d.body;
+						}
+						preEl.textContent = errText || ((cfg.i18n && cfg.i18n.loadError) ? cfg.i18n.loadError : "Could not load schema.");
+					}
+				}
+				function updateSchemaCopyEnabled() {
+					if (copyManifestBtn && manifestBodyEl) {
+						copyManifestBtn.disabled = (manifestBodyEl.textContent || "").trim() === "";
+					}
+					if (copyEnvelopeBtn && envelopeBodyEl) {
+						copyEnvelopeBtn.disabled = (envelopeBodyEl.textContent || "").trim() === "";
+					}
 				}
 				function showCopiedSchemaIcon(btn) {
 					var copiedLabel = (window.creatorreactorAuthMode && window.creatorreactorAuthMode.copiedLabel) ? window.creatorreactorAuthMode.copiedLabel : "Copied!";
@@ -5742,25 +6274,30 @@ class Admin_Settings {
 					} catch (err) {}
 					document.body.removeChild(ta);
 				}
-				if (copySchemaBtn) {
-					updateSchemaCopyEnabled();
-					copySchemaBtn.addEventListener("click", function(e) {
+				function bindCopy(btn, preEl) {
+					if (!btn || !preEl) {
+						return;
+					}
+					btn.addEventListener("click", function(e) {
 						e.preventDefault();
-						if (copySchemaBtn.disabled) {
+						if (btn.disabled) {
 							return;
 						}
-						var text = bodyEl.textContent || "";
+						var text = preEl.textContent || "";
 						if (navigator.clipboard && navigator.clipboard.writeText) {
 							navigator.clipboard.writeText(text).then(function() {
-								showCopiedSchemaIcon(copySchemaBtn);
+								showCopiedSchemaIcon(btn);
 							}).catch(function() {
-								fallbackCopySchema(text, copySchemaBtn);
+								fallbackCopySchema(text, btn);
 							});
 						} else {
-							fallbackCopySchema(text, copySchemaBtn);
+							fallbackCopySchema(text, btn);
 						}
 					});
 				}
+				bindCopy(copyManifestBtn, manifestBodyEl);
+				bindCopy(copyEnvelopeBtn, envelopeBodyEl);
+				updateSchemaCopyEnabled();
 				if (!btn || !cfg || !cfg.ajaxUrl || !cfg.nonce) {
 					return;
 				}
@@ -5778,23 +6315,40 @@ class Admin_Settings {
 						.then(function(data) {
 							if (!data || !data.success || !data.data) {
 								var err = (cfg.i18n && cfg.i18n.loadError) ? cfg.i18n.loadError : "Could not load schema.";
-								bodyEl.textContent = err;
+								manifestBodyEl.textContent = err;
+								if (envelopeBodyEl) {
+									envelopeBodyEl.textContent = err;
+								}
 								return;
 							}
-							var d = data.data;
-							applySchemaConnectionFromResult(d);
-							if (d.ok) {
-								bodyEl.textContent = d.body || "";
-							} else {
-								var errText = d.error || "";
-								if (d.body && d.body !== errText) {
-									errText = errText ? (errText + "\n\n" + d.body) : d.body;
+							var payload = data.data;
+							var m = payload.manifest;
+							var e = payload.envelope;
+							if (m || e) {
+								if (m) {
+									applySchemaConnectionFromResult(m, "manifest");
+									fillSchemaPreFromResult(manifestBodyEl, m);
 								}
-								bodyEl.textContent = errText || ((cfg.i18n && cfg.i18n.loadError) ? cfg.i18n.loadError : "Could not load schema.");
+								if (e) {
+									applySchemaConnectionFromResult(e, "envelope");
+									if (envelopeBodyEl) {
+										fillSchemaPreFromResult(envelopeBodyEl, e);
+									}
+								}
+								return;
+							}
+							var err2 = (cfg.i18n && cfg.i18n.loadError) ? cfg.i18n.loadError : "Could not load schema.";
+							manifestBodyEl.textContent = err2;
+							if (envelopeBodyEl) {
+								envelopeBodyEl.textContent = err2;
 							}
 						})
 						.catch(function() {
-							bodyEl.textContent = (cfg.i18n && cfg.i18n.loadError) ? cfg.i18n.loadError : "Could not load schema.";
+							var err = (cfg.i18n && cfg.i18n.loadError) ? cfg.i18n.loadError : "Could not load schema.";
+							manifestBodyEl.textContent = err;
+							if (envelopeBodyEl) {
+								envelopeBodyEl.textContent = err;
+							}
 						})
 						.finally(function() {
 							setLoading(false);
@@ -6134,6 +6688,27 @@ class Admin_Settings {
 		$option_name          = self::OPTION_NAME;
 		$metrics_resolved_url = self::get_metrics_ingest_url_for_requests();
 		include CREATORREACTOR_PLUGIN_DIR . 'includes/partials/cloud-metrics-ingest-fields.php';
+	}
+
+	/**
+	 * Social OAuth provider tab (credentials + appearance partial).
+	 *
+	 * @param string $slug        Provider slug.
+	 * @param array  $opts        Options.
+	 * @param string $secret_mask Secret field mask.
+	 */
+	private static function render_social_oauth_provider_tab_content( $slug, array $opts, $secret_mask ) {
+		$cfg = Social_OAuth_Registry::get_config( $slug );
+		$label = 'bluesky' === $slug
+			? __( 'Bluesky', 'wp-creatorreactor' )
+			: ( is_array( $cfg ) && isset( $cfg['label'] ) ? $cfg['label'] : $slug );
+		$option_name           = self::OPTION_NAME;
+		$broker_mode           = ! empty( $opts['broker_mode'] );
+		$redirect_uri          = 'bluesky' === $slug
+			? trailingslashit( CreatorReactor_OAuth::get_rest_redirect_uri( CreatorReactor_OAuth::REST_NAMESPACE, '/bluesky-oauth-callback' ) )
+			: Social_OAuth::get_callback_redirect_uri( $slug );
+		$instructions_expanded = ! self::is_social_oauth_provider_configured( $slug );
+		include CREATORREACTOR_PLUGIN_DIR . 'includes/partials/social-oauth-provider-tab.php';
 	}
 
 	/**
@@ -6823,16 +7398,9 @@ class Admin_Settings {
 			text-align: center;
 			line-height: 1.25;
 		}
-		.creatorreactor-wrap .form-table tr.creatorreactor-settings-row-dbs th,
-		.creatorreactor-wrap .form-table tr.creatorreactor-settings-row-dbs td {
-			padding-top: 0;
-			padding-bottom: 0;
-			vertical-align: middle;
-		}
 		.creatorreactor-auth-mode-segmented label:last-child { border-right: 0; }
 		.creatorreactor-auth-mode-segmented label { position: relative; }
-		.creatorreactor-auth-mode-segmented input.creatorreactor-auth-mode-input,
-		.creatorreactor-auth-mode-segmented input.creatorreactor-dbs-size-input {
+		.creatorreactor-auth-mode-segmented input.creatorreactor-auth-mode-input {
 			position: absolute;
 			opacity: 0;
 			width: 1px;
@@ -6844,8 +7412,7 @@ class Admin_Settings {
 			box-shadow: none;
 			z-index: 1;
 		}
-		.creatorreactor-auth-mode-segmented input.creatorreactor-auth-mode-input:focus-visible + span,
-		.creatorreactor-auth-mode-segmented input.creatorreactor-dbs-size-input:focus-visible + span {
+		.creatorreactor-auth-mode-segmented input.creatorreactor-auth-mode-input:focus-visible + span {
 			outline: 2px solid var(--cr-accent, #8e2d77);
 			outline-offset: 2px;
 		}
@@ -7003,7 +7570,7 @@ class Admin_Settings {
 		.creatorreactor-fanvue-oauth--admin-preview .creatorreactor-fanvue-oauth-img {
 			display: block;
 			height: auto;
-			max-width: min(200px, 100%);
+			max-width: min(220px, 100%);
 			width: auto;
 			margin: 0 auto;
 		}
@@ -7011,7 +7578,7 @@ class Admin_Settings {
 			display: block;
 			margin-top: 8px;
 			font-size: 14px;
-			font-weight: 600;
+			font-weight: 500;
 			text-align: center;
 		}
 		.creatorreactor-mode-notice p { margin: 0; font-size: 13px; }
@@ -7822,6 +8389,7 @@ class Admin_Settings {
 		.creatorreactor-doc-section[hidden] { display: none !important; }
 		.creatorreactor-settings-container { display: flex; gap: 20px; }
 		.creatorreactor-settings-sidebar { width: 160px; flex-shrink: 0; }
+		.creatorreactor-settings-sidebar--social-oauth { width: 200px; }
 		.creatorreactor-sidebar-nav { display: flex; flex-direction: column; }
 		.creatorreactor-sidebar-link { display: block; padding: 12px 14px; border-bottom: 1px solid #eee; color: #50575e; text-decoration: none; font-weight: 500; }
 		.creatorreactor-sidebar-link.is-active { background: #faf3f8; color: var(--cr-accent, #8e2d77); border-left: 3px solid var(--cr-accent, #8e2d77); }
@@ -8048,32 +8616,32 @@ class Admin_Settings {
 
 		$css .= Shortcodes::get_google_oauth_button_css();
 		$css .= sprintf(
-			' .creatorreactor-fanvue-oauth--admin-preview.creatorreactor-fanvue-oauth-link--minimal{display:inline-flex;align-items:center;justify-content:center;padding:%1$dpx;border:0;border-radius:4px;background:%2$s;box-sizing:border-box;line-height:0;}' .
+			' .creatorreactor-fanvue-oauth--admin-preview.creatorreactor-fanvue-oauth-link--minimal{display:inline-flex;align-items:center;justify-content:center;width:%1$dpx;height:%1$dpx;min-width:%1$dpx;min-height:%1$dpx;padding:0;border:0;border-radius:4px;background:%2$s;box-sizing:border-box;line-height:0;}' .
 			' .creatorreactor-fanvue-oauth--admin-preview.creatorreactor-fanvue-oauth-link--minimal .creatorreactor-fanvue-oauth-img-minimal{display:block;width:%3$dpx;height:%3$dpx;object-fit:contain;flex-shrink:0;transform:translateY(%4$dpx);}',
-			Shortcodes::FANVUE_MINIMAL_LINK_PADDING_PX,
+			Shortcodes::OAUTH_COMPACT_BOX_PX,
 			Shortcodes::FANVUE_MINIMAL_OAUTH_BACKGROUND,
 			Shortcodes::FANVUE_MINIMAL_ICON_SIZE_PX,
 			Shortcodes::FANVUE_MINIMAL_ICON_TRANSLATE_Y_PX
 		);
 		$css .= sprintf(
-			' .creatorreactor-instagram-oauth--admin-preview.creatorreactor-instagram-oauth-link--standard{display:inline-flex;align-items:center;gap:12px;padding:10px 16px;border-radius:4px;border:0;background:%1$s;color:#fff;font-size:14px;font-weight:500;line-height:1.35;box-sizing:border-box;text-decoration:none;font-family:"Roboto",system-ui,-apple-system,"Segoe UI",sans-serif;box-shadow:0 1px 2px rgba(0,0,0,.08);}' .
+			' .creatorreactor-instagram-oauth--admin-preview.creatorreactor-instagram-oauth-link--standard{display:inline-flex;align-items:center;gap:12px;min-height:40px;padding:10px 16px;border-radius:4px;border:0;background:%1$s;color:#fff;font-size:14px;font-weight:500;line-height:1.35;box-sizing:border-box;text-decoration:none;font-family:"Roboto",system-ui,-apple-system,"Segoe UI",sans-serif;box-shadow:0 1px 2px rgba(0,0,0,.08);}' .
 			' .creatorreactor-instagram-oauth--admin-preview.creatorreactor-instagram-oauth-link--standard .creatorreactor-instagram-oauth-svg{flex-shrink:0;display:block;width:20px;height:20px;}' .
-			' .creatorreactor-instagram-oauth--admin-preview.creatorreactor-instagram-oauth-link--minimal{display:inline-flex;align-items:center;justify-content:center;padding:%2$dpx;border:0;border-radius:4px;background:%1$s;box-sizing:border-box;line-height:0;box-shadow:0 1px 2px rgba(0,0,0,.08);}' .
+			' .creatorreactor-instagram-oauth--admin-preview.creatorreactor-instagram-oauth-link--minimal{display:inline-flex;align-items:center;justify-content:center;width:%2$dpx;height:%2$dpx;min-width:%2$dpx;min-height:%2$dpx;padding:0;border:0;border-radius:4px;background:%1$s;box-sizing:border-box;line-height:0;box-shadow:0 1px 2px rgba(0,0,0,.08);}' .
 			' .creatorreactor-instagram-oauth--admin-preview.creatorreactor-instagram-oauth-link--minimal .creatorreactor-instagram-oauth-svg{display:block;width:%3$dpx;height:%3$dpx;flex-shrink:0;transform:translateY(%4$dpx);}',
 			Shortcodes::INSTAGRAM_BRAND_GRADIENT_CSS,
-			Shortcodes::INSTAGRAM_MINIMAL_LINK_PADDING_PX,
+			Shortcodes::OAUTH_COMPACT_BOX_PX,
 			Shortcodes::INSTAGRAM_MINIMAL_ICON_SIZE_PX,
 			Shortcodes::INSTAGRAM_MINIMAL_ICON_TRANSLATE_Y_PX
 		);
 		$css .= sprintf(
-			' .creatorreactor-onlyfans-oauth--admin-preview.creatorreactor-onlyfans-oauth-link--standard{display:inline-flex;align-items:center;gap:10px;padding:10px 18px;border-radius:8px;border:1px solid %1$s;background:%2$s;color:#fff;font-size:14px;font-weight:600;line-height:1.2;box-sizing:border-box;text-decoration:none;box-shadow:0 1px 3px rgba(0,0,0,.2);}' .
-			' .creatorreactor-onlyfans-oauth--admin-preview.creatorreactor-onlyfans-oauth-link--standard .creatorreactor-onlyfans-oauth-svg{flex-shrink:0;display:block;width:22px;height:22px;}' .
+			' .creatorreactor-onlyfans-oauth--admin-preview.creatorreactor-onlyfans-oauth-link--standard{display:inline-flex;align-items:center;gap:12px;min-height:40px;padding:10px 16px;border-radius:4px;border:1px solid %1$s;background:%2$s;color:#fff;font-size:14px;font-weight:500;line-height:1.35;box-sizing:border-box;text-decoration:none;box-shadow:0 1px 3px rgba(0,0,0,.2);}' .
+			' .creatorreactor-onlyfans-oauth--admin-preview.creatorreactor-onlyfans-oauth-link--standard .creatorreactor-onlyfans-oauth-svg{flex-shrink:0;display:block;width:20px;height:20px;}' .
 			' .creatorreactor-onlyfans-oauth--admin-preview.creatorreactor-onlyfans-oauth-link--standard .creatorreactor-onlyfans-oauth-label{color:#fff;}' .
-			' .creatorreactor-onlyfans-oauth--admin-preview.creatorreactor-onlyfans-oauth-link--minimal{display:inline-flex;align-items:center;justify-content:center;padding:%3$dpx;border:1px solid #2a2a2a;border-radius:8px;background:%2$s;box-sizing:border-box;line-height:0;box-shadow:0 1px 3px rgba(0,0,0,.2);}' .
+			' .creatorreactor-onlyfans-oauth--admin-preview.creatorreactor-onlyfans-oauth-link--minimal{display:inline-flex;align-items:center;justify-content:center;width:%3$dpx;height:%3$dpx;min-width:%3$dpx;min-height:%3$dpx;padding:0;border:1px solid #2a2a2a;border-radius:4px;background:%2$s;box-sizing:border-box;line-height:0;box-shadow:0 1px 3px rgba(0,0,0,.2);}' .
 			' .creatorreactor-onlyfans-oauth--admin-preview.creatorreactor-onlyfans-oauth-link--minimal .creatorreactor-onlyfans-oauth-svg{display:block;width:%4$dpx;height:%4$dpx;flex-shrink:0;transform:translateY(%5$dpx);}',
 			Shortcodes::ONLYFANS_OAUTH_ADMIN_ACCENT,
 			Shortcodes::ONLYFANS_OAUTH_ADMIN_BUTTON_BG,
-			Shortcodes::ONLYFANS_MINIMAL_LINK_PADDING_PX,
+			Shortcodes::OAUTH_COMPACT_BOX_PX,
 			Shortcodes::ONLYFANS_MINIMAL_ICON_SIZE_PX,
 			Shortcodes::ONLYFANS_MINIMAL_ICON_TRANSLATE_Y_PX
 		);
@@ -8196,6 +8764,10 @@ class Admin_Settings {
 			var instagramTabPanel = document.querySelector(".creatorreactor-tab-panel[data-tab=\"instagram\"]");
 			if (instagramTabPanel) {
 				setupRedirectUriCopyDelegation(instagramTabPanel);
+			}
+			var socialOauthTabPanel = document.querySelector(".creatorreactor-tab-panel[data-tab=\"social_oauth\"]");
+			if (socialOauthTabPanel) {
+				setupRedirectUriCopyDelegation(socialOauthTabPanel);
 			}
 
 			function refreshProviderAppearanceCardsLayout() {
@@ -8474,6 +9046,20 @@ class Admin_Settings {
 					return;
 				}
 
+				var wrapEl = document.querySelector(".creatorreactor-wrap");
+				var socialOauthSlugs = [];
+				if (wrapEl && wrapEl.getAttribute("data-creatorreactor-social-oauth-slugs")) {
+					try {
+						var parsedSlugs = JSON.parse(wrapEl.getAttribute("data-creatorreactor-social-oauth-slugs"));
+						if (Array.isArray(parsedSlugs)) {
+							socialOauthSlugs = parsedSlugs;
+						}
+					} catch (eSocial) {}
+				}
+				function isSocialOauthSlug(t) {
+					return t && socialOauthSlugs.indexOf(t) !== -1;
+				}
+
 				function activateTab(tabName, updateUrl) {
 					tabLinks.forEach(function(link) {
 						var isActive = link.getAttribute("data-tab") === tabName;
@@ -8503,6 +9089,13 @@ class Admin_Settings {
 						if (tabName === "settings") {
 							url.searchParams.set("subtab", "oauth");
 						}
+						if (tabName === "social_oauth") {
+							url.searchParams.delete("subtab");
+							var sp = url.searchParams.get("social_provider");
+							if (!sp || !isSocialOauthSlug(sp)) {
+								url.searchParams.set("social_provider", socialOauthSlugs[0] || "");
+							}
+						}
 						window.history.replaceState({}, "", url.toString());
 					}
 
@@ -8522,7 +9115,12 @@ class Admin_Settings {
 				} else if (tabLinks.length) {
 					fallbackTab = tabLinks[0].getAttribute("data-tab") || fallbackTab;
 				}
-				var currentTab = new URLSearchParams(window.location.search).get("tab") || fallbackTab;
+				var params = new URLSearchParams(window.location.search);
+				var rawTab = params.get("tab") || fallbackTab;
+				var currentTab = rawTab;
+				if (isSocialOauthSlug(rawTab)) {
+					currentTab = "social_oauth";
+				}
 				if (!document.querySelector(".creatorreactor-tab-link[data-tab=\"" + currentTab + "\"]")) {
 					currentTab = fallbackTab;
 				}
@@ -9265,19 +9863,102 @@ class Admin_Settings {
 					body.append("webhook_secret_unchanged", whUnchanged);
 				}
 			});
-			document.querySelectorAll(".creatorreactor-dbs-size-input").forEach(function(inp) {
-				inp.addEventListener("change", function() {
-					if (!inp.checked) {
-						return;
+			(function() {
+				var cfg = window.creatorreactorSocialOAuthSave;
+				if (!cfg) { return; }
+				var modal = document.getElementById("creatorreactor-social-oauth-test-modal");
+				if (!modal) { return; }
+				var statusEl = document.getElementById("creatorreactor-social-oauth-test-status");
+				var remediationEl = document.getElementById("creatorreactor-social-oauth-test-remediation");
+				var remediationWrap = document.getElementById("creatorreactor-social-oauth-test-remediation-wrap");
+				var acknowledgeBtn = modal.querySelector(".creatorreactor-social-oauth-test-acknowledge");
+				var footerDismiss = modal.querySelector(".creatorreactor-social-oauth-test-footer-dismiss");
+				var headerDismiss = modal.querySelector(".creatorreactor-social-oauth-test-dismiss");
+				var backdrop = modal.querySelector(".creatorreactor-modal-backdrop");
+				function openModal() { modal.setAttribute("aria-hidden", "false"); document.body.style.overflow = "hidden"; }
+				function closeModal() { modal.setAttribute("aria-hidden", "true"); document.body.style.overflow = ""; }
+				function setRemediation(text) {
+					if (!remediationEl) { return; }
+					if (remediationWrap) { remediationWrap.hidden = !text; }
+					remediationEl.textContent = text || "";
+				}
+				function setStatus(kind, text) {
+					if (!statusEl) { return; }
+					statusEl.className = "creatorreactor-social-oauth-test-status creatorreactor-status-message";
+					if (kind === true) { statusEl.classList.add("creatorreactor-status-success"); }
+					else if (kind === false) { statusEl.classList.add("creatorreactor-status-error"); }
+					statusEl.textContent = text || "";
+					if (acknowledgeBtn) { acknowledgeBtn.hidden = true; }
+					if (footerDismiss) { footerDismiss.hidden = true; }
+				}
+				if (headerDismiss) { headerDismiss.addEventListener("click", closeModal); }
+				if (backdrop) { backdrop.addEventListener("click", closeModal); }
+				if (footerDismiss) { footerDismiss.addEventListener("click", closeModal); }
+				document.addEventListener("click", function(ev) {
+					var btn = ev.target && ev.target.closest && ev.target.closest(".creatorreactor-social-oauth-test");
+					if (!btn) { return; }
+					ev.preventDefault();
+					var slug = (btn.getAttribute("data-provider-slug") || "").trim();
+					if (!slug) { return; }
+					var form = document.getElementById("creatorreactor-" + slug + "-settings-form");
+					if (!form) { return; }
+					var idEl = form.querySelector(".creatorreactor-social-oauth-client-id");
+					var secEl = form.querySelector(".creatorreactor-social-oauth-client-secret");
+					var instEl = form.querySelector("#creatorreactor_mastodon_instance");
+					var clientId = idEl ? (idEl.value || "").trim() : "";
+					if (!clientId) { return; }
+					var secretVal = secEl ? (secEl.value || "") : "";
+					var secretUnchanged = (secretVal === "" || secretVal === "********") ? "1" : "0";
+					setRemediation("");
+					setStatus(null, (cfg.i18n && cfg.i18n.checking) ? cfg.i18n.checking : "");
+					modal.dataset.activeSlug = slug;
+					openModal();
+					var body = new window.FormData();
+					body.append("action", "creatorreactor_social_oauth_validate");
+					body.append("nonce", cfg.nonce);
+					body.append("provider_slug", slug);
+					body.append("client_id", clientId);
+					body.append("client_secret", secretVal);
+					body.append("secret_unchanged", secretUnchanged);
+					if (instEl) {
+						body.append("mastodon_instance", (instEl.value || "").trim());
 					}
-					document.querySelectorAll(".creatorreactor-dbs-size-input").forEach(function(i) {
-						var lab = i.closest("label");
-						if (lab) {
-							lab.classList.toggle("is-selected", i.checked);
-						}
-					});
+					window.fetch(cfg.ajaxUrl, { method: "POST", credentials: "same-origin", body: body })
+						.then(function(res) { return res.json(); })
+						.then(function(data) {
+							if (data && data.success && data.data && data.data.skip) {
+								setStatus(true, data.data.message || "");
+								setRemediation("");
+								if (acknowledgeBtn) { acknowledgeBtn.hidden = false; }
+								return;
+							}
+							if (data && data.success) {
+								setStatus(true, data.data && data.data.message ? data.data.message : "");
+								setRemediation("");
+								if (acknowledgeBtn) { acknowledgeBtn.hidden = false; }
+								return;
+							}
+							setStatus(false, data && data.data && data.data.message ? data.data.message : "");
+							setRemediation(data && data.data && data.data.remediation ? data.data.remediation : "");
+							if (footerDismiss) { footerDismiss.hidden = false; }
+						})
+						.catch(function() {
+							setStatus(false, "");
+							setRemediation("");
+							if (footerDismiss) { footerDismiss.hidden = false; }
+						});
 				});
-			});
+				if (acknowledgeBtn) {
+					acknowledgeBtn.addEventListener("click", function() {
+						closeModal();
+						var slug = modal.dataset.activeSlug || "";
+						if (!slug) { return; }
+						var form = document.getElementById("creatorreactor-" + slug + "-settings-form");
+						if (form && form.requestSubmit) { form.requestSubmit(); }
+						else if (form) { form.submit(); }
+					});
+				}
+			})();
 			});
 		})();
 		';
@@ -9322,8 +10003,8 @@ class Admin_Settings {
 				'action'  => 'creatorreactor_debug_schema_manifest',
 				'i18n'    => [
 					/* translators: %s: Schema spec version or em dash. */
-					'specTitle' => __( 'Spec %s', 'wp-creatorreactor' ),
-					'loadError' => __( 'Could not load schema manifest from the schema service.', 'wp-creatorreactor' ),
+					'specTitleManifest' => __( 'Spec %s — manifest', 'wp-creatorreactor' ),
+					'loadError'         => __( 'Could not load schema from the schema service.', 'wp-creatorreactor' ),
 				],
 			]
 		);
@@ -9342,6 +10023,17 @@ class Admin_Settings {
 					'networkError'    => __( 'Could not reach your site (admin-ajax). Check your network connection.', 'wp-creatorreactor' ),
 					'networkRemediate' => __( 'Ensure admin-ajax.php is not blocked by a security plugin or firewall.', 'wp-creatorreactor' ),
 					'close'           => __( 'Close', 'wp-creatorreactor' ),
+				],
+			]
+		);
+		wp_localize_script(
+			'creatorreactor-admin',
+			'creatorreactorSocialOAuthSave',
+			[
+				'ajaxUrl' => admin_url( 'admin-ajax.php' ),
+				'nonce'   => wp_create_nonce( 'creatorreactor_social_oauth_save' ),
+				'i18n'    => [
+					'checking' => __( 'Verifying OAuth credentials…', 'wp-creatorreactor' ),
 				],
 			]
 		);
@@ -9615,6 +10307,11 @@ class Admin_Settings {
 		$ofauth_webhook_secret_mask = ! empty( $opts['creatorreactor_ofauth_webhook_secret'] ) ? '********' : '';
 		$google_oauth_secret_mask       = ! empty( $opts['creatorreactor_google_oauth_client_secret'] ) ? '********' : '';
 		$instagram_oauth_secret_mask    = ! empty( $opts['creatorreactor_instagram_oauth_client_secret'] ) ? '********' : '';
+		$social_oauth_secret_masks        = [];
+		foreach ( self::all_settings_social_oauth_slugs() as $social_slug ) {
+			$sk = Social_OAuth_Registry::option_client_secret( $social_slug );
+			$social_oauth_secret_masks[ $social_slug ] = ! empty( $opts[ $sk ] ) ? '********' : '';
+		}
 		$broker_mode         = ! empty( $opts['broker_mode'] );
 		$oauth_locked_initial = self::oauth_config_should_start_locked( $opts, $broker_mode );
 		$authentication_mode = $broker_mode ? self::AUTH_MODE_AGENCY : self::AUTH_MODE_CREATOR;
@@ -9622,6 +10319,8 @@ class Admin_Settings {
 		$current_page_slug = isset( $_GET['page'] ) ? sanitize_key( wp_unslash( $_GET['page'] ) ) : self::PAGE_SLUG;
 		$is_users_page      = ( self::PAGE_USERS_SLUG === $current_page_slug );
 		$is_settings_page   = ( self::PAGE_SETTINGS_SLUG === $current_page_slug );
+		$settings_social_slugs        = self::all_settings_social_oauth_slugs();
+		$settings_default_social_slug = ! empty( $settings_social_slugs[0] ) ? $settings_social_slugs[0] : 'tiktok';
 		$tab_links          = [];
 		if ( $is_users_page ) {
 			$allowed_tabs = [ 'users' ];
@@ -9633,7 +10332,17 @@ class Admin_Settings {
 				],
 			];
 		} elseif ( $is_settings_page ) {
-			$allowed_tabs = [ 'general', 'cloud', 'settings', 'google', 'instagram', 'onlyfans', 'documentation', 'debug' ];
+			$allowed_tabs = [
+				'general',
+				'cloud',
+				'settings',
+				'google',
+				'instagram',
+				'social_oauth',
+				'onlyfans',
+				'documentation',
+				'debug',
+			];
 			$tab_links = [
 				'general'    => [
 					'label'     => __( 'General', 'wp-creatorreactor' ),
@@ -9659,6 +10368,14 @@ class Admin_Settings {
 					'label'     => __( 'Instagram', 'wp-creatorreactor' ),
 					'page_slug' => self::PAGE_SETTINGS_SLUG,
 					'args'      => [ 'tab' => 'instagram' ],
+				],
+				'social_oauth' => [
+					'label'     => __( 'Social login', 'wp-creatorreactor' ),
+					'page_slug' => self::PAGE_SETTINGS_SLUG,
+					'args'      => [
+						'tab'             => 'social_oauth',
+						'social_provider' => $settings_default_social_slug,
+					],
 				],
 				'onlyfans'   => [
 					'label'     => __( 'OnlyFans', 'wp-creatorreactor' ),
@@ -9689,10 +10406,26 @@ class Admin_Settings {
 			];
 		}
 		$requested_tab = isset( $_GET['tab'] ) ? sanitize_key( wp_unslash( $_GET['tab'] ) ) : $default_tab;
+		$legacy_social_tab_for_oauth = '';
+		if ( $is_settings_page && in_array( $requested_tab, $settings_social_slugs, true ) ) {
+			$legacy_social_tab_for_oauth = $requested_tab;
+			$requested_tab               = 'social_oauth';
+		}
 		if ( $is_settings_page && 'integration-checks' === $requested_tab ) {
 			$requested_tab = 'debug';
 		}
 		$active_tab = in_array( $requested_tab, $allowed_tabs, true ) ? $requested_tab : $default_tab;
+		$active_social_provider = $settings_default_social_slug;
+		if ( $is_settings_page && 'social_oauth' === $active_tab ) {
+			if ( $legacy_social_tab_for_oauth !== '' ) {
+				$active_social_provider = $legacy_social_tab_for_oauth;
+			} else {
+				$p = isset( $_GET['social_provider'] ) ? sanitize_key( wp_unslash( $_GET['social_provider'] ) ) : '';
+				if ( $p !== '' && in_array( $p, $settings_social_slugs, true ) ) {
+					$active_social_provider = $p;
+				}
+			}
+		}
 		$allowed_subtabs = [ 'oauth', 'sync' ];
 		$requested_subtab = isset( $_GET['subtab'] ) ? sanitize_key( wp_unslash( $_GET['subtab'] ) ) : $default_subtab;
 		$active_subtab = in_array( $requested_subtab, $allowed_subtabs, true ) ? $requested_subtab : $default_subtab;
@@ -9703,7 +10436,7 @@ class Admin_Settings {
 		$user_totals      = $users_snapshot['totals'];
 		$user_rows        = $users_snapshot['rows'];
 		?>
-		<div class="wrap creatorreactor-wrap">
+		<div class="wrap creatorreactor-wrap"<?php echo $is_settings_page ? ' data-creatorreactor-social-oauth-slugs="' . esc_attr( wp_json_encode( $settings_social_slugs ) ) . '"' : ''; ?>>
 			<div class="creatorreactor-settings-header">
 				<div class="creatorreactor-settings-header-brand">
 					<?php self::render_brand_logo_img( 'creatorreactor-brand-logo--header' ); ?>
@@ -9979,6 +10712,54 @@ class Admin_Settings {
 						<button type="button" class="button creatorreactor-instagram-oauth-test-footer-dismiss" hidden><?php esc_html_e( 'Close', 'wp-creatorreactor' ); ?></button>
 						<button type="button" class="button button-primary creatorreactor-instagram-oauth-test-acknowledge" hidden><?php esc_html_e( 'Acknowledge', 'wp-creatorreactor' ); ?></button>
 					</div>
+				</div>
+			</div>
+		</div>
+
+		<?php
+		$active_social_mask = isset( $social_oauth_secret_masks[ $active_social_provider ] ) ? $social_oauth_secret_masks[ $active_social_provider ] : '';
+		?>
+		<div class="creatorreactor-tab-panel <?php echo 'social_oauth' === $active_tab ? 'is-active' : ''; ?>" data-tab="social_oauth">
+			<div class="creatorreactor-settings-container creatorreactor-social-oauth-settings-layout">
+				<div class="creatorreactor-settings-sidebar creatorreactor-settings-sidebar--social-oauth">
+					<nav class="creatorreactor-sidebar-nav" aria-label="<?php esc_attr_e( 'Social login providers', 'wp-creatorreactor' ); ?>">
+						<?php foreach ( $settings_social_slugs as $social_nav_slug ) : ?>
+							<a href="<?php echo esc_url( self::admin_social_oauth_settings_url( $social_nav_slug ) ); ?>" class="creatorreactor-sidebar-link <?php echo $social_nav_slug === $active_social_provider ? 'is-active' : ''; ?>"><?php echo esc_html( Shortcodes::social_oauth_provider_label( $social_nav_slug ) ); ?></a>
+						<?php endforeach; ?>
+					</nav>
+				</div>
+				<div class="creatorreactor-settings-content">
+					<form id="creatorreactor-<?php echo esc_attr( $active_social_provider ); ?>-settings-form" method="post" action="<?php echo esc_url( admin_url( 'options.php' ) ); ?>">
+						<?php settings_fields( self::OPTION_NAME ); ?>
+						<?php self::render_social_oauth_provider_tab_content( $active_social_provider, $opts, $active_social_mask ); ?>
+						<div class="creatorreactor-settings-actions">
+							<a class="button" href="<?php echo esc_url( self::admin_social_oauth_settings_url( $active_social_provider ) ); ?>"><?php esc_html_e( 'Cancel', 'wp-creatorreactor' ); ?></a>
+							<?php submit_button( __( 'Save Settings', 'wp-creatorreactor' ) ); ?>
+						</div>
+					</form>
+				</div>
+			</div>
+		</div>
+
+		<div id="creatorreactor-social-oauth-test-modal" class="creatorreactor-modal" aria-hidden="true" role="presentation">
+			<div class="creatorreactor-modal-backdrop" aria-hidden="true"></div>
+			<div class="creatorreactor-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="creatorreactor-social-oauth-test-modal-title">
+				<div class="creatorreactor-modal-header">
+					<div class="creatorreactor-modal-header-title">
+						<h3 id="creatorreactor-social-oauth-test-modal-title"><?php esc_html_e( 'Social OAuth: configuration check', 'wp-creatorreactor' ); ?></h3>
+					</div>
+					<button type="button" class="creatorreactor-social-oauth-test-dismiss" aria-label="<?php esc_attr_e( 'Close', 'wp-creatorreactor' ); ?>">&times;</button>
+				</div>
+				<div class="creatorreactor-modal-body">
+					<p id="creatorreactor-social-oauth-test-status" class="creatorreactor-social-oauth-test-status"></p>
+					<div id="creatorreactor-social-oauth-test-remediation-wrap" class="creatorreactor-social-oauth-test-remediation-wrap" hidden>
+						<strong><?php esc_html_e( 'What to do next', 'wp-creatorreactor' ); ?></strong>
+						<p id="creatorreactor-social-oauth-test-remediation" class="creatorreactor-social-oauth-test-remediation"></p>
+					</div>
+				</div>
+				<div class="creatorreactor-modal-footer">
+					<button type="button" class="button creatorreactor-social-oauth-test-footer-dismiss" hidden><?php esc_html_e( 'Close', 'wp-creatorreactor' ); ?></button>
+					<button type="button" class="button button-primary creatorreactor-social-oauth-test-acknowledge" hidden><?php esc_html_e( 'Acknowledge', 'wp-creatorreactor' ); ?></button>
 				</div>
 			</div>
 		</div>

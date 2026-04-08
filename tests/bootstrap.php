@@ -11,6 +11,15 @@ if (! defined('CREATORREACTOR_TABLE_ENTITLEMENTS')) {
 if (! defined('ARRAY_A')) {
     define('ARRAY_A', 'ARRAY_A');
 }
+if (! defined('CREATORREACTOR_PLUGIN_DIR')) {
+    define('CREATORREACTOR_PLUGIN_DIR', dirname(__DIR__) . '/');
+}
+if (! defined('CREATORREACTOR_VERSION')) {
+    define('CREATORREACTOR_VERSION', 'test');
+}
+if (! defined('CREATORREACTOR_PLUGIN_URL')) {
+    define('CREATORREACTOR_PLUGIN_URL', 'https://example.org/wp-content/plugins/wp-creatorreactor/');
+}
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
@@ -37,6 +46,7 @@ require_once __DIR__ . '/../includes/class-entitlements.php';
 require_once __DIR__ . '/../includes/class-editor-context.php';
 require_once __DIR__ . '/../includes/class-creatorreactor-oauth.php';
 require_once __DIR__ . '/../includes/class-admin-settings.php';
+require_once __DIR__ . '/../includes/class-bluesky-oauth.php';
 require_once __DIR__ . '/../includes/class-broker-client.php';
 require_once __DIR__ . '/../includes/class-creatorreactor-banner.php';
 require_once __DIR__ . '/../includes/class-creatorreactor.php';
