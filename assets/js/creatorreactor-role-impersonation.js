@@ -73,8 +73,18 @@
 		msgEl.style.display = text ? 'block' : 'none';
 	}
 
+	/** Non-empty impersonation slug from server (null/undefined/'' => not impersonating). */
+	function serverImpersonationSlug() {
+		var v = CFG.current;
+		if (v === null || v === undefined) {
+			return '';
+		}
+		var s = String(v).trim();
+		return s;
+	}
+
 	function isImpersonating() {
-		return !!(CFG.current && String(CFG.current).length);
+		return serverImpersonationSlug().length > 0;
 	}
 
 	function renderMode() {
@@ -82,7 +92,7 @@
 		panel.classList.toggle('creatorreactor-imp--impersonating', imp);
 		if (hintEl) {
 			if (imp) {
-				var label = (typeof CFG.currentLabel === 'string' && CFG.currentLabel !== '') ? CFG.currentLabel : String(CFG.current);
+				var label = (typeof CFG.currentLabel === 'string' && CFG.currentLabel !== '') ? CFG.currentLabel : serverImpersonationSlug();
 				hintEl.textContent = (CFG.i18n.viewingAs ? CFG.i18n.viewingAs + ' ' : '') + label;
 				hintEl.style.display = 'block';
 			} else {
@@ -202,14 +212,19 @@
 
 		selectEl = document.createElement('select');
 		selectEl.className = 'creatorreactor-imp__select';
-		selectEl.setAttribute('aria-label', CFG.i18n.selectPlaceholder);
-
-		var opt0 = document.createElement('option');
-		opt0.value = '';
-		opt0.textContent = CFG.i18n.selectPlaceholder;
-		selectEl.appendChild(opt0);
+		selectEl.setAttribute('aria-label', CFG.i18n.title || '');
 
 		var roles = Array.isArray(CFG.roles) ? CFG.roles : [];
+		var fromServer = serverImpersonationSlug();
+		var loggedOut = (typeof CFG.loggedOutSlug === 'string' && CFG.loggedOutSlug.length) ? CFG.loggedOutSlug : '';
+		var slugsInList = {};
+		for (var k = 0; k < roles.length; k++) {
+			if (roles[k] && roles[k].slug) {
+				slugsInList[roles[k].slug] = true;
+			}
+		}
+		/** When not actively impersonating (no cookie), or unknown slug: default to Logged out. */
+		var desired = (fromServer && slugsInList[fromServer]) ? fromServer : loggedOut;
 		for (var i = 0; i < roles.length; i++) {
 			var r = roles[i];
 			if (!r || !r.slug) {
@@ -218,10 +233,11 @@
 			var opt = document.createElement('option');
 			opt.value = r.slug;
 			opt.textContent = r.label || r.slug;
-			if (CFG.current === r.slug) {
-				opt.selected = true;
-			}
+			opt.selected = desired === r.slug;
 			selectEl.appendChild(opt);
+		}
+		if (desired && selectEl.options.length) {
+			selectEl.value = desired;
 		}
 
 		primaryBtn = document.createElement('button');

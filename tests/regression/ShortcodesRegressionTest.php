@@ -483,7 +483,7 @@ final class ShortcodesRegressionTest extends BaseTestCase
         self::assertStringContainsString('Log out', $out);
     }
 
-    public function testFanvueOauthReturnsDisabledLinkWhenSiteNotConnected(): void
+    public function testFanvueOauthReturnsEnabledLinkWhenOauthIsConfiguredEvenWithoutActiveConnection(): void
     {
         if (! defined('CREATORREACTOR_PLUGIN_URL')) {
             define('CREATORREACTOR_PLUGIN_URL', 'https://example.com/wp-content/plugins/creatorreactor/');
@@ -536,11 +536,12 @@ final class ShortcodesRegressionTest extends BaseTestCase
         Functions\expect('add_action')->once()->with('wp_footer', \Mockery::type('callable'), 1);
 
         $out = Shortcodes::fanvue_oauth();
-        self::assertStringContainsString('aria-disabled="true"', $out);
+        self::assertStringNotContainsString('aria-disabled="true"', $out);
+        self::assertStringContainsString('href="https://example.com/wp-json/', $out);
         self::assertStringContainsString('creatorreactor-fanvue-oauth-link', $out);
     }
 
-    public function testFanvueOauthKeepsDisabledLinkWhenStoredTokenCannotBeDecrypted(): void
+    public function testFanvueOauthStaysEnabledWhenStoredTokenCannotBeDecryptedButOauthIsConfigured(): void
     {
         if (! defined('CREATORREACTOR_PLUGIN_URL')) {
             define('CREATORREACTOR_PLUGIN_URL', 'https://example.com/wp-content/plugins/creatorreactor/');
@@ -591,8 +592,8 @@ final class ShortcodesRegressionTest extends BaseTestCase
         Functions\when('esc_html')->alias(static fn ($text): string => (string) $text);
         Functions\when('esc_attr')->alias(static fn ($value): string => (string) $value);
         $out = Shortcodes::fanvue_oauth();
-        self::assertStringContainsString('aria-disabled="true"', $out);
-        self::assertStringNotContainsString('href="https://example.com/wp-json/', $out);
+        self::assertStringNotContainsString('aria-disabled="true"', $out);
+        self::assertStringContainsString('href="https://example.com/wp-json/', $out);
     }
 
     public function testHasTierReturnsEmptyWhenOnlyProductAttributeMatches(): void

@@ -111,6 +111,7 @@ final class RoleImpersonationRegressionTest extends BaseTestCase
     {
         $this->stubAdministratorContext(1);
         Functions\when('wp_roles')->justReturn((object) ['roles' => []]);
+        Functions\when('get_role')->justReturn(false);
         Functions\when('is_ssl')->justReturn(false);
         Functions\when('wp_enqueue_style')->justReturn();
         Functions\when('wp_enqueue_script')->justReturn();

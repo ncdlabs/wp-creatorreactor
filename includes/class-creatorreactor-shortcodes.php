@@ -405,14 +405,14 @@ class Shortcodes {
 
 		self::schedule_fanvue_oauth_footer_style();
 
-		$label          = __( 'Log in with Fanvue', 'wp-creatorreactor' );
-		$site_connected = Admin_Settings::is_connected();
+		$label      = __( 'Log in with Fanvue', 'wp-creatorreactor' );
+		$configured = Admin_Settings::is_fanvue_oauth_settings_configured();
 
 		if ( $variant === 'minimal' ) {
 			$link_class = 'creatorreactor-fanvue-oauth-link creatorreactor-fanvue-oauth-link--minimal';
 			$wrap_class = 'creatorreactor-fanvue-oauth-wrap creatorreactor-fanvue-oauth-wrap--minimal';
 			$link_attrs = 'class="' . esc_attr( $link_class ) . '" aria-label="' . esc_attr( $label ) . '"';
-			if ( ! $site_connected ) {
+			if ( ! $configured ) {
 				$link_attrs .= ' aria-disabled="true" role="button" tabindex="-1"';
 			} else {
 				$link_attrs .= ' href="' . esc_url( $href ) . '"';
@@ -426,7 +426,7 @@ class Shortcodes {
 
 		$img_url    = CREATORREACTOR_PLUGIN_URL . 'img/login-fanvue.webp';
 		$link_attrs = 'class="creatorreactor-fanvue-oauth-link" aria-label="' . esc_attr( $label ) . '"';
-		if ( ! $site_connected ) {
+		if ( ! $configured ) {
 			$link_attrs .= ' aria-disabled="true" role="button" tabindex="-1"';
 		} else {
 			$link_attrs .= ' href="' . esc_url( $href ) . '"';

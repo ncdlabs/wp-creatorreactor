@@ -115,34 +115,7 @@ final class Role_Impersonation {
 		return [
 			'creatorreactor_follower'   => __( 'Follower', 'wp-creatorreactor' ),
 			'creatorreactor_subscriber' => __( 'Subscriber', 'wp-creatorreactor' ),
-			'creatorreactor_null'       => __( 'No Role', 'wp-creatorreactor' ),
 		];
-	}
-
-	/**
-	 * Registered roles whose slug starts with creatorreactor_, sorted by slug.
-	 *
-	 * @return array<string, string> slug => display name
-	 */
-	public static function get_all_creatorreactor_roles(): array {
-		$wp_roles = \wp_roles();
-		if ( ! $wp_roles || ! is_array( $wp_roles->roles ) ) {
-			return [];
-		}
-		$out = [];
-		foreach ( array_keys( $wp_roles->roles ) as $slug ) {
-			$slug = \sanitize_key( (string) $slug );
-			if ( strpos( $slug, 'creatorreactor_' ) !== 0 ) {
-				continue;
-			}
-			$role_obj = \get_role( $slug );
-			if ( ! $role_obj || ! isset( $role_obj->name ) ) {
-				continue;
-			}
-			$out[ $slug ] = \translate_user_role( $role_obj->name );
-		}
-		ksort( $out, SORT_STRING );
-		return $out;
 	}
 
 	/**
@@ -289,18 +262,20 @@ final class Role_Impersonation {
 			true
 		);
 
-		$roles_map = self::get_all_creatorreactor_roles();
-		$roles_ui  = [];
-		foreach ( array_keys( $roles_map ) as $slug ) {
+		$roles_ui   = [];
+		$roles_ui[] = [
+			'slug'  => self::IMPERSONATION_LOGGED_OUT_SLUG,
+			'label' => self::display_label_for_impersonation_choice( self::IMPERSONATION_LOGGED_OUT_SLUG ),
+		];
+		foreach ( [ 'creatorreactor_follower', 'creatorreactor_subscriber' ] as $slug ) {
+			if ( ! \get_role( $slug ) ) {
+				continue;
+			}
 			$roles_ui[] = [
 				'slug'  => $slug,
 				'label' => self::display_label_for_impersonation_choice( $slug ),
 			];
 		}
-		$roles_ui[] = [
-			'slug'  => self::IMPERSONATION_LOGGED_OUT_SLUG,
-			'label' => self::display_label_for_impersonation_choice( self::IMPERSONATION_LOGGED_OUT_SLUG ),
-		];
 
 		$current = self::get_valid_impersonation_role_for_user( $user, $uid );
 
@@ -316,7 +291,6 @@ final class Role_Impersonation {
 				'currentLabel'  => ( $current !== null && $current !== '' ) ? self::display_label_for_impersonation_choice( $current ) : '',
 				'i18n'         => [
 					'title'             => __( 'Impersonate Role', 'wp-creatorreactor' ),
-					'selectPlaceholder' => __( 'Select role…', 'wp-creatorreactor' ),
 					'impersonate'       => __( 'Impersonate', 'wp-creatorreactor' ),
 					'stop'              => __( 'Stop impersonating', 'wp-creatorreactor' ),
 					'viewingAs'         => __( 'Viewing as:', 'wp-creatorreactor' ),
