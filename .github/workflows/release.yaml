@@ -7,12 +7,18 @@ name: Release
 on:
   release:
     types: [published]
+  workflow_dispatch:
+    inputs:
+      tag_name:
+        description: "Existing release tag to upload zip to (for example: v2.1)"
+        required: true
+        type: string
 
 permissions:
   contents: write
 
 concurrency:
-  group: release-${{ github.event.release.tag_name }}
+  group: release-${{ github.event.release.tag_name || inputs.tag_name || github.ref_name }}
   cancel-in-progress: true
 
 jobs:
@@ -27,7 +33,7 @@ jobs:
       - name: Set up PHP
         uses: shivammathur/setup-php@v2
         with:
-          php-version: "8.2"
+          php-version: "8.4"
           coverage: none
           tools: composer
 
@@ -105,6 +111,7 @@ jobs:
       - name: Upload zip to GitHub Release
         env:
           GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          RELEASE_TAG: ${{ github.event.release.tag_name || inputs.tag_name || github.ref_name }}
         run: |
           set -euo pipefail
           shopt -s nullglob
@@ -113,4 +120,4 @@ jobs:
             echo "Expected exactly one wp-creatorreactor-*.zip, got: ${zips[*]-}" >&2
             exit 1
           fi
-          gh release upload "${{ github.event.release.tag_name }}" "${zips[0]}" --clobber | cat
+          gh release upload "${RELEASE_TAG}" "${zips[0]}" --clobber | cat
