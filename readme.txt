@@ -3,7 +3,7 @@ Contributors: lougrossi
 Tags: oauth, membership, subscribers, elementor, login
 Requires at least: 5.9
 Tested up to: 6.9
-Stable tag: 2.0.64
+Stable tag: 2.1
 Requires PHP: 8.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -55,13 +55,14 @@ Development repository: https://github.com/ncdlabs/creatorreactor
 
 == Changelog ==
 
-= 2.0.64 =
-* Maintenance and compatibility updates (see GitHub releases for detail).
+= 2.1 =
+* Fixes Fanvue login enablement and role impersonation regressions.
+* Includes CreatorReactor Cloud Metrics ingest sync scheduling improvements.
 
 == Upgrade Notice ==
 
-= 2.0.64 =
-Routine update; review settings after upgrading in staging if you use OAuth or broker mode.
+= 2.1 =
+Recommended update with regression fixes; review OAuth, role, and sync behavior in staging before production rollout.
 
 == Privacy ==
 
