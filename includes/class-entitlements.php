@@ -509,10 +509,15 @@ class Entitlements {
 	 * @global \wpdb $wpdb
 	 * @return array{0: string, 1: string, 2: string} [ sql, arg_legacy_tier, arg_like_pattern ]
 	 */
-	private static function follower_tier_sql_match() {
+	/**
+	 * Values for follower-tier clauses that use the literal SQL `(tier <=> %s OR tier LIKE %s)` (avoids dynamic SQL fragments in $wpdb->prepare()).
+	 *
+	 * @return array{0: string, 1: string} Exact tier string and LIKE pattern.
+	 */
+	private static function follower_tier_prepare_values() {
 		global $wpdb;
 		$like = '%' . $wpdb->esc_like( '_follower' );
-		return [ '(tier <=> %s OR tier LIKE %s)', self::TIER_FOLLOWER, $like ];
+		return [ self::TIER_FOLLOWER, $like ];
 	}
 
 	/**
@@ -700,12 +705,12 @@ class Entitlements {
 			global $wpdb;
 			$table   = self::get_table_name();
 			$product = self::normalize_product( $product );
-			list( $ft_sql, $ft_legacy, $ft_like ) = self::follower_tier_sql_match();
+			list( $ft_legacy, $ft_like ) = self::follower_tier_prepare_values();
 
 			if ( empty( $active_creatorreactor_uuids ) ) {
 				$wpdb->query(
 					$wpdb->prepare(
-						"UPDATE {$table} SET status = %s, expires_at = %s, updated_at = %s WHERE status = %s AND product = %s AND creatorreactor_user_uuid IS NOT NULL AND creatorreactor_user_uuid != '' AND NOT ($ft_sql)",
+						"UPDATE {$table} SET status = %s, expires_at = %s, updated_at = %s WHERE status = %s AND product = %s AND creatorreactor_user_uuid IS NOT NULL AND creatorreactor_user_uuid != '' AND NOT ((tier <=> %s OR tier LIKE %s))",
 						array_merge(
 							[
 								self::STATUS_INACTIVE,
@@ -723,22 +728,23 @@ class Entitlements {
 			}
 
 			$placeholders = implode( ',', array_fill( 0, count( $active_creatorreactor_uuids ), '%s' ) );
-			$query        = $wpdb->prepare(
-				"UPDATE {$table} SET status = %s, expires_at = %s, updated_at = %s WHERE status = %s AND product = %s AND creatorreactor_user_uuid IS NOT NULL AND creatorreactor_user_uuid != '' AND NOT ($ft_sql) AND creatorreactor_user_uuid NOT IN ($placeholders)",
-				array_merge(
-					[
-						self::STATUS_INACTIVE,
-						$expires_at,
-						current_time( 'mysql' ),
-						self::STATUS_ACTIVE,
-						$product,
-						$ft_legacy,
-						$ft_like,
-					],
-					array_map( 'sanitize_text_field', $active_creatorreactor_uuids )
+			$wpdb->query(
+				$wpdb->prepare(
+					"UPDATE {$table} SET status = %s, expires_at = %s, updated_at = %s WHERE status = %s AND product = %s AND creatorreactor_user_uuid IS NOT NULL AND creatorreactor_user_uuid != '' AND NOT ((tier <=> %s OR tier LIKE %s)) AND creatorreactor_user_uuid NOT IN ($placeholders)",
+					array_merge(
+						[
+							self::STATUS_INACTIVE,
+							$expires_at,
+							current_time( 'mysql' ),
+							self::STATUS_ACTIVE,
+							$product,
+							$ft_legacy,
+							$ft_like,
+						],
+						array_map( 'sanitize_text_field', $active_creatorreactor_uuids )
+					)
 				)
 			);
-			$wpdb->query( $query );
 			self::report_db_error( 'Entitlements mark_missing_subscribers_as_inactive' );
 			return (int) $wpdb->rows_affected;
 		} catch ( \Throwable $e ) {
@@ -759,12 +765,12 @@ class Entitlements {
 			global $wpdb;
 			$table   = self::get_table_name();
 			$product = self::normalize_product( $product );
-			list( $ft_sql, $ft_legacy, $ft_like ) = self::follower_tier_sql_match();
+			list( $ft_legacy, $ft_like ) = self::follower_tier_prepare_values();
 
 			if ( empty( $active_follower_uuids ) ) {
 				$wpdb->query(
 					$wpdb->prepare(
-						"UPDATE {$table} SET status = %s, expires_at = %s, updated_at = %s WHERE status = %s AND product = %s AND creatorreactor_user_uuid IS NOT NULL AND creatorreactor_user_uuid != '' AND ($ft_sql)",
+						"UPDATE {$table} SET status = %s, expires_at = %s, updated_at = %s WHERE status = %s AND product = %s AND creatorreactor_user_uuid IS NOT NULL AND creatorreactor_user_uuid != '' AND ((tier <=> %s OR tier LIKE %s))",
 						array_merge(
 							[
 								self::STATUS_INACTIVE,
@@ -782,22 +788,23 @@ class Entitlements {
 			}
 
 			$placeholders = implode( ',', array_fill( 0, count( $active_follower_uuids ), '%s' ) );
-			$query        = $wpdb->prepare(
-				"UPDATE {$table} SET status = %s, expires_at = %s, updated_at = %s WHERE status = %s AND product = %s AND ($ft_sql) AND creatorreactor_user_uuid NOT IN ($placeholders)",
-				array_merge(
-					[
-						self::STATUS_INACTIVE,
-						$expires_at,
-						current_time( 'mysql' ),
-						self::STATUS_ACTIVE,
-						$product,
-						$ft_legacy,
-						$ft_like,
-					],
-					array_map( 'sanitize_text_field', $active_follower_uuids )
+			$wpdb->query(
+				$wpdb->prepare(
+					"UPDATE {$table} SET status = %s, expires_at = %s, updated_at = %s WHERE status = %s AND product = %s AND ((tier <=> %s OR tier LIKE %s)) AND creatorreactor_user_uuid NOT IN ($placeholders)",
+					array_merge(
+						[
+							self::STATUS_INACTIVE,
+							$expires_at,
+							current_time( 'mysql' ),
+							self::STATUS_ACTIVE,
+							$product,
+							$ft_legacy,
+							$ft_like,
+						],
+						array_map( 'sanitize_text_field', $active_follower_uuids )
+					)
 				)
 			);
-			$wpdb->query( $query );
 			self::report_db_error( 'Entitlements mark_missing_followers_as_inactive' );
 			return (int) $wpdb->rows_affected;
 		} catch ( \Throwable $e ) {
@@ -814,25 +821,50 @@ class Entitlements {
 		global $wpdb;
 		$table = self::get_table_name();
 		$now   = current_time( 'mysql' );
+		$t_esc = esc_sql( $table );
 
-		$where = [ 'status = %s', 'expires_at > %s' ];
-		$args  = [ self::STATUS_ACTIVE, $now ];
-
+		if ( $tier !== null && $product !== null ) {
+			$vals = self::tier_filter_match_values( $tier, $product );
+			$ph   = implode( ',', array_fill( 0, count( $vals ), '%s' ) );
+			return $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT * FROM `{$t_esc}` WHERE status = %s AND expires_at > %s AND tier IN ($ph) AND product = %s",
+					array_merge( [ self::STATUS_ACTIVE, $now ], $vals, [ self::normalize_product( $product ) ] )
+				),
+				ARRAY_A
+			);
+		}
 		if ( $tier !== null ) {
-			$vals    = self::tier_filter_match_values( $tier, $product );
-			$ph      = implode( ',', array_fill( 0, count( $vals ), '%s' ) );
-			$where[] = "tier IN ($ph)";
-			$args    = array_merge( $args, $vals );
+			$vals = self::tier_filter_match_values( $tier, $product );
+			$ph   = implode( ',', array_fill( 0, count( $vals ), '%s' ) );
+			return $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT * FROM `{$t_esc}` WHERE status = %s AND expires_at > %s AND tier IN ($ph)",
+					array_merge( [ self::STATUS_ACTIVE, $now ], $vals )
+				),
+				ARRAY_A
+			);
 		}
-
 		if ( $product !== null ) {
-			$where[] = 'product = %s';
-			$args[]  = self::normalize_product( $product );
+			return $wpdb->get_results(
+				$wpdb->prepare(
+					"SELECT * FROM `{$t_esc}` WHERE status = %s AND expires_at > %s AND product = %s",
+					self::STATUS_ACTIVE,
+					$now,
+					self::normalize_product( $product )
+				),
+				ARRAY_A
+			);
 		}
 
-		$query = "SELECT * FROM {$table} WHERE " . implode( ' AND ', $where );
-
-		return $wpdb->get_results( $wpdb->prepare( $query, $args ), ARRAY_A );
+		return $wpdb->get_results(
+			$wpdb->prepare(
+				"SELECT * FROM `{$t_esc}` WHERE status = %s AND expires_at > %s",
+				self::STATUS_ACTIVE,
+				$now
+			),
+			ARRAY_A
+		);
 	}
 
 	public static function check_user_entitlement( $user_id, $tier = null, $product = null ) {
@@ -847,24 +879,51 @@ class Entitlements {
 		}
 
 		$email = $user->user_email;
+		$t_esc = esc_sql( $table );
 
-		$where = [ 'email = %s', 'status = %s', 'expires_at > %s' ];
-		$args  = [ $email, self::STATUS_ACTIVE, $now ];
-
+		if ( $tier !== null && $product !== null ) {
+			$vals = self::tier_filter_match_values( $tier, $product );
+			$ph   = implode( ',', array_fill( 0, count( $vals ), '%s' ) );
+			$row  = $wpdb->get_row(
+				$wpdb->prepare(
+					"SELECT * FROM `{$t_esc}` WHERE email = %s AND status = %s AND expires_at > %s AND tier IN ($ph) AND product = %s LIMIT 1",
+					array_merge( [ $email, self::STATUS_ACTIVE, $now ], $vals, [ self::normalize_product( $product ) ] )
+				)
+			);
+			return $row !== null;
+		}
 		if ( $tier !== null ) {
-			$vals    = self::tier_filter_match_values( $tier, $product );
-			$ph      = implode( ',', array_fill( 0, count( $vals ), '%s' ) );
-			$where[] = "tier IN ($ph)";
-			$args    = array_merge( $args, $vals );
+			$vals = self::tier_filter_match_values( $tier, $product );
+			$ph   = implode( ',', array_fill( 0, count( $vals ), '%s' ) );
+			$row  = $wpdb->get_row(
+				$wpdb->prepare(
+					"SELECT * FROM `{$t_esc}` WHERE email = %s AND status = %s AND expires_at > %s AND tier IN ($ph) LIMIT 1",
+					array_merge( [ $email, self::STATUS_ACTIVE, $now ], $vals )
+				)
+			);
+			return $row !== null;
 		}
-
 		if ( $product !== null ) {
-			$where[] = 'product = %s';
-			$args[]  = self::normalize_product( $product );
+			$row = $wpdb->get_row(
+				$wpdb->prepare(
+					"SELECT * FROM `{$t_esc}` WHERE email = %s AND status = %s AND expires_at > %s AND product = %s LIMIT 1",
+					$email,
+					self::STATUS_ACTIVE,
+					$now,
+					self::normalize_product( $product )
+				)
+			);
+			return $row !== null;
 		}
 
-		$query = "SELECT * FROM {$table} WHERE " . implode( ' AND ', $where ) . ' LIMIT 1';
-		$row   = $wpdb->get_row( $wpdb->prepare( $query, $args ) );
+		$row = $wpdb->get_row(
+			$wpdb->prepare(
+				"SELECT * FROM `{$t_esc}` WHERE email = %s AND status = %s AND expires_at > %s LIMIT 1",
+				$email,
+				self::STATUS_ACTIVE,
+				$now
+			)
+		);
 
 		return $row !== null;
 	}
@@ -945,11 +1004,11 @@ class Entitlements {
 				'wp_user_id',
 			]
 		);
-		list( $ft_sql, $ft_legacy, $ft_like ) = self::follower_tier_sql_match();
+		list( $ft_legacy, $ft_like ) = self::follower_tier_prepare_values();
 		// phpcs:ignore WordPress.DB.PreparedSQL.InterpolatedNotPrepared -- table name from trusted prefix.
 		$rows = $wpdb->get_results(
 			$wpdb->prepare(
-				"SELECT {$select_cols} FROM {$table} WHERE status = %s AND expires_at > %s AND (wp_user_id = %d OR email = %s) AND ($ft_sql)",
+				"SELECT {$select_cols} FROM {$table} WHERE status = %s AND expires_at > %s AND (wp_user_id = %d OR email = %s) AND ((tier <=> %s OR tier LIKE %s))",
 				array_merge(
 					[ self::STATUS_INACTIVE, $now, (int) $user_id, $user->user_email ],
 					[ $ft_legacy, $ft_like ]

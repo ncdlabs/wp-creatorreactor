@@ -38,7 +38,6 @@ final class LoginRedirectRegressionTest extends BaseTestCase
         Functions\expect('add_filter')
             ->once()
             ->with('login_redirect', [Login_Page::class, 'force_home_login_redirect'], 20, 3);
-        Functions\expect('add_filter')->times(3);
 
         Login_Page::init();
         self::assertTrue(true);
@@ -338,19 +337,4 @@ final class LoginRedirectRegressionTest extends BaseTestCase
         self::assertTrue(true);
     }
 
-    public function testEnqueueLoginBrandingAssetsRegistersStylesheetAndLogoVariable(): void
-    {
-        if (! defined('CREATORREACTOR_VERSION')) {
-            define('CREATORREACTOR_VERSION', 'test-version');
-        }
-        if (! defined('CREATORREACTOR_PLUGIN_URL')) {
-            define('CREATORREACTOR_PLUGIN_URL', 'https://example.com/wp-content/plugins/wp-creatorreactor/');
-        }
-        Functions\when('esc_url')->alias(static fn ($url): string => (string) $url);
-        Functions\expect('wp_enqueue_style')->once();
-        Functions\expect('wp_add_inline_style')->once();
-
-        Login_Page::enqueue_login_branding_assets();
-        self::assertTrue(true);
-    }
 }

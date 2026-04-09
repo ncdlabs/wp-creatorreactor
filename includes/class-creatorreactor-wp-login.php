@@ -51,54 +51,6 @@ class Login_Page {
 		add_action( 'login_init', [ __CLASS__, 'maybe_add_google_oauth_login_notice' ] );
 		add_action( 'login_init', [ __CLASS__, 'maybe_add_social_oauth_login_notice' ] );
 		add_filter( 'login_redirect', [ __CLASS__, 'force_home_login_redirect' ], 20, 3 );
-		add_action( 'login_enqueue_scripts', [ __CLASS__, 'enqueue_login_branding_assets' ], 5 );
-		add_filter( 'login_headerurl', [ __CLASS__, 'filter_login_header_url' ] );
-		add_filter( 'login_headertext', [ __CLASS__, 'filter_login_header_text' ] );
-		add_filter( 'login_body_class', [ __CLASS__, 'filter_login_body_class' ], 10, 2 );
-	}
-
-	/**
-	 * Brand colors, logo, and layout for wp-login.php (all login actions).
-	 */
-	public static function enqueue_login_branding_assets() {
-		$handle = 'creatorreactor-wp-login-brand';
-		wp_enqueue_style(
-			$handle,
-			CREATORREACTOR_PLUGIN_URL . 'assets/css/creatorreactor-wp-login.css',
-			[],
-			CREATORREACTOR_VERSION
-		);
-		$logo = esc_url( CREATORREACTOR_PLUGIN_URL . 'img/cr-logo.png' );
-		wp_add_inline_style(
-			$handle,
-			':root{--cr-logo-url:url("' . $logo . '");}'
-		);
-	}
-
-	/**
-	 * @param string $url Default login logo link URL.
-	 * @return string
-	 */
-	public static function filter_login_header_url( $url ) {
-		return home_url( '/' );
-	}
-
-	/**
-	 * @param string $text Default login logo link title / alt text.
-	 * @return string
-	 */
-	public static function filter_login_header_text( $text ) {
-		return __( 'CreatorReactor', 'wp-creatorreactor' );
-	}
-
-	/**
-	 * @param string[] $classes Body classes.
-	 * @param string   $action  Login action (login, lostpassword, etc.).
-	 * @return string[]
-	 */
-	public static function filter_login_body_class( $classes, $action ) {
-		$classes[] = 'creatorreactor-login';
-		return $classes;
 	}
 
 	/**
@@ -387,11 +339,11 @@ class Login_Page {
 		$css = <<<CSS
 .creatorreactor-wp-login-split {
 	display: flex;
-	flex-direction: row;
+	flex-direction: column;
 	flex-wrap: wrap;
 	align-items: center;
 	justify-content: center;
-	gap: 28px;
+	gap: 18px;
 	width: 100%;
 	max-width: 100%;
 }
@@ -409,9 +361,16 @@ class Login_Page {
 	text-align: center;
 	position: relative;
 	z-index: 1;
+	width: 100%;
 }
 #loginform .creatorreactor-wp-login-social {
+	display: flex;
+	flex-direction: column;
+	align-items: center;
+	justify-content: center;
+	gap: 10px;
 	text-align: center;
+	width: 100%;
 }
 .creatorreactor-wp-login-split-social .creatorreactor-fanvue-oauth-wrap {
 	margin: 0;
@@ -425,7 +384,7 @@ class Login_Page {
 	cursor: pointer;
 	pointer-events: auto;
 	text-decoration: none;
-	color: #8e2d77;
+	color: inherit;
 }
 .creatorreactor-fanvue-oauth-logged-in {
 	margin: 0;
@@ -466,7 +425,7 @@ class Login_Page {
 	transform: translateY({$fanvue_minimal_icon_ty}px);
 }
 #login:has(.creatorreactor-wp-login-split) {
-	max-width: 720px;
+	max-width: 400px;
 	width: 100%;
 }
 CSS;

@@ -338,6 +338,72 @@ class Admin_Settings {
 	}
 
 	/**
+	 * Sidebar status for an OAuth provider.
+	 *
+	 * Returns:
+	 * - configured: credentials/settings are complete.
+	 * - error: partial/incomplete config exists.
+	 * - none: no config entered yet.
+	 *
+	 * @param string $slug Provider slug.
+	 * @return string
+	 */
+	private static function oauth_settings_provider_sidebar_status( $slug ) {
+		$slug = sanitize_key( (string) $slug );
+		$opts = self::get_options();
+		if ( $slug === '' ) {
+			return 'none';
+		}
+
+		switch ( $slug ) {
+			case 'fanvue':
+				if ( self::is_fanvue_oauth_settings_configured_from_opts( ! empty( $opts['broker_mode'] ), $opts ) ) {
+					return 'configured';
+				}
+				if ( ! empty( $opts['broker_mode'] ) ) {
+					$site_id    = isset( $opts['site_id'] ) ? trim( (string) $opts['site_id'] ) : '';
+					$broker_url = isset( $opts['broker_url'] ) ? trim( (string) $opts['broker_url'] ) : '';
+					return ( $site_id !== '' || $broker_url !== '' ) ? 'error' : 'none';
+				}
+				$fanvue_id  = isset( $opts['creatorreactor_oauth_client_id'] ) ? trim( (string) $opts['creatorreactor_oauth_client_id'] ) : '';
+				$fanvue_sec = isset( $opts['creatorreactor_oauth_client_secret'] ) ? trim( (string) $opts['creatorreactor_oauth_client_secret'] ) : '';
+				return ( $fanvue_id !== '' || $fanvue_sec !== '' ) ? 'error' : 'none';
+			case 'google':
+				if ( self::is_google_login_configured() ) {
+					return 'configured';
+				}
+				$google_id  = isset( $opts['creatorreactor_google_oauth_client_id'] ) ? trim( (string) $opts['creatorreactor_google_oauth_client_id'] ) : '';
+				$google_sec = isset( $opts['creatorreactor_google_oauth_client_secret'] ) ? trim( (string) $opts['creatorreactor_google_oauth_client_secret'] ) : '';
+				return ( $google_id !== '' || $google_sec !== '' ) ? 'error' : 'none';
+			case 'instagram':
+				if ( self::is_instagram_oauth_configured() ) {
+					return 'configured';
+				}
+				$instagram_id  = isset( $opts['creatorreactor_instagram_oauth_client_id'] ) ? trim( (string) $opts['creatorreactor_instagram_oauth_client_id'] ) : '';
+				$instagram_sec = isset( $opts['creatorreactor_instagram_oauth_client_secret'] ) ? trim( (string) $opts['creatorreactor_instagram_oauth_client_secret'] ) : '';
+				return ( $instagram_id !== '' || $instagram_sec !== '' ) ? 'error' : 'none';
+			case 'onlyfans':
+				if ( self::is_onlyfans_ofauth_configured_from_opts( $opts ) ) {
+					return 'configured';
+				}
+				$ofauth_api_key        = isset( $opts['creatorreactor_ofauth_api_key'] ) ? trim( (string) $opts['creatorreactor_ofauth_api_key'] ) : '';
+				$ofauth_webhook_secret = isset( $opts['creatorreactor_ofauth_webhook_secret'] ) ? trim( (string) $opts['creatorreactor_ofauth_webhook_secret'] ) : '';
+				return ( $ofauth_api_key !== '' || $ofauth_webhook_secret !== '' ) ? 'error' : 'none';
+			default:
+				if ( self::is_social_oauth_provider_configured( $slug ) ) {
+					return 'configured';
+				}
+				$social_id  = isset( $opts[ Social_OAuth_Registry::option_client_id( $slug ) ] ) ? trim( (string) $opts[ Social_OAuth_Registry::option_client_id( $slug ) ] ) : '';
+				$social_sec = isset( $opts[ Social_OAuth_Registry::option_client_secret( $slug ) ] ) ? trim( (string) $opts[ Social_OAuth_Registry::option_client_secret( $slug ) ] ) : '';
+				if ( 'mastodon' === $slug ) {
+					$instance = Social_OAuth::normalize_mastodon_base_from_opts( $opts );
+					return ( $social_id !== '' || $social_sec !== '' || $instance !== '' ) ? 'error' : 'none';
+				}
+				return ( $social_id !== '' || $social_sec !== '' ) ? 'error' : 'none';
+		}
+	}
+
+	/**
 	 * Settings screen URL for OAuth Settings (unified tab + sidebar).
 	 *
 	 * @param string               $provider    Provider key (fanvue, google, tiktok, bluesky, …).
@@ -610,7 +676,7 @@ class Admin_Settings {
 			wp_send_json_error( [ 'message' => __( 'Forbidden.', 'wp-creatorreactor' ) ], 403 );
 		}
 		// Explicit intent only (ignore / other flows must not POST this flag).
-		if ( ! isset( $_POST['apply_integration_fixes'] ) || (string) wp_unslash( $_POST['apply_integration_fixes'] ) !== '1' ) {
+		if ( ! isset( $_POST['apply_integration_fixes'] ) || sanitize_text_field( wp_unslash( (string) $_POST['apply_integration_fixes'] ) ) !== '1' ) {
 			wp_send_json_error( [ 'message' => __( 'Invalid request.', 'wp-creatorreactor' ) ], 400 );
 		}
 
@@ -840,7 +906,7 @@ class Admin_Settings {
 			wp_send_json_error( [ 'message' => __( 'Invalid check.', 'wp-creatorreactor' ) ], 400 );
 		}
 
-		$do_ignore = ! empty( $_POST['ignore'] ) && (string) wp_unslash( $_POST['ignore'] ) === '1';
+		$do_ignore = isset( $_POST['ignore'] ) && sanitize_text_field( wp_unslash( (string) $_POST['ignore'] ) ) === '1';
 		$current   = self::get_ignored_integration_check_ids();
 
 		if ( $do_ignore ) {
@@ -881,13 +947,15 @@ class Admin_Settings {
 			}
 		}
 		if ( isset( $_SERVER[ $name ] ) && is_string( $_SERVER[ $name ] ) ) {
-			$v = trim( (string) $_SERVER[ $name ] );
+			$v = sanitize_text_field( wp_unslash( $_SERVER[ $name ] ) );
+			$v = trim( $v );
 			if ( $v !== '' ) {
 				return $v;
 			}
 		}
 		if ( isset( $_ENV[ $name ] ) && is_string( $_ENV[ $name ] ) ) {
-			$v = trim( (string) $_ENV[ $name ] );
+			$v = sanitize_text_field( wp_unslash( $_ENV[ $name ] ) );
+			$v = trim( $v );
 			if ( $v !== '' ) {
 				return $v;
 			}
@@ -1154,8 +1222,8 @@ class Admin_Settings {
 		}
 
 		$client_id = isset( $_POST['client_id'] ) ? trim( sanitize_text_field( wp_unslash( $_POST['client_id'] ) ) ) : '';
-		$secret_in = isset( $_POST['client_secret'] ) ? (string) wp_unslash( $_POST['client_secret'] ) : '';
-		$secret_unchanged = isset( $_POST['secret_unchanged'] ) && (string) wp_unslash( $_POST['secret_unchanged'] ) === '1';
+		$secret_in = isset( $_POST['client_secret'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['client_secret'] ) ) : '';
+		$secret_unchanged = isset( $_POST['secret_unchanged'] ) && sanitize_text_field( wp_unslash( (string) $_POST['secret_unchanged'] ) ) === '1';
 
 		if ( $client_id === '' ) {
 			wp_send_json_success( [ 'skip' => true ] );
@@ -1245,8 +1313,8 @@ class Admin_Settings {
 			);
 		}
 		$client_id = isset( $_POST['client_id'] ) ? trim( sanitize_text_field( wp_unslash( $_POST['client_id'] ) ) ) : '';
-		$secret_in = isset( $_POST['client_secret'] ) ? (string) wp_unslash( $_POST['client_secret'] ) : '';
-		$secret_unchanged = isset( $_POST['secret_unchanged'] ) && (string) wp_unslash( $_POST['secret_unchanged'] ) === '1';
+		$secret_in = isset( $_POST['client_secret'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['client_secret'] ) ) : '';
+		$secret_unchanged = isset( $_POST['secret_unchanged'] ) && sanitize_text_field( wp_unslash( (string) $_POST['secret_unchanged'] ) ) === '1';
 		if ( $client_id === '' ) {
 			wp_send_json_success( [ 'skip' => true ] );
 		}
@@ -1266,7 +1334,7 @@ class Admin_Settings {
 			);
 		}
 		if ( 'mastodon' === $slug ) {
-			$inst = isset( $_POST['mastodon_instance'] ) ? trim( wp_unslash( $_POST['mastodon_instance'] ) ) : '';
+			$inst = isset( $_POST['mastodon_instance'] ) ? trim( sanitize_text_field( wp_unslash( (string) $_POST['mastodon_instance'] ) ) ) : '';
 			if ( $inst === '' ) {
 				$inst = isset( $opts['creatorreactor_mastodon_instance'] ) ? trim( (string) $opts['creatorreactor_mastodon_instance'] ) : '';
 			}
@@ -1360,8 +1428,8 @@ class Admin_Settings {
 		}
 
 		$client_id = isset( $_POST['client_id'] ) ? trim( sanitize_text_field( wp_unslash( $_POST['client_id'] ) ) ) : '';
-		$secret_in = isset( $_POST['client_secret'] ) ? (string) wp_unslash( $_POST['client_secret'] ) : '';
-		$secret_unchanged = isset( $_POST['secret_unchanged'] ) && (string) wp_unslash( $_POST['secret_unchanged'] ) === '1';
+		$secret_in = isset( $_POST['client_secret'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['client_secret'] ) ) : '';
+		$secret_unchanged = isset( $_POST['secret_unchanged'] ) && sanitize_text_field( wp_unslash( (string) $_POST['secret_unchanged'] ) ) === '1';
 
 		if ( $client_id === '' ) {
 			wp_send_json_success( [ 'skip' => true ] );
@@ -1442,8 +1510,8 @@ class Admin_Settings {
 		}
 
 		$client_id = isset( $_POST['client_id'] ) ? trim( sanitize_text_field( wp_unslash( $_POST['client_id'] ) ) ) : '';
-		$secret_in = isset( $_POST['client_secret'] ) ? (string) wp_unslash( $_POST['client_secret'] ) : '';
-		$secret_unchanged = isset( $_POST['secret_unchanged'] ) && (string) wp_unslash( $_POST['secret_unchanged'] ) === '1';
+		$secret_in = isset( $_POST['client_secret'] ) ? sanitize_text_field( wp_unslash( (string) $_POST['client_secret'] ) ) : '';
+		$secret_unchanged = isset( $_POST['secret_unchanged'] ) && sanitize_text_field( wp_unslash( (string) $_POST['secret_unchanged'] ) ) === '1';
 
 		if ( $client_id === '' ) {
 			wp_send_json_success( [ 'skip' => true ] );
@@ -2032,6 +2100,7 @@ class Admin_Settings {
 			$tz = new \DateTimeZone( $selected );
 		} catch ( \Exception $e ) {
 			return [
+				/* translators: %s: PHP/WordPress timezone name used when the selected zone is invalid. */
 				'label'    => sprintf( __( 'System Time (%s)', 'wp-creatorreactor' ), $site_name ),
 				'timezone' => $site_tz,
 				'selected' => 'browser',
@@ -8048,6 +8117,9 @@ class Admin_Settings {
 			align-items: center;
 			gap: 8px;
 		}
+		.creatorreactor-module-child--unconfigured-oauth {
+			align-items: flex-start;
+		}
 		.creatorreactor-module-child--gateway,
 		.creatorreactor-module-child--fanvue-actions {
 			justify-content: space-between;
@@ -8074,6 +8146,20 @@ class Admin_Settings {
 		.creatorreactor-module-child-label {
 			font-size: 13px;
 			color: var(--cr-text);
+		}
+		.creatorreactor-unconfigured-oauth-summary {
+			cursor: pointer;
+			font-size: 13px;
+			font-weight: 600;
+		}
+		.creatorreactor-unconfigured-oauth-list {
+			margin: 8px 0 0 18px;
+		}
+		.creatorreactor-unconfigured-oauth-list li {
+			margin: 0 0 6px;
+		}
+		.creatorreactor-unconfigured-oauth-list li:last-child {
+			margin-bottom: 0;
 		}
 		.creatorreactor-connection-actions {
 			display: flex;
@@ -8420,7 +8506,33 @@ class Admin_Settings {
 		.creatorreactor-settings-sidebar { width: 160px; flex-shrink: 0; }
 		.creatorreactor-settings-sidebar--social-oauth { width: 200px; }
 		.creatorreactor-sidebar-nav { display: flex; flex-direction: column; }
-		.creatorreactor-sidebar-link { display: block; padding: 12px 14px; border-bottom: 1px solid #eee; color: #50575e; text-decoration: none; font-weight: 500; }
+		.creatorreactor-sidebar-link {
+			display: grid;
+			grid-template-columns: minmax(0, 1fr) 28px;
+			align-items: center;
+			column-gap: 12px;
+			padding: 12px 14px;
+			border-bottom: 1px solid #eee;
+			color: #50575e;
+			text-decoration: none;
+			font-weight: 500;
+		}
+		.creatorreactor-sidebar-link-label { min-width: 0; }
+		.creatorreactor-sidebar-link-status-col {
+			display: flex;
+			justify-content: center;
+			align-items: center;
+			width: 28px;
+			min-width: 28px;
+		}
+		.creatorreactor-sidebar-link-status {
+			display: inline-flex;
+			align-items: center;
+			justify-content: center;
+		}
+		.creatorreactor-sidebar-link-status .dashicons { width: 18px; height: 18px; font-size: 18px; line-height: 1; }
+		.creatorreactor-sidebar-link-status.is-configured { color: #00a32a; }
+		.creatorreactor-sidebar-link-status.is-error { color: #dba617; }
 		.creatorreactor-sidebar-link.is-active { background: #faf3f8; color: var(--cr-accent, #8e2d77); border-left: 3px solid var(--cr-accent, #8e2d77); }
 		.creatorreactor-sidebar-link:hover:not(.is-active) { background: #f5f5f5; }
 		.creatorreactor-settings-content { flex: 1; min-width: 0; }
@@ -10529,8 +10641,18 @@ class Admin_Settings {
 					$oauth_sidebar_slugs = self::oauth_settings_all_provider_slugs();
 					usort( $oauth_sidebar_slugs, [ __CLASS__, 'compare_oauth_sidebar_labels' ] );
 					foreach ( $oauth_sidebar_slugs as $oauth_nav_slug ) :
+						$oauth_nav_status = self::oauth_settings_provider_sidebar_status( $oauth_nav_slug );
 						?>
-					<a href="<?php echo esc_url( self::admin_oauth_settings_url( $oauth_nav_slug ) ); ?>" class="creatorreactor-sidebar-link <?php echo $oauth_nav_slug === $active_oauth_provider ? 'is-active' : ''; ?>"><?php echo esc_html( self::oauth_settings_provider_sidebar_label( $oauth_nav_slug ) ); ?></a>
+					<a href="<?php echo esc_url( self::admin_oauth_settings_url( $oauth_nav_slug ) ); ?>" class="creatorreactor-sidebar-link <?php echo $oauth_nav_slug === $active_oauth_provider ? 'is-active' : ''; ?>">
+						<span class="creatorreactor-sidebar-link-label"><?php echo esc_html( self::oauth_settings_provider_sidebar_label( $oauth_nav_slug ) ); ?></span>
+						<span class="creatorreactor-sidebar-link-status-col">
+							<?php if ( 'configured' === $oauth_nav_status ) : ?>
+								<span class="creatorreactor-sidebar-link-status is-configured" title="<?php esc_attr_e( 'Provider configured', 'wp-creatorreactor' ); ?>" aria-label="<?php esc_attr_e( 'Provider configured', 'wp-creatorreactor' ); ?>"><span class="dashicons dashicons-yes-alt" aria-hidden="true"></span></span>
+							<?php elseif ( 'error' === $oauth_nav_status ) : ?>
+								<span class="creatorreactor-sidebar-link-status is-error" title="<?php esc_attr_e( 'Configuration incomplete', 'wp-creatorreactor' ); ?>" aria-label="<?php esc_attr_e( 'Configuration incomplete', 'wp-creatorreactor' ); ?>"><span class="dashicons dashicons-warning" aria-hidden="true"></span></span>
+							<?php endif; ?>
+						</span>
+					</a>
 					<?php endforeach; ?>
 				</nav>
 			</div>
@@ -10964,6 +11086,86 @@ class Admin_Settings {
 						$instagram_oauth_state = 'yellow';
 					}
 				}
+				$unconfigured_oauth_providers = [];
+				if ( ! $fanvue_oauth_is_configured ) {
+					$unconfigured_oauth_providers[] = [
+						'label' => __( 'Sign in with Fanvue', 'wp-creatorreactor' ),
+						'url'   => self::admin_oauth_settings_url( 'fanvue', [ 'subtab' => 'oauth' ] ),
+					];
+				}
+				if ( ! self::is_onlyfans_ofauth_configured_from_opts( $opts ) ) {
+					$unconfigured_oauth_providers[] = [
+						'label' => __( 'OnlyFans', 'wp-creatorreactor' ),
+						'url'   => self::admin_oauth_settings_url( 'onlyfans', [ 'subtab' => 'oauth' ] ),
+					];
+				}
+				if ( ! self::is_google_login_configured() ) {
+					$unconfigured_oauth_providers[] = [
+						'label' => __( 'Google', 'wp-creatorreactor' ),
+						'url'   => self::admin_oauth_settings_url( 'google' ),
+					];
+				}
+				if ( ! self::is_instagram_oauth_configured() ) {
+					$unconfigured_oauth_providers[] = [
+						'label' => __( 'Instagram', 'wp-creatorreactor' ),
+						'url'   => self::admin_oauth_settings_url( 'instagram' ),
+					];
+				}
+				foreach ( self::all_settings_social_oauth_slugs() as $social_slug ) {
+					if ( self::is_social_oauth_provider_configured( $social_slug ) ) {
+						continue;
+					}
+					$provider_label = 'bluesky' === $social_slug ? __( 'Bluesky', 'wp-creatorreactor' ) : Shortcodes::social_oauth_provider_label( $social_slug );
+					$unconfigured_oauth_providers[] = [
+						'label' => $provider_label,
+						'url'   => self::admin_social_oauth_settings_url( $social_slug ),
+					];
+				}
+				usort(
+					$unconfigured_oauth_providers,
+					static function ( $a, $b ) {
+						$a_label = isset( $a['label'] ) ? (string) $a['label'] : '';
+						$b_label = isset( $b['label'] ) ? (string) $b['label'] : '';
+						return strnatcasecmp( $a_label, $b_label );
+					}
+				);
+				$wordpress_gateway_children = [];
+				if ( $fanvue_oauth_is_configured ) {
+					$wordpress_gateway_children[] = [
+						'id'    => 'fanvue_oauth',
+						'label' => __( 'Sign in with Fanvue', 'wp-creatorreactor' ),
+						'state' => $fanvue_oauth_state,
+					];
+				}
+				if ( self::is_onlyfans_ofauth_configured_from_opts( $opts ) ) {
+					$wordpress_gateway_children[] = [
+						'id'    => 'onlyfans_ofauth',
+						'label' => __( 'OnlyFans', 'wp-creatorreactor' ),
+						'state' => $onlyfans_oauth_state,
+					];
+				}
+				if ( self::is_google_login_configured() ) {
+					$wordpress_gateway_children[] = [
+						'id'    => 'google_oauth',
+						'label' => __( 'Google', 'wp-creatorreactor' ),
+						'state' => $google_oauth_state,
+					];
+				}
+				if ( self::is_instagram_oauth_configured() ) {
+					$wordpress_gateway_children[] = [
+						'id'    => 'instagram_oauth',
+						'label' => __( 'Instagram', 'wp-creatorreactor' ),
+						'state' => $instagram_oauth_state,
+					];
+				}
+				if ( ! empty( $unconfigured_oauth_providers ) ) {
+					$wordpress_gateway_children[] = [
+						'id'                     => 'unconfigured_oauth_providers',
+						'label'                  => __( 'OAuth providers not configured', 'wp-creatorreactor' ),
+						'state'                  => 'gray',
+						'unconfigured_providers' => $unconfigured_oauth_providers,
+					];
+				}
 				$cloud_is_active = ! empty( $opts['creatorreactor_cloud_active'] );
 				$cloud_id_present = ! empty( $opts['creatorreactor_cloud_id'] );
 				$cloud_password_present = ! empty( $opts['creatorreactor_cloud_password'] );
@@ -10993,28 +11195,7 @@ class Admin_Settings {
 				$modules = [
 					[
 						'label'    => __( 'Wordpress Gateway', 'wp-creatorreactor' ),
-						'children' => [
-							[
-								'id'    => 'fanvue_oauth',
-								'label' => __( 'Sign in with Fanvue', 'wp-creatorreactor' ),
-								'state' => $fanvue_oauth_state,
-							],
-							[
-								'id'    => 'onlyfans_ofauth',
-								'label' => __( 'Sign in with OnlyFans', 'wp-creatorreactor' ),
-								'state' => $onlyfans_oauth_state,
-							],
-							[
-								'id'    => 'google_oauth',
-								'label' => __( 'Sign in with Google', 'wp-creatorreactor' ),
-								'state' => $google_oauth_state,
-							],
-							[
-								'id'    => 'instagram_oauth',
-								'label' => __( 'Login with Instagram', 'wp-creatorreactor' ),
-								'state' => $instagram_oauth_state,
-							],
-						],
+						'children' => $wordpress_gateway_children,
 					],
 					[
 						'label'    => __( 'CreatorReactor Cloud', 'wp-creatorreactor' ),
@@ -11123,7 +11304,45 @@ class Admin_Settings {
 														$child_state = in_array( $child_state, [ 'green', 'yellow', 'red', 'gray' ], true ) ? $child_state : 'gray';
 														?>
 														<?php
-														if ( in_array( $child_id, [ 'fanvue_oauth', 'onlyfans_ofauth', 'google_oauth', 'instagram_oauth' ], true ) ) :
+														if ( 'unconfigured_oauth_providers' === $child_id ) :
+															$unconfigured_providers = isset( $child['unconfigured_providers'] ) && is_array( $child['unconfigured_providers'] ) ? $child['unconfigured_providers'] : [];
+															?>
+															<li class="creatorreactor-module-child creatorreactor-module-child--unconfigured-oauth">
+																<span class="creatorreactor-module-status-dot is-gray" aria-hidden="true"></span>
+																<div class="creatorreactor-module-child-label">
+																	<details>
+																		<summary class="creatorreactor-unconfigured-oauth-summary">
+																			<?php
+																			printf(
+																				esc_html(
+																					/* translators: %d: number of unconfigured OAuth providers */
+																					__( 'OAuth providers not configured (%d)', 'wp-creatorreactor' )
+																				),
+																				(int) count( $unconfigured_providers )
+																			);
+																			?>
+																		</summary>
+																		<ul class="creatorreactor-unconfigured-oauth-list">
+																			<?php foreach ( $unconfigured_providers as $unconfigured_provider ) : ?>
+																				<?php
+																				$provider_label = isset( $unconfigured_provider['label'] ) ? (string) $unconfigured_provider['label'] : '';
+																				$provider_url   = isset( $unconfigured_provider['url'] ) ? (string) $unconfigured_provider['url'] : '';
+																				?>
+																				<li>
+																					<?php if ( $provider_url !== '' ) : ?>
+																						<a href="<?php echo esc_url( $provider_url ); ?>" class="button-link"><?php echo esc_html( $provider_label ); ?></a>
+																					<?php else : ?>
+																						<?php echo esc_html( $provider_label ); ?>
+																					<?php endif; ?>
+																				</li>
+																			<?php endforeach; ?>
+																		</ul>
+																	</details>
+																</div>
+															</li>
+														<?php elseif ( in_array( $child_id, [ 'fanvue_oauth', 'onlyfans_ofauth', 'google_oauth', 'instagram_oauth' ], true ) ) :
+															?>
+															<?php
 															$gw_mode = self::wordpress_gateway_child_action_mode( $child_state );
 															if ( 'fanvue_oauth' === $child_id ) {
 																$gw_configure_href = self::admin_oauth_settings_url( 'fanvue', [ 'subtab' => 'oauth' ] );

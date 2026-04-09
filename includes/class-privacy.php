@@ -415,18 +415,21 @@ class Privacy {
 
 		$table_sql = esc_sql( $table );
 		if ( $uid > 0 ) {
-			$sql = $wpdb->prepare(
-				"DELETE FROM `{$table_sql}` WHERE email = %s OR wp_user_id = %d",
-				$email,
-				$uid
+			$wpdb->query(
+				$wpdb->prepare(
+					"DELETE FROM `{$table_sql}` WHERE email = %s OR wp_user_id = %d",
+					$email,
+					$uid
+				)
 			);
 		} else {
-			$sql = $wpdb->prepare(
-				"DELETE FROM `{$table_sql}` WHERE email = %s",
-				$email
+			$wpdb->query(
+				$wpdb->prepare(
+					"DELETE FROM `{$table_sql}` WHERE email = %s",
+					$email
+				)
 			);
 		}
-		$wpdb->query( $sql );
 		return (int) $wpdb->rows_affected;
 	}
 

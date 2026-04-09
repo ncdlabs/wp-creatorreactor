@@ -3,7 +3,7 @@ Contributors: lougrossi
 Tags: oauth, membership, subscribers, elementor, login
 Requires at least: 5.9
 Tested up to: 6.9
-Stable tag: 2.1
+Stable tag: 2.1.2
 Requires PHP: 8.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -55,11 +55,18 @@ Development repository: https://github.com/ncdlabs/creatorreactor
 
 == Changelog ==
 
+= 2.1.2 =
+* Aligns with WordPress Plugin Check and PHPCS expectations (database prepare patterns, admin input sanitization, shortcode CSS string style).
+* Release workflow: opt into Node.js 24 for GitHub Actions and exclude `phpcs.xml.dist` from Plugin Check scans.
+
 = 2.1 =
 * Fixes Fanvue login enablement and role impersonation regressions.
 * Includes CreatorReactor Cloud Metrics ingest sync scheduling improvements.
 
 == Upgrade Notice ==
+
+= 2.1.2 =
+Maintenance release; safe to apply after quick staging checks on OAuth and admin settings saves.
 
 = 2.1 =
 Recommended update with regression fixes; review OAuth, role, and sync behavior in staging before production rollout.

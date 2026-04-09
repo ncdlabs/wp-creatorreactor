@@ -9,7 +9,7 @@ set -e
 #   --patch
 #
 # Version schema:
-#   {major}.{minor}.{patch}
+#   {major}.{minor} or {major}.{minor}.{patch} (patch defaults to 0 for bump math)
 #
 # --package-only: do not bump CREATORREACTOR_VERSION; build wp-creatorreactor-<current>.zip for CI/releases.
 
@@ -74,13 +74,20 @@ done
 # This repo deploys as wp-creatorreactor/ (see deploy.sh). Override if your install uses another name:
 #   PLUGIN_SLUG=creatorreactor ./build-zip.sh
 
-CURRENT_VERSION="$(sed -nE "s/^define\\( 'CREATORREACTOR_VERSION', '([0-9]+\\.[0-9]+\\.[0-9]+)'.*/\\1/p" creatorreactor.php)"
-if ! echo "$CURRENT_VERSION" | grep -Eq '^[0-9]+\.[0-9]+\.[0-9]+$'; then
+CURRENT_VERSION="$(sed -nE "s/^define\\( 'CREATORREACTOR_VERSION', '([^']+)'.*/\\1/p" creatorreactor.php)"
+if ! echo "$CURRENT_VERSION" | grep -Eq '^[0-9]+\.[0-9]+(\.[0-9]+)?$'; then
 	echo "Error: could not parse current version from creatorreactor.php (got: '$CURRENT_VERSION')" >&2
 	exit 1
 fi
 
-IFS='.' read -r VERSION_MAJOR VERSION_MINOR VERSION_PATCH <<< "$CURRENT_VERSION"
+if [[ "$CURRENT_VERSION" =~ ^([0-9]+)\.([0-9]+)(\.([0-9]+))?$ ]]; then
+	VERSION_MAJOR="${BASH_REMATCH[1]}"
+	VERSION_MINOR="${BASH_REMATCH[2]}"
+	VERSION_PATCH="${BASH_REMATCH[4]:-0}"
+else
+	echo "Error: invalid CREATORREACTOR_VERSION format: '$CURRENT_VERSION'" >&2
+	exit 1
+fi
 
 if [ "$PACKAGE_ONLY" -eq 1 ]; then
 	VERSION="$CURRENT_VERSION"
@@ -108,8 +115,8 @@ else
 	VERSION="${VERSION_MAJOR}.${VERSION_MINOR}.${VERSION_PATCH}"
 
 	# Update both the docblock version and the runtime constant to keep everything consistent.
-	perl -pi -e "s/\\* Version: \\d+\\.\\d+\\.\\d+/\\* Version: $VERSION/;" creatorreactor.php
-	perl -pi -e "s/define\\( 'CREATORREACTOR_VERSION', '\\d+\\.\\d+\\.\\d+' \\);/define( 'CREATORREACTOR_VERSION', '$VERSION' );/;" creatorreactor.php
+	perl -pi -e "s/\\* Version: [0-9]+\\.[0-9]+(\\.[0-9]+)?/\\* Version: $VERSION/;" creatorreactor.php
+	perl -pi -e "s/define\\( 'CREATORREACTOR_VERSION', '[0-9]+\\.[0-9]+(\\.[0-9]+)?' \\);/define( 'CREATORREACTOR_VERSION', '$VERSION' );/;" creatorreactor.php
 
 	echo "Bumped CreatorReactor version: $CURRENT_VERSION -> $VERSION"
 fi

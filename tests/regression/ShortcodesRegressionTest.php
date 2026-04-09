@@ -74,6 +74,9 @@ final class ShortcodesRegressionTest extends BaseTestCase
         Functions\when('sanitize_text_field')->alias(
             static fn ($value): string => trim((string) $value)
         );
+        Functions\when('wp_parse_url')->alias(
+            static fn ($url) => parse_url((string) $url)
+        );
         Functions\when('get_option')->alias(
             static function ($key, $default = false) {
                 if ($key === 'creatorreactor_settings') {
@@ -600,5 +603,93 @@ final class ShortcodesRegressionTest extends BaseTestCase
     {
         Functions\expect('do_shortcode')->never();
         self::assertSame('', Shortcodes::has_tier(['product' => 'fanvue'], 'product gate'));
+    }
+
+    public function testFanvueOauthReturnsEmptyWhenNotConfigured(): void
+    {
+        Functions\when('get_option')->alias(
+            static function ($key, $default = false) {
+                if ($key === 'creatorreactor_settings') {
+                    return [
+                        'broker_mode' => false,
+                        'creatorreactor_oauth_client_id' => '',
+                        'creatorreactor_oauth_client_secret' => '',
+                    ];
+                }
+                return $default;
+            }
+        );
+        Functions\when('is_user_logged_in')->justReturn(false);
+        Functions\when('is_singular')->justReturn(false);
+        Functions\when('home_url')->alias(static fn ($path = '/'): string => 'https://example.com' . $path);
+        Functions\when('rest_url')->alias(static fn ($path = ''): string => 'https://example.com/wp-json/' . ltrim((string) $path, '/'));
+        Functions\when('add_query_arg')->alias(static fn ($key, $value = null, $url = null): string => (string) (is_array($key) ? $value : $url));
+        Functions\when('wp_create_nonce')->justReturn('nonce-123');
+        Functions\when('wp_validate_redirect')->alias(static fn ($url, $fallback = ''): string => (string) $url ?: (string) $fallback);
+        Functions\when('wp_unslash')->alias(static fn ($value) => $value);
+        Functions\when('remove_query_arg')->alias(static fn ($key, $url) => (string) $url);
+        Functions\when('esc_url')->alias(static fn ($url): string => (string) $url);
+        Functions\when('esc_url_raw')->alias(static fn ($url): string => (string) $url);
+        self::assertSame('', Shortcodes::fanvue_oauth());
+    }
+
+    public function testGoogleOauthReturnsEmptyWhenNotConfigured(): void
+    {
+        Functions\when('get_option')->alias(
+            static function ($key, $default = false) {
+                if ($key === 'creatorreactor_settings') {
+                    return [
+                        'broker_mode' => false,
+                        'creatorreactor_google_client_id' => '',
+                        'creatorreactor_google_client_secret' => '',
+                    ];
+                }
+                return $default;
+            }
+        );
+        Functions\when('is_user_logged_in')->justReturn(false);
+        Functions\when('is_singular')->justReturn(false);
+        Functions\when('home_url')->alias(static fn ($path = '/'): string => 'https://example.com' . $path);
+        Functions\when('rest_url')->alias(static fn ($path = ''): string => 'https://example.com/wp-json/' . ltrim((string) $path, '/'));
+        Functions\when('add_query_arg')->alias(static fn ($key, $value = null, $url = null): string => (string) (is_array($key) ? $value : $url));
+        Functions\when('wp_create_nonce')->justReturn('nonce-123');
+        Functions\when('wp_validate_redirect')->alias(static fn ($url, $fallback = ''): string => (string) $url ?: (string) $fallback);
+        Functions\when('wp_unslash')->alias(static fn ($value) => $value);
+        Functions\when('remove_query_arg')->alias(static fn ($key, $url) => (string) $url);
+        Functions\when('esc_url')->alias(static fn ($url): string => (string) $url);
+        Functions\when('esc_url_raw')->alias(static fn ($url): string => (string) $url);
+        Functions\when('__')->alias(static fn ($text, $domain = null): string => (string) $text);
+        Functions\when('esc_attr')->alias(static fn ($value): string => (string) $value);
+        self::assertSame('', Shortcodes::google_oauth());
+    }
+
+    public function testSocialOauthReturnsEmptyWhenProviderNotConfigured(): void
+    {
+        Functions\when('get_option')->alias(
+            static function ($key, $default = false) {
+                if ($key === 'creatorreactor_settings') {
+                    return [
+                        'broker_mode' => false,
+                        'creatorreactor_social_oauth_tiktok_client_id' => '',
+                        'creatorreactor_social_oauth_tiktok_client_secret' => '',
+                    ];
+                }
+                return $default;
+            }
+        );
+        Functions\when('is_user_logged_in')->justReturn(false);
+        Functions\when('is_singular')->justReturn(false);
+        Functions\when('home_url')->alias(static fn ($path = '/'): string => 'https://example.com' . $path);
+        Functions\when('rest_url')->alias(static fn ($path = ''): string => 'https://example.com/wp-json/' . ltrim((string) $path, '/'));
+        Functions\when('add_query_arg')->alias(static fn ($key, $value = null, $url = null): string => (string) (is_array($key) ? $value : $url));
+        Functions\when('wp_create_nonce')->justReturn('nonce-123');
+        Functions\when('wp_validate_redirect')->alias(static fn ($url, $fallback = ''): string => (string) $url ?: (string) $fallback);
+        Functions\when('wp_unslash')->alias(static fn ($value) => $value);
+        Functions\when('remove_query_arg')->alias(static fn ($key, $url) => (string) $url);
+        Functions\when('esc_url')->alias(static fn ($url): string => (string) $url);
+        Functions\when('esc_url_raw')->alias(static fn ($url): string => (string) $url);
+        Functions\when('__')->alias(static fn ($text, $domain = null): string => (string) $text);
+        Functions\when('esc_attr')->alias(static fn ($value): string => (string) $value);
+        self::assertSame('', Shortcodes::social_oauth_login('tiktok'));
     }
 }

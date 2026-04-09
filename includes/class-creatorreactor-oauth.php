@@ -789,6 +789,68 @@ class CreatorReactor_OAuth {
 		];
 	}
 
+	/**
+	 * Admin-visible summary when refresh_token exchange fails. Omits secrets; truncates long bodies.
+	 *
+	 * @param int    $code_http           HTTP status, or 0 if the request never completed (transport error).
+	 * @param string $wp_transport_message Message from \WP_Error when $code_http is 0.
+	 * @param mixed  $data                Decoded JSON body from the token endpoint.
+	 * @param string $body_res            Raw response body (fallback snippet).
+	 * @return string
+	 */
+	private static function format_refresh_failure_admin_message( $code_http, $wp_transport_message, $data, $body_res ) {
+		$code_http            = (int) $code_http;
+		$wp_transport_message = is_string( $wp_transport_message ) ? trim( $wp_transport_message ) : '';
+		$body_res             = is_string( $body_res ) ? $body_res : '';
+
+		$detail = '';
+		if ( $code_http === 0 && $wp_transport_message !== '' ) {
+			$detail = $wp_transport_message;
+		} elseif ( is_array( $data ) ) {
+			$desc = isset( $data['error_description'] ) ? trim( (string) $data['error_description'] ) : '';
+			$err  = isset( $data['error'] ) ? trim( (string) $data['error'] ) : '';
+			if ( $desc !== '' ) {
+				$detail = $desc;
+			} elseif ( $err !== '' ) {
+				$detail = $err;
+			}
+		}
+		if ( $detail === '' && $body_res !== '' ) {
+			$detail = trim( wp_strip_all_tags( substr( $body_res, 0, 240 ) ) );
+		}
+		$detail = preg_replace( '/\s+/', ' ', $detail );
+		$detail = trim( (string) $detail );
+		if ( strlen( $detail ) > 320 ) {
+			$detail = substr( $detail, 0, 317 ) . '…';
+		}
+
+		if ( $code_http === 0 ) {
+			if ( $detail === '' ) {
+				return __( 'OAuth refresh failed: could not reach the token endpoint.', 'wp-creatorreactor' );
+			}
+			return sprintf(
+				/* translators: %s: Transport error from the WordPress HTTP API. */
+				__( 'OAuth refresh failed (network): %s', 'wp-creatorreactor' ),
+				$detail
+			);
+		}
+
+		if ( $detail === '' ) {
+			return sprintf(
+				/* translators: %d: HTTP status code. */
+				__( 'OAuth refresh failed (HTTP %d). Disconnect and connect again in the OAuth tab.', 'wp-creatorreactor' ),
+				$code_http
+			);
+		}
+
+		return sprintf(
+			/* translators: 1: HTTP status code, 2: Error text from the authorization server. */
+			__( 'OAuth refresh failed (HTTP %1$d): %2$s. If this persists, disconnect OAuth and connect again with the same Client ID and Secret used for that authorization.', 'wp-creatorreactor' ),
+			$code_http,
+			$detail
+		);
+	}
+
 	public static function refresh_tokens_if_needed() {
 		$tokens = self::get_tokens();
 		if ( empty( $tokens ) ) {
@@ -829,7 +891,7 @@ class CreatorReactor_OAuth {
 
 		if ( is_wp_error( $response ) ) {
 			Admin_Settings::log_connection( 'error', 'OAuth token refresh: transport error — ' . $response->get_error_message() );
-			Admin_Settings::set_last_error( __( 'OAuth refresh failed.', 'wp-creatorreactor' ) );
+			Admin_Settings::set_last_error( self::format_refresh_failure_admin_message( 0, $response->get_error_message(), null, '' ) );
 			return false;
 		}
 
@@ -859,11 +921,12 @@ class CreatorReactor_OAuth {
 				'error',
 				'OAuth token refresh: HTTP ' . $code_http . '. ' . preg_replace( '/\s+/', ' ', wp_strip_all_tags( $snippet ) )
 			);
-			Admin_Settings::set_last_error( __( 'OAuth refresh failed.', 'wp-creatorreactor' ) );
+			Admin_Settings::set_last_error( self::format_refresh_failure_admin_message( $code_http, '', is_array( $data ) ? $data : null, $body_res ) );
 			return false;
 		}
 		if ( ! isset( $data['access_token'] ) || ! is_string( $data['access_token'] ) ) {
 			Admin_Settings::log_connection( 'error', 'OAuth token refresh: success response missing access_token.' );
+			Admin_Settings::set_last_error( __( 'OAuth refresh succeeded but the response had no access_token. Disconnect and connect again in the OAuth tab.', 'wp-creatorreactor' ) );
 			return false;
 		}
 
@@ -1124,6 +1187,46 @@ class CreatorReactor_OAuth {
 		}
 		$decrypted = self::decrypt_tokens( $stored );
 		return is_array( $decrypted ) ? $decrypted : [];
+	}
+
+	/**
+	 * Explains why subscriber/follower sync has no usable access token when {@see get_access_token()} is null.
+	 * "Configured" in the UI often means Client ID/Secret only; sync requires a completed Connect (stored tokens).
+	 *
+	 * @return string
+	 */
+	public static function message_when_sync_has_no_access_token() {
+		$tokens = self::get_tokens();
+		if ( empty( $tokens ) ) {
+			return __(
+				'No OAuth token on file. Open the OAuth tab and click Connect to finish authorization—saving Client ID and Secret alone does not store a token. If you cloned or migrated the site, reconnect OAuth (token storage depends on this site’s keys).',
+				'wp-creatorreactor'
+			);
+		}
+		$expires_at     = isset( $tokens['expires_at'] ) ? (int) $tokens['expires_at'] : 0;
+		$needs_refresh  = $expires_at <= 0 || time() >= $expires_at - 60;
+		$refresh        = isset( $tokens['refresh_token'] ) ? (string) $tokens['refresh_token'] : '';
+		if ( $needs_refresh && $refresh === '' ) {
+			return __(
+				'OAuth access token has expired and no refresh token is stored. In the OAuth tab, disconnect and connect again, then run Sync.',
+				'wp-creatorreactor'
+			);
+		}
+		if ( $needs_refresh ) {
+			$opts          = Admin_Settings::get_options();
+			$client_id     = isset( $opts['creatorreactor_oauth_client_id'] ) ? trim( (string) $opts['creatorreactor_oauth_client_id'] ) : '';
+			$client_secret = isset( $opts['creatorreactor_oauth_client_secret'] ) ? trim( (string) $opts['creatorreactor_oauth_client_secret'] ) : '';
+			if ( $client_id === '' || $client_secret === '' ) {
+				return __(
+					'OAuth access token has expired. Save both OAuth Client ID and Client Secret (required for refresh), then run Sync—or disconnect and connect again.',
+					'wp-creatorreactor'
+				);
+			}
+		}
+		return __(
+			'OAuth token is unavailable. Check the Connection log for a refresh error; if none, disconnect and connect in the OAuth tab, then run Sync.',
+			'wp-creatorreactor'
+		);
 	}
 
 	public static function get_access_token() {

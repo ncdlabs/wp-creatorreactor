@@ -341,6 +341,9 @@ class Shortcodes {
 				. '<a href="' . esc_url( wp_logout_url( $home ) ) . '">' . esc_html__( 'Log out', 'wp-creatorreactor' ) . '</a>'
 				. '</p>';
 		}
+		if ( ! Admin_Settings::is_fanvue_oauth_settings_configured() ) {
+			return '';
+		}
 
 		$redirect_to = '';
 		if ( isset( $_REQUEST['redirect_to'] ) && is_string( $_REQUEST['redirect_to'] ) ) {
@@ -405,18 +408,13 @@ class Shortcodes {
 
 		self::schedule_fanvue_oauth_footer_style();
 
-		$label      = __( 'Log in with Fanvue', 'wp-creatorreactor' );
-		$configured = Admin_Settings::is_fanvue_oauth_settings_configured();
+		$label = __( 'Log in with Fanvue', 'wp-creatorreactor' );
 
 		if ( $variant === 'minimal' ) {
 			$link_class = 'creatorreactor-fanvue-oauth-link creatorreactor-fanvue-oauth-link--minimal';
 			$wrap_class = 'creatorreactor-fanvue-oauth-wrap creatorreactor-fanvue-oauth-wrap--minimal';
 			$link_attrs = 'class="' . esc_attr( $link_class ) . '" aria-label="' . esc_attr( $label ) . '"';
-			if ( ! $configured ) {
-				$link_attrs .= ' aria-disabled="true" role="button" tabindex="-1"';
-			} else {
-				$link_attrs .= ' href="' . esc_url( $href ) . '"';
-			}
+			$link_attrs .= ' href="' . esc_url( $href ) . '"';
 			$logo_url = CREATORREACTOR_PLUGIN_URL . 'img/fanvue-logo.webp';
 			return '<p class="' . esc_attr( $wrap_class ) . '">'
 				. '<a ' . $link_attrs . '>'
@@ -426,11 +424,7 @@ class Shortcodes {
 
 		$img_url    = CREATORREACTOR_PLUGIN_URL . 'img/login-fanvue.webp';
 		$link_attrs = 'class="creatorreactor-fanvue-oauth-link" aria-label="' . esc_attr( $label ) . '"';
-		if ( ! $configured ) {
-			$link_attrs .= ' aria-disabled="true" role="button" tabindex="-1"';
-		} else {
-			$link_attrs .= ' href="' . esc_url( $href ) . '"';
-		}
+		$link_attrs .= ' href="' . esc_url( $href ) . '"';
 
 		return '<p class="creatorreactor-fanvue-oauth-wrap">'
 			. '<a ' . $link_attrs . '>'
@@ -551,6 +545,9 @@ class Shortcodes {
 				. '<a href="' . esc_url( wp_logout_url( $home ) ) . '">' . esc_html__( 'Log out', 'wp-creatorreactor' ) . '</a>'
 				. '</p>';
 		}
+		if ( ! Admin_Settings::is_google_login_configured() ) {
+			return '';
+		}
 
 		$redirect_to = '';
 		if ( isset( $_REQUEST['redirect_to'] ) && is_string( $_REQUEST['redirect_to'] ) ) {
@@ -618,14 +615,9 @@ class Shortcodes {
 		$style = $variant === 'minimal'
 			? 'logo_only'
 			: Admin_Settings::get_google_login_button_style();
-		$configured     = Admin_Settings::is_google_login_configured();
 		$link_class     = 'creatorreactor-google-oauth-link creatorreactor-google-oauth-style--' . sanitize_html_class( $style );
 		$link_attrs     = 'class="' . esc_attr( $link_class ) . '" aria-label="' . esc_attr( $label ) . '"';
-		if ( ! $configured ) {
-			$link_attrs .= ' aria-disabled="true" role="button" tabindex="-1"';
-		} else {
-			$link_attrs .= ' href="' . esc_url( $href ) . '"';
-		}
+		$link_attrs .= ' href="' . esc_url( $href ) . '"';
 
 		$inner = self::google_oauth_button_inner_html( $style );
 
@@ -695,103 +687,106 @@ class Shortcodes {
 	public static function get_google_oauth_button_css() {
 		$box  = (int) self::OAUTH_COMPACT_BOX_PX;
 		$cico = (int) self::OAUTH_COMPACT_ICON_PX;
-		return <<<CSS
-.creatorreactor-google-oauth-wrap {
-	margin: 12px 0 0;
-	text-align: center;
-}
-.creatorreactor-google-oauth-link {
-	box-sizing: border-box;
-	cursor: pointer;
-	pointer-events: auto;
-	line-height: 1.35;
-	text-decoration: none;
-	font-family: "Roboto", system-ui, -apple-system, "Segoe UI", sans-serif;
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	vertical-align: middle;
-}
-.creatorreactor-google-oauth-link[aria-disabled="true"] {
-	cursor: not-allowed;
-	pointer-events: none;
-	opacity: 0.55;
-	filter: grayscale(100%);
-}
-.creatorreactor-google-oauth-svg {
-	display: block;
-	flex-shrink: 0;
-}
-.creatorreactor-google-oauth-icon .creatorreactor-google-oauth-svg {
-	width: 20px;
-	height: 20px;
-}
-.creatorreactor-google-oauth-link.creatorreactor-google-oauth-style--standard_light {
-	color: #1f1f1f;
-	background: #fff;
-	border: 1px solid #747775;
-	border-radius: 4px;
-	padding: 10px 16px;
-	min-height: 40px;
-	box-sizing: border-box;
-	font-weight: 500;
-	font-size: 14px;
-	gap: 0;
-}
-.creatorreactor-google-oauth-style--standard_light .creatorreactor-google-oauth-button-inner {
-	display: inline-flex;
-	align-items: center;
-	gap: 12px;
-}
-.creatorreactor-google-oauth-link.creatorreactor-google-oauth-style--standard_dark {
-	color: #e3e3e3;
-	background: #131314;
-	border: 1px solid #8e918f;
-	border-radius: 4px;
-	padding: 10px 16px;
-	min-height: 40px;
-	box-sizing: border-box;
-	font-weight: 500;
-	font-size: 14px;
-	gap: 0;
-}
-.creatorreactor-google-oauth-style--standard_dark .creatorreactor-google-oauth-button-inner {
-	display: inline-flex;
-	align-items: center;
-	gap: 12px;
-}
-.creatorreactor-google-oauth-link.creatorreactor-google-oauth-style--logo_only {
-	display: inline-flex;
-	align-items: center;
-	justify-content: center;
-	width: {$box}px;
-	height: {$box}px;
-	min-width: {$box}px;
-	min-height: {$box}px;
-	padding: 0;
-	border: 1px solid #dadce0;
-	border-radius: 4px;
-	background: #fff;
-	box-sizing: border-box;
-}
-.creatorreactor-google-oauth-style--logo_only .creatorreactor-google-oauth-button-inner--logo-only {
-	display: flex;
-	align-items: center;
-	justify-content: center;
-	line-height: 0;
-}
-.creatorreactor-google-oauth-style--logo_only .creatorreactor-google-oauth-svg {
-	width: {$cico}px;
-	height: {$cico}px;
-}
-.creatorreactor-wp-login-social .creatorreactor-google-oauth-wrap {
-	margin: 12px 0 0;
-}
-.creatorreactor-google-oauth-wrap--minimal {
-	margin: 0;
-	text-align: inherit;
-}
-CSS;
+		return implode(
+			"\n",
+			[
+				'.creatorreactor-google-oauth-wrap {',
+				"\tmargin: 12px 0 0;",
+				"\ttext-align: center;",
+				'}',
+				'.creatorreactor-google-oauth-link {',
+				"\tbox-sizing: border-box;",
+				"\tcursor: pointer;",
+				"\tpointer-events: auto;",
+				"\tline-height: 1.35;",
+				"\ttext-decoration: none;",
+				"\tfont-family: \"Roboto\", system-ui, -apple-system, \"Segoe UI\", sans-serif;",
+				"\tdisplay: inline-flex;",
+				"\talign-items: center;",
+				"\tjustify-content: center;",
+				"\tvertical-align: middle;",
+				'}',
+				'.creatorreactor-google-oauth-link[aria-disabled="true"] {',
+				"\tcursor: not-allowed;",
+				"\tpointer-events: none;",
+				"\topacity: 0.55;",
+				"\tfilter: grayscale(100%);",
+				'}',
+				'.creatorreactor-google-oauth-svg {',
+				"\tdisplay: block;",
+				"\tflex-shrink: 0;",
+				'}',
+				'.creatorreactor-google-oauth-icon .creatorreactor-google-oauth-svg {',
+				"\twidth: 20px;",
+				"\theight: 20px;",
+				'}',
+				'.creatorreactor-google-oauth-link.creatorreactor-google-oauth-style--standard_light {',
+				"\tcolor: #1f1f1f;",
+				"\tbackground: #fff;",
+				"\tborder: 1px solid #747775;",
+				"\tborder-radius: 4px;",
+				"\tpadding: 10px 16px;",
+				"\tmin-height: 40px;",
+				"\tbox-sizing: border-box;",
+				"\tfont-weight: 500;",
+				"\tfont-size: 14px;",
+				"\tgap: 0;",
+				'}',
+				'.creatorreactor-google-oauth-style--standard_light .creatorreactor-google-oauth-button-inner {',
+				"\tdisplay: inline-flex;",
+				"\talign-items: center;",
+				"\tgap: 12px;",
+				'}',
+				'.creatorreactor-google-oauth-link.creatorreactor-google-oauth-style--standard_dark {',
+				"\tcolor: #e3e3e3;",
+				"\tbackground: #131314;",
+				"\tborder: 1px solid #8e918f;",
+				"\tborder-radius: 4px;",
+				"\tpadding: 10px 16px;",
+				"\tmin-height: 40px;",
+				"\tbox-sizing: border-box;",
+				"\tfont-weight: 500;",
+				"\tfont-size: 14px;",
+				"\tgap: 0;",
+				'}',
+				'.creatorreactor-google-oauth-style--standard_dark .creatorreactor-google-oauth-button-inner {',
+				"\tdisplay: inline-flex;",
+				"\talign-items: center;",
+				"\tgap: 12px;",
+				'}',
+				'.creatorreactor-google-oauth-link.creatorreactor-google-oauth-style--logo_only {',
+				"\tdisplay: inline-flex;",
+				"\talign-items: center;",
+				"\tjustify-content: center;",
+				"\twidth: {$box}px;",
+				"\theight: {$box}px;",
+				"\tmin-width: {$box}px;",
+				"\tmin-height: {$box}px;",
+				"\tpadding: 0;",
+				"\tborder: 1px solid #dadce0;",
+				"\tborder-radius: 4px;",
+				"\tbackground: #fff;",
+				"\tbox-sizing: border-box;",
+				'}',
+				'.creatorreactor-google-oauth-style--logo_only .creatorreactor-google-oauth-button-inner--logo-only {',
+				"\tdisplay: flex;",
+				"\talign-items: center;",
+				"\tjustify-content: center;",
+				"\tline-height: 0;",
+				'}',
+				'.creatorreactor-google-oauth-style--logo_only .creatorreactor-google-oauth-svg {',
+				"\twidth: {$cico}px;",
+				"\theight: {$cico}px;",
+				'}',
+				'.creatorreactor-wp-login-social .creatorreactor-google-oauth-wrap {',
+				"\tmargin: 12px 0 0;",
+				'}',
+				'.creatorreactor-google-oauth-wrap--minimal {',
+				"\tmargin: 0;",
+				"\ttext-align: inherit;",
+				'}',
+			]
+		);
 	}
 
 	/**
@@ -943,6 +938,9 @@ CSS;
 				. '<a href="' . esc_url( wp_logout_url( $home ) ) . '">' . esc_html__( 'Log out', 'wp-creatorreactor' ) . '</a>'
 				. '</p>';
 		}
+		if ( ! Admin_Settings::is_social_oauth_provider_configured( $slug ) ) {
+			return '';
+		}
 
 		$redirect_to = '';
 		if ( isset( $_REQUEST['redirect_to'] ) && is_string( $_REQUEST['redirect_to'] ) ) {
@@ -1006,7 +1004,6 @@ CSS;
 
 		self::schedule_social_oauth_footer_style();
 
-		$configured = Admin_Settings::is_social_oauth_provider_configured( $slug );
 		$minimal    = ( $variant === 'minimal' );
 		$btn_label  = sprintf(
 			/* translators: %s: provider name */
@@ -1020,11 +1017,7 @@ CSS;
 			$link_class .= ' creatorreactor-social-oauth-link--standard';
 		}
 		$link_attrs = 'class="' . esc_attr( $link_class ) . '" aria-label="' . esc_attr( $btn_label ) . '"';
-		if ( ! $configured ) {
-			$link_attrs .= ' aria-disabled="true" role="button" tabindex="-1"';
-		} else {
-			$link_attrs .= ' href="' . esc_url( $href ) . '"';
-		}
+		$link_attrs .= ' href="' . esc_url( $href ) . '"';
 		$inner = self::social_oauth_button_inner_html( $slug );
 
 		$wrap_class = 'creatorreactor-social-oauth-wrap creatorreactor-social-oauth-wrap--' . sanitize_html_class( $slug );

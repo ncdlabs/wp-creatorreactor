@@ -60,42 +60,6 @@ final class LoginPageCoverageRegressionTest extends BaseTestCase
         self::assertSame('', $_GET['redirect_to']);
     }
 
-    public function testEnqueueLoginBrandingAssetsRegistersInlineLogoCss(): void
-    {
-        if (! defined('CREATORREACTOR_VERSION')) {
-            define('CREATORREACTOR_VERSION', 't');
-        }
-        if (! defined('CREATORREACTOR_PLUGIN_URL')) {
-            define('CREATORREACTOR_PLUGIN_URL', 'https://example.com/p/');
-        }
-        Functions\when('wp_enqueue_style')->justReturn();
-        Functions\when('esc_url')->alias(static fn ($u): string => (string) $u);
-        Functions\when('wp_add_inline_style')->justReturn();
-
-        Login_Page::enqueue_login_branding_assets();
-        self::assertTrue(true);
-    }
-
-    public function testFilterLoginHeaderUrlReturnsHomeUrl(): void
-    {
-        Functions\when('home_url')->alias(static fn ($p = '/'): string => 'https://home.test' . $p);
-        self::assertSame('https://home.test/', Login_Page::filter_login_header_url('x'));
-    }
-
-    public function testFilterLoginHeaderTextReturnsTranslatedBrand(): void
-    {
-        Functions\when('__')->alias(static fn ($t, $d = null): string => (string) $t);
-        self::assertSame('CreatorReactor', Login_Page::filter_login_header_text('x'));
-    }
-
-    public function testFilterLoginBodyClassAppendsCreatorReactorMarker(): void
-    {
-        self::assertSame(
-            ['a', 'creatorreactor-login'],
-            Login_Page::filter_login_body_class(['a'], 'login')
-        );
-    }
-
     public function testForceHomeLoginRedirectSendsWpUsersToHome(): void
     {
         Functions\when('home_url')->alias(static fn ($p = '/'): string => 'https://pub.test' . $p);

@@ -314,7 +314,10 @@ class CreatorReactor_Client {
 			$token = $this->get_access_token();
 			if ( ! $token ) {
 				if ( ! $quiet ) {
-					Admin_Settings::set_last_error( __( 'No OAuth token. Connect to creatorreactor in the OAuth tab, then run Sync again.', 'wp-creatorreactor' ) );
+					$existing = trim( (string) get_option( Admin_Settings::OPTION_LAST_ERROR, '' ) );
+					if ( $existing === '' ) {
+						Admin_Settings::set_last_error( CreatorReactor_OAuth::message_when_sync_has_no_access_token() );
+					}
 				}
 				return null;
 			}
@@ -382,7 +385,10 @@ class CreatorReactor_Client {
 			$token = $this->get_access_token();
 			if ( ! $token ) {
 				if ( ! $quiet ) {
-					Admin_Settings::set_last_error( __( 'No OAuth token. Connect to creatorreactor in the OAuth tab, then run Sync again.', 'wp-creatorreactor' ) );
+					$existing = trim( (string) get_option( Admin_Settings::OPTION_LAST_ERROR, '' ) );
+					if ( $existing === '' ) {
+						Admin_Settings::set_last_error( CreatorReactor_OAuth::message_when_sync_has_no_access_token() );
+					}
 				}
 				return null;
 			}

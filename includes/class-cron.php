@@ -149,6 +149,8 @@ class Cron {
 		$sync_start = microtime( true );
 		$ok           = false;
 		try {
+			// Each sync run should report only errors from this attempt (avoid masking token/refresh hints).
+			Admin_Settings::set_last_error( '' );
 			$ok = self::sync_entitlements_now();
 			if ( $ok ) {
 				Admin_Settings::clear_connection_errors();
