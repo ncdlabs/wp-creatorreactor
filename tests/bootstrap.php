@@ -23,6 +23,8 @@ if (! defined('CREATORREACTOR_PLUGIN_URL')) {
 
 require_once __DIR__ . '/../vendor/autoload.php';
 
+require_once __DIR__ . '/Traits/ShortcodesRegressionBrainMonkeyTrait.php';
+
 require_once __DIR__ . '/wp-core-test-stubs.php';
 
 // Provide a minimal \WP_User stub for unit tests.
@@ -52,6 +54,8 @@ require_once __DIR__ . '/../includes/class-creatorreactor-banner.php';
 require_once __DIR__ . '/../includes/class-creatorreactor.php';
 require_once __DIR__ . '/../includes/class-creatorreactor-onboarding.php';
 require_once __DIR__ . '/../includes/class-role-impersonation.php';
+require_once __DIR__ . '/../includes/class-gate-registry.php';
+require_once __DIR__ . '/../includes/class-gate-marker.php';
 require_once __DIR__ . '/../includes/class-creatorreactor-shortcodes.php';
 require_once __DIR__ . '/../includes/class-creatorreactor-client.php';
 require_once __DIR__ . '/../includes/class-creatorreactor-fan-oauth.php';

@@ -37,6 +37,8 @@ class Plugin {
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-creatorreactor-onboarding.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-creatorreactor-shortcodes.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-creatorreactor-wp-login.php';
+			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-gate-registry.php';
+			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-gate-marker.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-creatorreactor-elementor.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-creatorreactor-blocks.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-editor-context.php';

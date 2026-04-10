@@ -51,6 +51,19 @@ $disable_url = wp_nonce_url(
 						</li>
 						<?php if ( 'mastodon' === $slug ) : ?>
 							<li><?php esc_html_e( 'Enter your instance base URL below and register the app with the redirect URI above.', 'wp-creatorreactor' ); ?></li>
+						<?php elseif ( 'patreon' === $slug ) : ?>
+							<li>
+								<?php
+								printf(
+									wp_kses_post(
+										/* translators: 1: opening link to Patreon client registration, 2: closing link */
+										__( 'Register an OAuth client under %1$sClients & API Keys%2$s (creator account). Request API v2 scopes: identity and identity[email] so WordPress can receive profile id and email.', 'wp-creatorreactor' )
+									),
+									'<a href="' . esc_url( 'https://www.patreon.com/portal/registration/register-clients' ) . '" target="_blank" rel="noopener noreferrer">',
+									'</a>'
+								);
+								?>
+							</li>
 						<?php endif; ?>
 					</ol>
 				</div>

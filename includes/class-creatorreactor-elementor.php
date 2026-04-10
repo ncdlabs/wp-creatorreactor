@@ -40,6 +40,7 @@ final class Elementor_Integration {
 			return;
 		}
 
+		require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-gate-registry.php';
 		require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-creatorreactor-elementor-widgets.php';
 
 		$elements = \Elementor\Plugin::instance()->elements_manager;
@@ -55,6 +56,66 @@ final class Elementor_Integration {
 
 		add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_frontend_gates_inheritance_assets' ], 20 );
 		add_action( 'admin_enqueue_scripts', [ __CLASS__, 'enqueue_elementor_gates_editor_constraint_assets' ], 20 );
+		// After {@see \Elementor\Element_Base::add_render_attributes()} — not `elementor/frontend/before_render`,
+		// which runs earlier and would lose attrs when Elementor re-inits `_wrapper`.
+		add_action( 'elementor/element/after_add_attributes', [ __CLASS__, 'inject_creatorreactor_gate_wrapper_attributes' ], 10, 1 );
+	}
+
+	/**
+	 * Gate metadata on the widget wrapper — Elementor drops inner HTML when a widget renders nothing,
+	 * which removed hidden spans and broke client/server gate stripping for sibling widgets in the same column.
+	 *
+	 * @param \Elementor\Element_Base $element Elementor element instance.
+	 */
+	public static function inject_creatorreactor_gate_wrapper_attributes( $element ) {
+		if ( ! $element instanceof \Elementor\Widget_Base ) {
+			return;
+		}
+		$name = $element->get_name();
+		if ( strpos( $name, 'creatorreactor_' ) !== 0 || $name === 'creatorreactor_fanvue_oauth' ) {
+			return;
+		}
+
+		$s               = $element->get_settings_for_display();
+		$container_logic = isset( $s['container_logic'] ) ? sanitize_key( (string) $s['container_logic'] ) : 'and';
+		if ( $container_logic !== 'and' && $container_logic !== 'or' ) {
+			$container_logic = 'and';
+		}
+		$roles = Role_Impersonation::get_effective_roles_csv_for_logged_in_user();
+
+		if ( $name === 'creatorreactor_has_tier' ) {
+			$tier    = isset( $s['tier'] ) ? trim( sanitize_text_field( (string) $s['tier'] ) ) : '';
+			$product = isset( $s['product'] ) ? trim( sanitize_text_field( (string) $s['product'] ) ) : '';
+			$probe   = Shortcodes::has_tier(
+				[
+					'tier'    => $tier,
+					'product' => $product,
+				],
+				'__creatorreactor_gate_probe__'
+			);
+			$matched   = trim( (string) $probe ) !== '';
+			$match_str = $matched ? '1' : '0';
+			$gate      = 'has_tier';
+		} else {
+			$tag = Gate_Registry::elementor_widget_shortcode_gate_slug( $name );
+			if ( $tag === null ) {
+				return;
+			}
+			$probe     = Shortcodes::apply_enclosing_gate( $tag, '__creatorreactor_gate_probe__' );
+			$matched   = trim( (string) $probe ) !== '';
+			$match_str = $matched ? '1' : '0';
+			$gate      = $tag;
+		}
+
+		$element->add_render_attribute(
+			'_wrapper',
+			[
+				'data-creatorreactor-gate'       => $gate,
+				'data-creatorreactor-gate-match' => $match_str,
+				'data-creatorreactor-gate-logic' => $container_logic,
+				'data-creatorreactor-user-roles' => $roles,
+			]
+		);
 	}
 
 	/**
@@ -76,12 +137,32 @@ final class Elementor_Integration {
 			$version
 		);
 
+		if ( ! class_exists( __NAMESPACE__ . '\\Gate_Registry' ) ) {
+			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-gate-registry.php';
+		}
+
 		wp_enqueue_script(
-			'creatorreactor-elementor-gates-inheritance',
-			CREATORREACTOR_PLUGIN_URL . 'assets/js/creatorreactor-elementor-gates-inheritance.js',
+			'creatorreactor-gates-inheritance-core',
+			CREATORREACTOR_PLUGIN_URL . 'assets/js/creatorreactor-gates-inheritance-core.js',
 			[],
 			$version,
 			true
+		);
+
+		wp_enqueue_script(
+			'creatorreactor-elementor-gates-inheritance',
+			CREATORREACTOR_PLUGIN_URL . 'assets/js/creatorreactor-elementor-gates-inheritance.js',
+			[ 'creatorreactor-gates-inheritance-core' ],
+			$version,
+			true
+		);
+
+		wp_localize_script(
+			'creatorreactor-elementor-gates-inheritance',
+			'CreatorReactorElementorGatesInheritance',
+			[
+				'widgetNameToGate' => Gate_Registry::elementor_widget_name_to_gate_slug_for_js(),
+			]
 		);
 
 		$viewer_state_bootstrap = Viewer_State::bootstrap_for_inline_script();

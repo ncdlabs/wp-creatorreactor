@@ -33,6 +33,7 @@ class Social_OAuth_Registry {
 			'reddit',
 			'twitch',
 			'discord',
+			'patreon',
 			'mastodon',
 		];
 	}
@@ -222,6 +223,16 @@ class Social_OAuth_Registry {
 				'client_id_param' => 'client_id',
 				'token_auth'    => 'post',
 				'profile_strategy' => 'discord',
+			],
+			'patreon'   => [
+				'label'           => __( 'Patreon', 'wp-creatorreactor' ),
+				'auth_url'        => 'https://www.patreon.com/oauth2/authorize',
+				'token_url'       => 'https://www.patreon.com/api/oauth2/token',
+				'scopes'          => 'identity identity[email]',
+				'client_id_param' => 'client_id',
+				'token_auth'      => 'post',
+				'pkce'            => false,
+				'profile_strategy' => 'patreon',
 			],
 			'mastodon'  => [
 				'label'         => __( 'Mastodon', 'wp-creatorreactor' ),

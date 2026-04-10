@@ -40,9 +40,17 @@ class Blocks {
 		);
 
 		wp_enqueue_script(
+			'creatorreactor-gates-inheritance-core',
+			CREATORREACTOR_PLUGIN_URL . 'assets/js/creatorreactor-gates-inheritance-core.js',
+			[],
+			$version,
+			true
+		);
+
+		wp_enqueue_script(
 			'creatorreactor-gutenberg-gates-inheritance',
 			CREATORREACTOR_PLUGIN_URL . 'assets/js/creatorreactor-gutenberg-gates-inheritance.js',
-			[],
+			[ 'creatorreactor-gates-inheritance-core' ],
 			$version,
 			true
 		);
@@ -502,16 +510,9 @@ class Blocks {
 	 * @return string
 	 */
 	private static function render_gate_marker( string $gate, bool $matched, string $logic ): string {
-		$match_str = $matched ? '1' : '0';
-		$logic     = $logic === 'or' ? 'or' : 'and';
-
+		$logic = $logic === 'or' ? 'or' : 'and';
 		$roles = Role_Impersonation::get_effective_roles_csv_for_logged_in_user();
 
-		return '<span class="creatorreactor-gutenberg-gate-marker"'
-			. ' data-creatorreactor-gate="' . esc_attr( $gate ) . '"'
-			. ' data-creatorreactor-gate-match="' . esc_attr( $match_str ) . '"'
-			. ' data-creatorreactor-gate-logic="' . esc_attr( $logic ) . '"'
-			. ' data-creatorreactor-user-roles="' . esc_attr( $roles ) . '"'
-			. ' style="display:none" aria-hidden="true"></span>';
+		return Gate_Marker::render_gutenberg_span( $gate, $matched, $logic, $roles );
 	}
 }

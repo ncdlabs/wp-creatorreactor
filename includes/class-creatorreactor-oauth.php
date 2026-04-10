@@ -1240,4 +1240,87 @@ class CreatorReactor_OAuth {
 	public static function is_connected() {
 		return self::get_access_token() !== null;
 	}
+
+	/**
+	 * Prevent CDNs / full-page cache from caching OAuth redirects.
+	 */
+	public static function send_oauth_no_store_headers() {
+		if ( headers_sent() ) {
+			return;
+		}
+		nocache_headers();
+		header( 'Cache-Control: no-store, no-cache, must-revalidate, max-age=0, private' );
+		header( 'Pragma: no-cache' );
+	}
+
+	/**
+	 * Whether the current HTTP request appears to hit a REST route containing any substring.
+	 *
+	 * @param array<int, string> $needles Route fragments (e.g. google-oauth-callback).
+	 */
+	public static function wp_request_contains_rest_route_needles( array $needles ) {
+		if ( $needles === [] ) {
+			return false;
+		}
+		if ( function_exists( 'rest_get_server' ) ) {
+			$server = rest_get_server();
+			if ( $server && method_exists( $server, 'get_request' ) ) {
+				$request = $server->get_request();
+				if ( $request instanceof \WP_REST_Request ) {
+					$route = $request->get_route();
+					if ( is_string( $route ) ) {
+						foreach ( $needles as $needle ) {
+							if ( stripos( $route, $needle ) !== false ) {
+								return true;
+							}
+						}
+					}
+				}
+			}
+		}
+		$server_keys = [ 'REQUEST_URI', 'REDIRECT_URL', 'HTTP_X_ORIGINAL_URL', 'PATH_INFO' ];
+		foreach ( $server_keys as $key ) {
+			if ( empty( $_SERVER[ $key ] ) || ! is_string( $_SERVER[ $key ] ) ) {
+				continue;
+			}
+			$chunk = wp_unslash( $_SERVER[ $key ] );
+			foreach ( $needles as $needle ) {
+				if ( stripos( $chunk, $needle ) !== false ) {
+					return true;
+				}
+			}
+		}
+		if ( ! empty( $_SERVER['QUERY_STRING'] ) && is_string( $_SERVER['QUERY_STRING'] ) ) {
+			$qs = wp_unslash( $_SERVER['QUERY_STRING'] );
+			foreach ( $needles as $needle ) {
+				if ( stripos( $qs, $needle ) !== false ) {
+					return true;
+				}
+			}
+		}
+		if ( isset( $_GET['rest_route'] ) && is_string( $_GET['rest_route'] ) ) {
+			$rr = wp_unslash( $_GET['rest_route'] );
+			foreach ( $needles as $needle ) {
+				if ( stripos( $rr, $needle ) !== false ) {
+					return true;
+				}
+			}
+		}
+		return false;
+	}
+
+	/**
+	 * Allow public OAuth REST callbacks without a logged-in cookie nonce.
+	 *
+	 * @param mixed              $result Previous filter value.
+	 * @param array<int, string> $needles {@see self::wp_request_contains_rest_route_needles()}.
+	 * @return mixed
+	 */
+	public static function filter_rest_allow_without_invalid_nonce( $result, array $needles ) {
+		$is_nonce_error = is_wp_error( $result ) && $result->get_error_code() === 'rest_cookie_invalid_nonce';
+		if ( $is_nonce_error && self::wp_request_contains_rest_route_needles( $needles ) ) {
+			return true;
+		}
+		return $result;
+	}
 }

@@ -70,6 +70,8 @@ class Admin_Settings {
 		'creatorreactor_twitch_oauth_client_secret',
 		'creatorreactor_discord_oauth_client_id',
 		'creatorreactor_discord_oauth_client_secret',
+		'creatorreactor_patreon_oauth_client_id',
+		'creatorreactor_patreon_oauth_client_secret',
 		'creatorreactor_mastodon_oauth_client_id',
 		'creatorreactor_mastodon_oauth_client_secret',
 		'creatorreactor_bluesky_oauth_client_id',
@@ -4866,6 +4868,75 @@ class Admin_Settings {
 	}
 
 	/**
+	 * Fixed bottom “floating card” with Cancel + submit for settings forms (not attached to a form card).
+	 *
+	 * @param string      $cancel_url   URL for Cancel (typically reload same tab without POST).
+	 * @param string|null $submit_label Primary button label; default is “Save Settings”.
+	 */
+	private static function render_settings_action_dock( $cancel_url, $submit_label = null ) {
+		if ( null === $submit_label ) {
+			$submit_label = __( 'Save Settings', 'wp-creatorreactor' );
+		}
+		?>
+		<div class="creatorreactor-settings-action-dock creatorreactor-settings-actions" role="group" aria-label="<?php esc_attr_e( 'Save or discard changes', 'wp-creatorreactor' ); ?>">
+			<div class="creatorreactor-settings-action-dock-inner">
+				<a class="button" href="<?php echo esc_url( $cancel_url ); ?>"><?php esc_html_e( 'Cancel', 'wp-creatorreactor' ); ?></a>
+				<?php submit_button( $submit_label ); ?>
+			</div>
+		</div>
+		<?php
+	}
+
+	/**
+	 * @param array<string, string> $args Keys: modal_id, title_id, title_text, class_prefix; optional backdrop_extra_class.
+	 */
+	private static function render_oauth_configuration_test_modal_partial( array $args ) {
+		$cr_oauth_test_modal = $args;
+		include CREATORREACTOR_PLUGIN_DIR . 'includes/partials/oauth-configuration-test-modal.php';
+	}
+
+	/**
+	 * Shared wrapper for provider “Login Button Appearance” cards.
+	 *
+	 * @param string   $data_subtab data-subtab value for the panel.
+	 * @param callable $render_inner_fields Callable that echoes fields inside the card (after intro).
+	 */
+	private static function render_login_button_appearance_panel( $data_subtab, callable $render_inner_fields ) {
+		?>
+		<div class="creatorreactor-settings-panel is-active" data-subtab="<?php echo esc_attr( (string) $data_subtab ); ?>">
+			<h2><?php esc_html_e( 'Login Button Appearance', 'wp-creatorreactor' ); ?></h2>
+			<div class="creatorreactor-settings-block">
+				<?php self::render_login_button_appearance_card_intro(); ?>
+				<?php $render_inner_fields(); ?>
+			</div>
+		</div>
+		<?php
+	}
+
+	/**
+	 * Form table row: readonly redirect URI + copy button + description (callback).
+	 *
+	 * @param string   $redirect_uri   Full redirect URL.
+	 * @param string   $row_heading    Table row heading (th text).
+	 * @param callable $echo_description Prints description markup (e.g. wrapped in <p class="description">).
+	 */
+	private static function render_form_table_readonly_redirect_uri_row( $redirect_uri, $row_heading, callable $echo_description ) {
+		$redirect_uri = (string) $redirect_uri;
+		?>
+		<tr>
+			<th scope="row"><?php echo esc_html( (string) $row_heading ); ?></th>
+			<td>
+				<div class="creatorreactor-redirect-uri-row">
+					<input type="text" readonly class="large-text code creatorreactor-oauth-redirect-uri-input" value="<?php echo esc_attr( $redirect_uri ); ?>" autocomplete="off" aria-readonly="true" />
+					<button type="button" class="button creatorreactor-copy-redirect-uri" data-copy-text="<?php echo esc_attr( $redirect_uri ); ?>" aria-label="<?php esc_attr_e( 'Copy redirect URI to clipboard', 'wp-creatorreactor' ); ?>"><?php esc_html_e( 'Copy', 'wp-creatorreactor' ); ?></button>
+				</div>
+				<?php $echo_description(); ?>
+			</td>
+		</tr>
+		<?php
+	}
+
+	/**
 	 * General settings tab: site-wide plugin options.
 	 *
 	 * Reloads settings from the database (bypassing a stale object cache) so checkboxes match the latest stored state.
@@ -4976,7 +5047,12 @@ class Admin_Settings {
 						</td>
 					</tr>
 				</table>
-				<?php submit_button( __( 'Save Changes', 'wp-creatorreactor' ) ); ?>
+				<?php
+				self::render_settings_action_dock(
+					self::admin_page_url( [ 'tab' => 'general' ], self::PAGE_SETTINGS_SLUG ),
+					__( 'Save Changes', 'wp-creatorreactor' )
+				);
+				?>
 			</form>
 		</div>
 		<?php
@@ -6927,13 +7003,12 @@ class Admin_Settings {
 								<p class="description"><?php esc_html_e( 'Stored encrypted. Leave as ******** to keep the existing value.', 'wp-creatorreactor' ); ?></p>
 							</td>
 						</tr>
-						<tr>
-							<th scope="row"><?php esc_html_e( 'Authorized redirect URI', 'wp-creatorreactor' ); ?></th>
-							<td>
-								<div class="creatorreactor-redirect-uri-row">
-									<input type="text" readonly class="large-text code creatorreactor-oauth-redirect-uri-input" value="<?php echo esc_attr( $redirect_uri ); ?>" autocomplete="off" aria-readonly="true" />
-									<button type="button" class="button creatorreactor-copy-redirect-uri" data-copy-text="<?php echo esc_attr( $redirect_uri ); ?>" aria-label="<?php esc_attr_e( 'Copy redirect URI to clipboard', 'wp-creatorreactor' ); ?>"><?php esc_html_e( 'Copy', 'wp-creatorreactor' ); ?></button>
-								</div>
+						<?php
+						self::render_form_table_readonly_redirect_uri_row(
+							$redirect_uri,
+							__( 'Authorized redirect URI', 'wp-creatorreactor' ),
+							static function () {
+								?>
 								<p class="description">
 									<?php
 									printf(
@@ -6946,8 +7021,10 @@ class Admin_Settings {
 									);
 									?>
 								</p>
-							</td>
-						</tr>
+								<?php
+							}
+						);
+						?>
 					</table>
 				</div>
 			<?php endif; ?>
@@ -6959,16 +7036,13 @@ class Admin_Settings {
 	 * Google login button style (wp-login + shortcodes). Rendered in a separate settings card below OAuth credentials.
 	 */
 	private static function render_google_login_button_appearance_fields() {
-		$option_name   = self::OPTION_NAME;
-		$google_theme  = self::google_login_full_button_theme_from_opts( self::get_options() );
-		$google_mode   = self::get_google_oauth_button_size_mode();
-		$site_general  = self::get_oauth_logo_button_general_size();
-		?>
-		<div class="creatorreactor-settings-panel is-active" data-subtab="google-oauth-appearance">
-			<h2><?php esc_html_e( 'Login Button Appearance', 'wp-creatorreactor' ); ?></h2>
-			<div class="creatorreactor-settings-block">
-				<?php self::render_login_button_appearance_card_intro(); ?>
-				<?php
+		$option_name  = self::OPTION_NAME;
+		$google_theme = self::google_login_full_button_theme_from_opts( self::get_options() );
+		$google_mode  = self::get_google_oauth_button_size_mode();
+		$site_general = self::get_oauth_logo_button_general_size();
+		self::render_login_button_appearance_panel(
+			'google-oauth-appearance',
+			function () use ( $option_name, $google_theme, $google_mode, $site_general ) {
 				self::render_oauth_logo_button_size_mode_fieldset(
 					$option_name,
 					self::GOOGLE_OAUTH_BUTTON_SIZE_MODE_KEY,
@@ -7003,9 +7077,9 @@ class Admin_Settings {
 						<?php endforeach; ?>
 					</div>
 				</fieldset>
-			</div>
-		</div>
-		<?php
+				<?php
+			}
+		);
 	}
 
 	/**
@@ -7013,15 +7087,11 @@ class Admin_Settings {
 	 */
 	private static function render_fanvue_login_button_appearance_fields() {
 		$option_name   = self::OPTION_NAME;
-		$cancel_url    = self::admin_oauth_settings_url( 'fanvue' );
-		$fv_mode      = self::get_fanvue_oauth_button_size_mode();
-		$site_general = self::get_oauth_logo_button_general_size();
-		?>
-		<div class="creatorreactor-settings-panel is-active" data-subtab="fanvue-oauth-login-appearance">
-			<h2><?php esc_html_e( 'Login Button Appearance', 'wp-creatorreactor' ); ?></h2>
-			<div class="creatorreactor-settings-block">
-				<?php self::render_login_button_appearance_card_intro(); ?>
-				<?php
+		$fv_mode       = self::get_fanvue_oauth_button_size_mode();
+		$site_general  = self::get_oauth_logo_button_general_size();
+		self::render_login_button_appearance_panel(
+			'fanvue-oauth-login-appearance',
+			function () use ( $option_name, $fv_mode, $site_general ) {
 				self::render_oauth_logo_button_size_mode_fieldset(
 					$option_name,
 					self::FANVUE_OAUTH_BUTTON_SIZE_MODE_KEY,
@@ -7030,14 +7100,8 @@ class Admin_Settings {
 					Shortcodes::fanvue_oauth_admin_preview_chip( 'minimal' ),
 					Shortcodes::fanvue_oauth_admin_preview_chip( 'standard' )
 				);
-				?>
-			</div>
-		</div>
-		<div class="creatorreactor-settings-actions">
-			<a class="button" href="<?php echo esc_url( $cancel_url ); ?>"><?php esc_html_e( 'Cancel', 'wp-creatorreactor' ); ?></a>
-			<?php submit_button( __( 'Save Settings', 'wp-creatorreactor' ) ); ?>
-		</div>
-		<?php
+			}
+		);
 	}
 
 	/**
@@ -7118,16 +7182,17 @@ class Admin_Settings {
 								<p class="description"><?php esc_html_e( 'Instagram app secret. Stored encrypted. Leave as ******** to keep the existing value.', 'wp-creatorreactor' ); ?></p>
 							</td>
 						</tr>
-						<tr>
-							<th scope="row"><?php esc_html_e( 'OAuth redirect URI', 'wp-creatorreactor' ); ?></th>
-							<td>
-								<div class="creatorreactor-redirect-uri-row">
-									<input type="text" readonly class="large-text code creatorreactor-oauth-redirect-uri-input" value="<?php echo esc_attr( $redirect_uri ); ?>" autocomplete="off" aria-readonly="true" />
-									<button type="button" class="button creatorreactor-copy-redirect-uri" data-copy-text="<?php echo esc_attr( $redirect_uri ); ?>" aria-label="<?php esc_attr_e( 'Copy redirect URI to clipboard', 'wp-creatorreactor' ); ?>"><?php esc_html_e( 'Copy', 'wp-creatorreactor' ); ?></button>
-								</div>
+						<?php
+						self::render_form_table_readonly_redirect_uri_row(
+							$redirect_uri,
+							__( 'OAuth redirect URI', 'wp-creatorreactor' ),
+							static function () {
+								?>
 								<p class="description"><?php esc_html_e( 'Must match the redirect URI configured in your Meta app (including trailing slash).', 'wp-creatorreactor' ); ?></p>
-							</td>
-						</tr>
+								<?php
+							}
+						);
+						?>
 					</table>
 					<p class="description">
 						<?php
@@ -7150,18 +7215,15 @@ class Admin_Settings {
 	/**
 	 * Instagram-style login button appearance (gradient previews; Settings → OAuth Settings → Instagram second card).
 	 *
-	 * @param array $opts Options from {@see self::get_options()}.
+	 * @param array $_opts Options from {@see self::get_options()} (reserved for future use).
 	 */
-	private static function render_instagram_login_button_appearance_fields( array $opts ) {
-		$option_name = self::OPTION_NAME;
+	private static function render_instagram_login_button_appearance_fields( array $_opts ) {
+		$option_name  = self::OPTION_NAME;
 		$ig_mode      = self::get_instagram_oauth_button_size_mode();
 		$site_general = self::get_oauth_logo_button_general_size();
-		?>
-		<div class="creatorreactor-settings-panel is-active" data-subtab="instagram-oauth-appearance">
-			<h2><?php esc_html_e( 'Login Button Appearance', 'wp-creatorreactor' ); ?></h2>
-			<div class="creatorreactor-settings-block">
-				<?php self::render_login_button_appearance_card_intro(); ?>
-				<?php
+		self::render_login_button_appearance_panel(
+			'instagram-oauth-appearance',
+			function () use ( $option_name, $ig_mode, $site_general ) {
 				self::render_oauth_logo_button_size_mode_fieldset(
 					$option_name,
 					self::INSTAGRAM_OAUTH_BUTTON_SIZE_MODE_KEY,
@@ -7170,10 +7232,8 @@ class Admin_Settings {
 					Shortcodes::instagram_oauth_admin_preview_chip( 'minimal' ),
 					Shortcodes::instagram_oauth_admin_preview_chip( 'standard' )
 				);
-				?>
-			</div>
-		</div>
-		<?php
+			}
+		);
 	}
 
 	/**
@@ -7186,7 +7246,6 @@ class Admin_Settings {
 	private static function render_onlyfans_settings_fields( array $opts, $api_key_mask, $webhook_secret_mask ) {
 		$option_name         = self::OPTION_NAME;
 		$webhook_url         = OFAuth::get_webhook_url();
-		$settings_cancel_url = self::admin_oauth_settings_url( 'onlyfans' );
 		$onlyfans_ofauth_instructions_expanded = ! self::is_onlyfans_ofauth_configured_from_opts( $opts );
 		include CREATORREACTOR_PLUGIN_DIR . 'includes/partials/onlyfans-settings-fields.php';
 	}
@@ -7807,6 +7866,7 @@ class Admin_Settings {
 		}
 		.creatorreactor-tab-panel { display: none; }
 		.creatorreactor-tab-panel.is-active { display: block; }
+		.creatorreactor-tab-panel--floating-actions { padding-bottom: 148px; box-sizing: border-box; }
 		.creatorreactor-sync-row { display: flex; gap: 15px; align-items: flex-end; margin-top: 15px; }
 		.creatorreactor-sync-row input[type="number"] { width: 80px; }
 		.creatorreactor-check-list { margin: 10px 0 0; }
@@ -8254,10 +8314,6 @@ class Admin_Settings {
 			.form-table td {
 				padding-top: 0;
 			}
-			.creatorreactor-settings-form-card .creatorreactor-settings-actions {
-				position: static;
-				justify-content: flex-start;
-			}
 		}
 		.creatorreactor-btn-connect.button {
 			background: var(--cr-brand-magenta, #8e2d77);
@@ -8626,12 +8682,6 @@ class Admin_Settings {
 		.creatorreactor-settings-form-card > .creatorreactor-settings-panel > .creatorreactor-settings-block:first-of-type {
 			border-top: none;
 		}
-		.creatorreactor-settings-content.creatorreactor-settings-appearance-card-below .creatorreactor-settings-form-card:not(.creatorreactor-provider-login-appearance-card) .creatorreactor-settings-actions {
-			display: none !important;
-		}
-		.creatorreactor-settings-content:not(.creatorreactor-settings-appearance-card-below) .creatorreactor-provider-login-appearance-card .creatorreactor-settings-actions {
-			display: none !important;
-		}
 		.creatorreactor-settings-block > h3 {
 			margin: 0 0 12px;
 			padding: 0;
@@ -8640,22 +8690,52 @@ class Admin_Settings {
 		.creatorreactor-settings-block .creatorreactor-subsection:first-of-type {
 			margin-top: 0;
 		}
-		.creatorreactor-settings-form-card .creatorreactor-settings-actions {
+		/* Floating Save/Cancel dock: detached from form cards, fixed to viewport bottom */
+		.creatorreactor-settings-action-dock.creatorreactor-settings-actions {
+			position: fixed;
+			left: 0;
+			right: 0;
+			bottom: 0;
+			z-index: 99900;
+			margin: 0;
+			padding: 0 16px;
+			padding-bottom: max(48px, calc(24px + env(safe-area-inset-bottom, 0px)));
+			padding-left: max(16px, env(safe-area-inset-left, 0px));
+			padding-right: max(16px, env(safe-area-inset-right, 0px));
+			pointer-events: none;
+			display: flex;
+			justify-content: center;
+			align-items: flex-end;
+			background: transparent;
+			border: 0;
+			box-shadow: none;
+		}
+		.creatorreactor-settings-action-dock-inner {
+			pointer-events: auto;
 			display: flex;
 			flex-wrap: wrap;
 			align-items: center;
 			justify-content: flex-end;
 			gap: 10px;
-			margin: 0;
-			padding: 16px 20px;
-			border-top: 1px solid #dcdcde;
-			position: sticky;
-			bottom: 0;
-			z-index: 5;
+			width: 100%;
+			max-width: min(920px, calc(100vw - 32px));
+			margin: 0 auto;
+			padding: 12px 18px;
+			box-sizing: border-box;
 			background: #fff;
-			box-shadow: 0 -4px 12px rgba(0, 0, 0, 0.06);
+			border: 1px solid #dcdcde;
+			border-radius: 10px;
+			box-shadow: 0 10px 36px rgba(0, 0, 0, 0.14);
 		}
-		.creatorreactor-settings-form-card .creatorreactor-settings-actions .submit { margin: 0; padding: 0; }
+		.creatorreactor-settings-action-dock .submit { margin: 0; padding: 0; }
+		@media screen and (min-width: 783px) {
+			.creatorreactor-settings-action-dock.creatorreactor-settings-actions {
+				padding-left: 176px;
+			}
+			body.folded .creatorreactor-settings-action-dock.creatorreactor-settings-actions {
+				padding-left: 52px;
+			}
+		}
 		.creatorreactor-subsection { margin-top: 25px; }
 		.creatorreactor-subsection h4 { margin-top: 0; margin-bottom: 15px; font-size: 15px; color: #50575e; }
 		.creatorreactor-advanced { margin-top: 25px; }
@@ -10632,7 +10712,7 @@ class Admin_Settings {
 		<?php endif; ?>
 
 		<?php if ( $is_settings_page || $is_users_page ) : ?>
-		<div class="creatorreactor-tab-panel <?php echo ( $is_settings_page && 'social_oauth' === $active_tab ) ? 'is-active' : ''; ?>" data-tab="social_oauth">
+		<div class="creatorreactor-tab-panel <?php echo ( $is_settings_page && 'social_oauth' === $active_tab ) ? 'is-active' : ''; ?><?php echo $is_settings_page ? ' creatorreactor-tab-panel--floating-actions' : ''; ?>" data-tab="social_oauth">
 		<?php if ( $is_settings_page ) : ?>
 		<div class="creatorreactor-settings-container creatorreactor-oauth-settings-unified">
 			<div class="creatorreactor-settings-sidebar creatorreactor-settings-sidebar--social-oauth">
@@ -10726,38 +10806,23 @@ class Admin_Settings {
 					<?php self::render_oauth_dynamic_fields( $broker_mode, $opts, $secret_mask, $current_product_label ); ?>
 				</div>
 			</div>
-			<div class="creatorreactor-settings-actions">
-				<a class="button" href="<?php echo esc_url( self::admin_oauth_settings_url( 'fanvue' ) ); ?>"><?php esc_html_e( 'Cancel', 'wp-creatorreactor' ); ?></a>
-				<?php submit_button( __( 'Save Settings', 'wp-creatorreactor' ) ); ?>
-			</div>
 			</div>
 			<div class="creatorreactor-settings-form-card creatorreactor-provider-login-appearance-card creatorreactor-fanvue-login-appearance-card" <?php echo ! empty( $opts['broker_mode'] ) ? 'hidden' : ''; ?>>
 				<?php self::render_fanvue_login_button_appearance_fields(); ?>
 			</div>
 		</div>
 		</div>
-			<div id="creatorreactor-fanvue-oauth-test-modal" class="creatorreactor-modal" aria-hidden="true" role="presentation">
-				<div class="creatorreactor-modal-backdrop" aria-hidden="true"></div>
-				<div class="creatorreactor-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="creatorreactor-fanvue-oauth-test-modal-title">
-					<div class="creatorreactor-modal-header">
-						<div class="creatorreactor-modal-header-title">
-							<h3 id="creatorreactor-fanvue-oauth-test-modal-title"><?php esc_html_e( 'Fanvue OAuth: configuration check', 'wp-creatorreactor' ); ?></h3>
-						</div>
-						<button type="button" class="creatorreactor-fanvue-oauth-test-dismiss" aria-label="<?php esc_attr_e( 'Close', 'wp-creatorreactor' ); ?>">&times;</button>
-					</div>
-					<div class="creatorreactor-modal-body">
-						<p id="creatorreactor-fanvue-oauth-test-status" class="creatorreactor-fanvue-oauth-test-status"></p>
-						<div id="creatorreactor-fanvue-oauth-test-remediation-wrap" class="creatorreactor-fanvue-oauth-test-remediation-wrap" hidden>
-							<strong><?php esc_html_e( 'What to do next', 'wp-creatorreactor' ); ?></strong>
-							<p id="creatorreactor-fanvue-oauth-test-remediation" class="creatorreactor-fanvue-oauth-test-remediation"></p>
-						</div>
-					</div>
-					<div class="creatorreactor-modal-footer">
-						<button type="button" class="button creatorreactor-fanvue-oauth-test-footer-dismiss" hidden><?php esc_html_e( 'Close', 'wp-creatorreactor' ); ?></button>
-						<button type="button" class="button button-primary creatorreactor-fanvue-oauth-test-acknowledge" hidden><?php esc_html_e( 'Acknowledge', 'wp-creatorreactor' ); ?></button>
-					</div>
-				</div>
-			</div>
+			<?php self::render_settings_action_dock( self::admin_oauth_settings_url( 'fanvue' ) ); ?>
+			<?php
+			self::render_oauth_configuration_test_modal_partial(
+				[
+					'modal_id'     => 'creatorreactor-fanvue-oauth-test-modal',
+					'title_id'     => 'creatorreactor-fanvue-oauth-test-modal-title',
+					'title_text'   => __( 'Fanvue OAuth: configuration check', 'wp-creatorreactor' ),
+					'class_prefix' => 'creatorreactor-fanvue-oauth-test',
+				]
+			);
+			?>
 		</form>
 			<?php elseif ( 'onlyfans' === $active_oauth_provider ) : ?>
 			<form id="creatorreactor-onlyfans-settings-form" method="post" action="<?php echo esc_url( admin_url( 'options.php' ) ); ?>">
@@ -10767,117 +10832,64 @@ class Admin_Settings {
 						<?php self::render_onlyfans_settings_fields( $opts, $ofauth_api_key_mask, $ofauth_webhook_secret_mask ); ?>
 					</div>
 				</div>
-				<div id="creatorreactor-onlyfans-ofauth-test-modal" class="creatorreactor-modal" aria-hidden="true" role="presentation">
-					<div class="creatorreactor-modal-backdrop" aria-hidden="true"></div>
-					<div class="creatorreactor-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="creatorreactor-onlyfans-ofauth-test-modal-title">
-						<div class="creatorreactor-modal-header">
-							<div class="creatorreactor-modal-header-title">
-								<h3 id="creatorreactor-onlyfans-ofauth-test-modal-title"><?php esc_html_e( 'OnlyFans (OFAuth): configuration check', 'wp-creatorreactor' ); ?></h3>
-							</div>
-							<button type="button" class="creatorreactor-onlyfans-ofauth-test-dismiss" aria-label="<?php esc_attr_e( 'Close', 'wp-creatorreactor' ); ?>">&times;</button>
-						</div>
-						<div class="creatorreactor-modal-body">
-							<p id="creatorreactor-onlyfans-ofauth-test-status" class="creatorreactor-onlyfans-ofauth-test-status"></p>
-							<div id="creatorreactor-onlyfans-ofauth-test-remediation-wrap" class="creatorreactor-onlyfans-ofauth-test-remediation-wrap" hidden>
-								<strong><?php esc_html_e( 'What to do next', 'wp-creatorreactor' ); ?></strong>
-								<p id="creatorreactor-onlyfans-ofauth-test-remediation" class="creatorreactor-onlyfans-ofauth-test-remediation"></p>
-							</div>
-						</div>
-						<div class="creatorreactor-modal-footer">
-							<button type="button" class="button creatorreactor-onlyfans-ofauth-test-footer-dismiss" hidden><?php esc_html_e( 'Close', 'wp-creatorreactor' ); ?></button>
-							<button type="button" class="button button-primary creatorreactor-onlyfans-ofauth-test-acknowledge" hidden><?php esc_html_e( 'Acknowledge', 'wp-creatorreactor' ); ?></button>
-						</div>
-					</div>
-				</div>
+				<?php self::render_settings_action_dock( self::admin_oauth_settings_url( 'onlyfans' ) ); ?>
+				<?php
+				self::render_oauth_configuration_test_modal_partial(
+					[
+						'modal_id'     => 'creatorreactor-onlyfans-ofauth-test-modal',
+						'title_id'     => 'creatorreactor-onlyfans-ofauth-test-modal-title',
+						'title_text'   => __( 'OnlyFans (OFAuth): configuration check', 'wp-creatorreactor' ),
+						'class_prefix' => 'creatorreactor-onlyfans-ofauth-test',
+					]
+				);
+				?>
 			</form>
 			<?php elseif ( 'google' === $active_oauth_provider ) : ?>
 			<form id="creatorreactor-google-settings-form" method="post" action="<?php echo esc_url( admin_url( 'options.php' ) ); ?>">
 				<?php settings_fields( self::OPTION_NAME ); ?>
 				<div class="creatorreactor-settings-form-card">
 					<?php self::render_google_settings_fields( $opts, $google_oauth_secret_mask ); ?>
-					<?php if ( ! empty( $opts['broker_mode'] ) ) : ?>
-					<div class="creatorreactor-settings-actions">
-						<a class="button" href="<?php echo esc_url( self::admin_oauth_settings_url( 'google' ) ); ?>"><?php esc_html_e( 'Cancel', 'wp-creatorreactor' ); ?></a>
-						<?php submit_button( __( 'Save Settings', 'wp-creatorreactor' ) ); ?>
-					</div>
-					<?php endif; ?>
 				</div>
 				<?php if ( empty( $opts['broker_mode'] ) ) : ?>
 				<div class="creatorreactor-settings-form-card creatorreactor-provider-login-appearance-card">
 					<?php self::render_google_login_button_appearance_fields(); ?>
-					<div class="creatorreactor-settings-actions">
-						<a class="button" href="<?php echo esc_url( self::admin_oauth_settings_url( 'google' ) ); ?>"><?php esc_html_e( 'Cancel', 'wp-creatorreactor' ); ?></a>
-						<?php submit_button( __( 'Save Settings', 'wp-creatorreactor' ) ); ?>
-					</div>
 				</div>
 				<?php endif; ?>
+				<?php self::render_settings_action_dock( self::admin_oauth_settings_url( 'google' ) ); ?>
 			</form>
-			<div id="creatorreactor-google-oauth-test-modal" class="creatorreactor-modal" aria-hidden="true" role="presentation">
-				<div class="creatorreactor-modal-backdrop" aria-hidden="true"></div>
-				<div class="creatorreactor-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="creatorreactor-google-oauth-test-modal-title">
-					<div class="creatorreactor-modal-header">
-						<div class="creatorreactor-modal-header-title">
-							<h3 id="creatorreactor-google-oauth-test-modal-title"><?php esc_html_e( 'Google sign-in: configuration check', 'wp-creatorreactor' ); ?></h3>
-						</div>
-						<button type="button" class="creatorreactor-google-oauth-test-dismiss" aria-label="<?php esc_attr_e( 'Close', 'wp-creatorreactor' ); ?>">&times;</button>
-					</div>
-					<div class="creatorreactor-modal-body">
-						<p id="creatorreactor-google-oauth-test-status" class="creatorreactor-google-oauth-test-status"></p>
-						<div id="creatorreactor-google-oauth-test-remediation-wrap" class="creatorreactor-google-oauth-test-remediation-wrap" hidden>
-							<strong><?php esc_html_e( 'What to do next', 'wp-creatorreactor' ); ?></strong>
-							<p id="creatorreactor-google-oauth-test-remediation" class="creatorreactor-google-oauth-test-remediation"></p>
-						</div>
-					</div>
-					<div class="creatorreactor-modal-footer">
-						<button type="button" class="button creatorreactor-google-oauth-test-footer-dismiss" hidden><?php esc_html_e( 'Close', 'wp-creatorreactor' ); ?></button>
-						<button type="button" class="button button-primary creatorreactor-google-oauth-test-acknowledge" hidden><?php esc_html_e( 'Acknowledge', 'wp-creatorreactor' ); ?></button>
-					</div>
-				</div>
-			</div>
+			<?php
+			self::render_oauth_configuration_test_modal_partial(
+				[
+					'modal_id'     => 'creatorreactor-google-oauth-test-modal',
+					'title_id'     => 'creatorreactor-google-oauth-test-modal-title',
+					'title_text'   => __( 'Google sign-in: configuration check', 'wp-creatorreactor' ),
+					'class_prefix' => 'creatorreactor-google-oauth-test',
+				]
+			);
+			?>
 			<?php elseif ( 'instagram' === $active_oauth_provider ) : ?>
 			<form id="creatorreactor-instagram-settings-form" method="post" action="<?php echo esc_url( admin_url( 'options.php' ) ); ?>">
 				<?php settings_fields( self::OPTION_NAME ); ?>
 				<div class="creatorreactor-settings-form-card">
 					<?php self::render_instagram_oauth_primary_fields( $opts, $instagram_oauth_secret_mask ); ?>
-					<?php if ( ! empty( $opts['broker_mode'] ) ) : ?>
-					<div class="creatorreactor-settings-actions">
-						<a class="button" href="<?php echo esc_url( self::admin_oauth_settings_url( 'instagram' ) ); ?>"><?php esc_html_e( 'Cancel', 'wp-creatorreactor' ); ?></a>
-						<?php submit_button( __( 'Save Settings', 'wp-creatorreactor' ) ); ?>
-					</div>
-					<?php endif; ?>
 				</div>
 				<?php if ( empty( $opts['broker_mode'] ) ) : ?>
 				<div class="creatorreactor-settings-form-card creatorreactor-provider-login-appearance-card">
 					<?php self::render_instagram_login_button_appearance_fields( $opts ); ?>
-					<div class="creatorreactor-settings-actions">
-						<a class="button" href="<?php echo esc_url( self::admin_oauth_settings_url( 'instagram' ) ); ?>"><?php esc_html_e( 'Cancel', 'wp-creatorreactor' ); ?></a>
-						<?php submit_button( __( 'Save Settings', 'wp-creatorreactor' ) ); ?>
-					</div>
 				</div>
 				<?php endif; ?>
+				<?php self::render_settings_action_dock( self::admin_oauth_settings_url( 'instagram' ) ); ?>
 			</form>
-			<div id="creatorreactor-instagram-oauth-test-modal" class="creatorreactor-modal" aria-hidden="true" role="presentation">
-				<div class="creatorreactor-modal-backdrop" aria-hidden="true"></div>
-				<div class="creatorreactor-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="creatorreactor-instagram-oauth-test-modal-title">
-					<div class="creatorreactor-modal-header">
-						<div class="creatorreactor-modal-header-title">
-							<h3 id="creatorreactor-instagram-oauth-test-modal-title"><?php esc_html_e( 'Instagram OAuth: configuration check', 'wp-creatorreactor' ); ?></h3>
-						</div>
-						<button type="button" class="creatorreactor-instagram-oauth-test-dismiss" aria-label="<?php esc_attr_e( 'Close', 'wp-creatorreactor' ); ?>">&times;</button>
-					</div>
-					<div class="creatorreactor-modal-body">
-						<p id="creatorreactor-instagram-oauth-test-status" class="creatorreactor-instagram-oauth-test-status"></p>
-						<div id="creatorreactor-instagram-oauth-test-remediation-wrap" class="creatorreactor-instagram-oauth-test-remediation-wrap" hidden>
-							<strong><?php esc_html_e( 'What to do next', 'wp-creatorreactor' ); ?></strong>
-							<p id="creatorreactor-instagram-oauth-test-remediation" class="creatorreactor-instagram-oauth-test-remediation"></p>
-						</div>
-					</div>
-					<div class="creatorreactor-modal-footer">
-						<button type="button" class="button creatorreactor-instagram-oauth-test-footer-dismiss" hidden><?php esc_html_e( 'Close', 'wp-creatorreactor' ); ?></button>
-						<button type="button" class="button button-primary creatorreactor-instagram-oauth-test-acknowledge" hidden><?php esc_html_e( 'Acknowledge', 'wp-creatorreactor' ); ?></button>
-					</div>
-				</div>
-			</div>
+			<?php
+			self::render_oauth_configuration_test_modal_partial(
+				[
+					'modal_id'     => 'creatorreactor-instagram-oauth-test-modal',
+					'title_id'     => 'creatorreactor-instagram-oauth-test-modal-title',
+					'title_text'   => __( 'Instagram OAuth: configuration check', 'wp-creatorreactor' ),
+					'class_prefix' => 'creatorreactor-instagram-oauth-test',
+				]
+			);
+			?>
 			<?php else : ?>
 			<?php
 			$active_social_mask = isset( $social_oauth_secret_masks[ $active_social_provider ] ) ? $social_oauth_secret_masks[ $active_social_provider ] : '';
@@ -10885,38 +10897,23 @@ class Admin_Settings {
 					<form id="creatorreactor-<?php echo esc_attr( $active_social_provider ); ?>-settings-form" method="post" action="<?php echo esc_url( admin_url( 'options.php' ) ); ?>">
 						<?php settings_fields( self::OPTION_NAME ); ?>
 						<?php self::render_social_oauth_provider_tab_content( $active_social_provider, $opts, $active_social_mask ); ?>
-						<div class="creatorreactor-settings-actions">
-							<a class="button" href="<?php echo esc_url( self::admin_social_oauth_settings_url( $active_social_provider ) ); ?>"><?php esc_html_e( 'Cancel', 'wp-creatorreactor' ); ?></a>
-							<?php submit_button( __( 'Save Settings', 'wp-creatorreactor' ) ); ?>
-						</div>
+						<?php self::render_settings_action_dock( self::admin_oauth_settings_url( $active_social_provider ) ); ?>
 					</form>
 			<?php endif; ?>
 			</div>
 		</div>
 		<?php endif; ?>
 		<?php if ( $is_settings_page ) : ?>
-		<div id="creatorreactor-social-oauth-test-modal" class="creatorreactor-modal" aria-hidden="true" role="presentation">
-			<div class="creatorreactor-modal-backdrop" aria-hidden="true"></div>
-			<div class="creatorreactor-modal-dialog" role="dialog" aria-modal="true" aria-labelledby="creatorreactor-social-oauth-test-modal-title">
-				<div class="creatorreactor-modal-header">
-					<div class="creatorreactor-modal-header-title">
-						<h3 id="creatorreactor-social-oauth-test-modal-title"><?php esc_html_e( 'Social OAuth: configuration check', 'wp-creatorreactor' ); ?></h3>
-					</div>
-					<button type="button" class="creatorreactor-social-oauth-test-dismiss" aria-label="<?php esc_attr_e( 'Close', 'wp-creatorreactor' ); ?>">&times;</button>
-				</div>
-				<div class="creatorreactor-modal-body">
-					<p id="creatorreactor-social-oauth-test-status" class="creatorreactor-social-oauth-test-status"></p>
-					<div id="creatorreactor-social-oauth-test-remediation-wrap" class="creatorreactor-social-oauth-test-remediation-wrap" hidden>
-						<strong><?php esc_html_e( 'What to do next', 'wp-creatorreactor' ); ?></strong>
-						<p id="creatorreactor-social-oauth-test-remediation" class="creatorreactor-social-oauth-test-remediation"></p>
-					</div>
-				</div>
-				<div class="creatorreactor-modal-footer">
-					<button type="button" class="button creatorreactor-social-oauth-test-footer-dismiss" hidden><?php esc_html_e( 'Close', 'wp-creatorreactor' ); ?></button>
-					<button type="button" class="button button-primary creatorreactor-social-oauth-test-acknowledge" hidden><?php esc_html_e( 'Acknowledge', 'wp-creatorreactor' ); ?></button>
-				</div>
-			</div>
-		</div>
+		<?php
+		self::render_oauth_configuration_test_modal_partial(
+			[
+				'modal_id'     => 'creatorreactor-social-oauth-test-modal',
+				'title_id'     => 'creatorreactor-social-oauth-test-modal-title',
+				'title_text'   => __( 'Social OAuth: configuration check', 'wp-creatorreactor' ),
+				'class_prefix' => 'creatorreactor-social-oauth-test',
+			]
+		);
+		?>
 		<?php endif; ?>
 		</div>
 
@@ -10944,10 +10941,10 @@ class Admin_Settings {
 			</div>
 		</div>
 
-		<div class="creatorreactor-tab-panel <?php echo 'general' === $active_tab ? 'is-active' : ''; ?>" data-tab="general">
+		<div class="creatorreactor-tab-panel <?php echo 'general' === $active_tab ? 'is-active' : ''; ?> creatorreactor-tab-panel--floating-actions" data-tab="general">
 			<?php self::render_general_tab_body(); ?>
 		</div>
-		<div class="creatorreactor-tab-panel <?php echo 'cloud' === $active_tab ? 'is-active' : ''; ?>" data-tab="cloud">
+		<div class="creatorreactor-tab-panel <?php echo 'cloud' === $active_tab ? 'is-active' : ''; ?> creatorreactor-tab-panel--floating-actions" data-tab="cloud">
 			<div class="creatorreactor-section">
 				<form method="post" action="<?php echo esc_url( admin_url( 'options.php' ) ); ?>">
 					<?php settings_fields( self::OPTION_NAME ); ?>
@@ -10980,10 +10977,7 @@ class Admin_Settings {
 							<?php self::render_cloud_metrics_ingest_fields( $opts ); ?>
 						</div>
 					</div>
-					<div class="creatorreactor-settings-actions">
-						<a class="button" href="<?php echo esc_url( self::admin_page_url( [ 'tab' => 'cloud' ], self::PAGE_SETTINGS_SLUG ) ); ?>"><?php esc_html_e( 'Cancel', 'wp-creatorreactor' ); ?></a>
-						<?php submit_button( __( 'Save Settings', 'wp-creatorreactor' ) ); ?>
-					</div>
+					<?php self::render_settings_action_dock( self::admin_page_url( [ 'tab' => 'cloud' ], self::PAGE_SETTINGS_SLUG ) ); ?>
 				</form>
 			</div>
 		</div>

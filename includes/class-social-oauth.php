@@ -1,6 +1,6 @@
 <?php
 /**
- * Generic OAuth 2.0 social login for TikTok, X, Snapchat, LinkedIn, Pinterest, Reddit, Twitch, Discord, Mastodon.
+ * Generic OAuth 2.0 social login for TikTok, X, Snapchat, LinkedIn, Pinterest, Reddit, Twitch, Discord, Patreon, Mastodon.
  *
  * @package CreatorReactor
  * @author  Lou Grossi
@@ -596,6 +596,8 @@ class Social_OAuth {
 				return self::profile_twitch( $access_token, $client_id );
 			case 'discord':
 				return self::profile_discord( $access_token );
+			case 'patreon':
+				return self::profile_patreon( $access_token );
 			case 'mastodon':
 				$base = self::normalize_mastodon_base_from_opts( $opts );
 				return $base !== '' ? self::profile_mastodon( $base, $access_token ) : null;
@@ -845,6 +847,50 @@ class Social_OAuth {
 			'id'    => (string) $data['id'],
 			'email' => $email,
 			'name'  => isset( $data['username'] ) ? (string) $data['username'] : '',
+		];
+	}
+
+	/**
+	 * Patreon API v2 identity (JSON:API).
+	 *
+	 * @return array<string, mixed>|null
+	 */
+	private static function profile_patreon( $access_token ) {
+		$url = add_query_arg(
+			[ 'fields[user]' => 'email,full_name,vanity' ],
+			'https://www.patreon.com/api/oauth2/v2/identity'
+		);
+		$response = wp_remote_get(
+			$url,
+			[
+				'timeout' => 30,
+				'headers' => [
+					'Authorization' => 'Bearer ' . $access_token,
+				],
+			]
+		);
+		if ( is_wp_error( $response ) ) {
+			return null;
+		}
+		$body = wp_remote_retrieve_body( $response );
+		$data = json_decode( is_string( $body ) ? $body : '', true );
+		if ( ! is_array( $data ) || empty( $data['data'] ) || ! is_array( $data['data'] ) ) {
+			return null;
+		}
+		$d = $data['data'];
+		$id = isset( $d['id'] ) ? (string) $d['id'] : '';
+		if ( $id === '' ) {
+			return null;
+		}
+		$attrs = isset( $d['attributes'] ) && is_array( $d['attributes'] ) ? $d['attributes'] : [];
+		$email = isset( $attrs['email'] ) ? (string) $attrs['email'] : '';
+		$name  = isset( $attrs['full_name'] ) && (string) $attrs['full_name'] !== ''
+			? (string) $attrs['full_name']
+			: ( isset( $attrs['vanity'] ) ? (string) $attrs['vanity'] : '' );
+		return [
+			'id'    => $id,
+			'email' => $email,
+			'name'  => $name,
 		];
 	}
 

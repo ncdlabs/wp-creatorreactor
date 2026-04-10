@@ -7,6 +7,7 @@ namespace CreatorReactor\Tests\Regression;
 use Brain\Monkey\Functions;
 use CreatorReactor\Shortcodes;
 use CreatorReactor\Tests\BaseTestCase;
+use CreatorReactor\Tests\Traits\ShortcodesRegressionBrainMonkeyTrait;
 
 final class ShortcodesWpdbStub
 {
@@ -53,43 +54,12 @@ final class ShortcodesWpdbStub
 
 final class ShortcodesRegressionTest extends BaseTestCase
 {
+    use ShortcodesRegressionBrainMonkeyTrait;
+
     protected function setUp(): void
     {
         parent::setUp();
-        Functions\when('shortcode_atts')->alias(
-            static function (array $pairs, $atts, $shortcode = ''): array {
-                $atts = (array) $atts;
-                $out  = $pairs;
-                foreach ( array_keys( $pairs ) as $name ) {
-                    if ( array_key_exists( $name, $atts ) ) {
-                        $out[ $name ] = $atts[ $name ];
-                    }
-                }
-                return $out;
-            }
-        );
-        Functions\when('sanitize_key')->alias(
-            static fn ($value): string => strtolower(trim((string) $value))
-        );
-        Functions\when('sanitize_text_field')->alias(
-            static fn ($value): string => trim((string) $value)
-        );
-        Functions\when('wp_parse_url')->alias(
-            static fn ($url) => parse_url((string) $url)
-        );
-        Functions\when('get_option')->alias(
-            static function ($key, $default = false) {
-                if ($key === 'creatorreactor_settings') {
-                    return [
-                        'creatorreactor_oauth_scopes' => 'openid offline_access',
-                        'display_timezone' => 'system',
-                    ];
-                }
-                return $default;
-            }
-        );
-        Functions\when('get_current_user_id')->justReturn(1);
-        Functions\when('get_userdata')->justReturn(false);
+        $this->stubShortcodesRegressionBrainMonkey();
     }
 
     private function mockWpdb(array $results = [], $row = null): void
@@ -130,6 +100,7 @@ final class ShortcodesRegressionTest extends BaseTestCase
             'reddit',
             'twitch',
             'discord',
+            'patreon',
             'mastodon',
             'bluesky',
         ];

@@ -14,9 +14,33 @@ if ( ! defined( 'ABSPATH' ) ) {
 }
 
 /**
+ * Shared Elementor control: container AND/OR visibility (matches Gutenberg gate blocks).
+ */
+trait Elementor_Widget_Container_Logic_Control_Trait {
+
+	protected function add_elementor_container_logic_control() {
+		$this->add_control(
+			'container_logic',
+			[
+				'label'       => __( 'Container visibility logic', 'wp-creatorreactor' ),
+				'type'        => \Elementor\Controls_Manager::SELECT,
+				'default'     => 'and',
+				'options'     => [
+					'and' => __( 'AND (current): hide container if any gate fails', 'wp-creatorreactor' ),
+					'or'  => __( 'OR: show container if any gate passes', 'wp-creatorreactor' ),
+				],
+				'description' => __( 'Block editor: used when multiple gate blocks share a layout container. Elementor: each gate only affects its own widget on the front end.', 'wp-creatorreactor' ),
+			]
+		);
+	}
+}
+
+/**
  * Base widget: inner HTML wrapped in a paired shortcode.
  */
 abstract class Elementor_Widget_Shortcode_Wrap extends \Elementor\Widget_Base {
+
+	use Elementor_Widget_Container_Logic_Control_Trait;
 
 	abstract protected function shortcode_tag(): string;
 
@@ -47,19 +71,7 @@ abstract class Elementor_Widget_Shortcode_Wrap extends \Elementor\Widget_Base {
 			]
 		);
 
-		$this->add_control(
-			'container_logic',
-			[
-				'label'       => __( 'Container visibility logic', 'wp-creatorreactor' ),
-				'type'        => \Elementor\Controls_Manager::SELECT,
-				'default'     => 'and',
-				'options'     => [
-					'and' => __( 'AND (current): hide container if any gate fails', 'wp-creatorreactor' ),
-					'or'  => __( 'OR: show container if any gate passes', 'wp-creatorreactor' ),
-				],
-				'description' => __( 'Block editor: used when multiple gate blocks share a layout container. Elementor: each gate only affects its own widget on the front end.', 'wp-creatorreactor' ),
-			]
-		);
+		$this->add_elementor_container_logic_control();
 
 		$this->end_controls_section();
 	}
@@ -68,24 +80,6 @@ abstract class Elementor_Widget_Shortcode_Wrap extends \Elementor\Widget_Base {
 		$s     = $this->get_settings_for_display();
 		$inner = isset( $s['inner_content'] ) ? $s['inner_content'] : '';
 		$tag   = $this->shortcode_tag();
-		$container_logic = isset( $s['container_logic'] ) ? sanitize_key( (string) $s['container_logic'] ) : 'and';
-		if ( $container_logic !== 'and' && $container_logic !== 'or' ) {
-			$container_logic = 'and';
-		}
-		$roles = Role_Impersonation::get_effective_roles_csv_for_logged_in_user();
-		// Determine gate-match independently from the widget's enclosed content.
-		// This ensures container inheritance works even if the widget's content is empty.
-		$probe   = Shortcodes::apply_enclosing_gate( $tag, '__creatorreactor_gate_probe__' );
-		$matched          = trim( (string) $probe ) !== '';
-		$match_str        = $matched ? '1' : '0';
-
-		echo '<span class="creatorreactor-elementor-gate-marker"'
-			. ' data-creatorreactor-gate="' . esc_attr( $tag ) . '"'
-			. ' data-creatorreactor-gate-match="' . esc_attr( $match_str ) . '"'
-			. ' data-creatorreactor-gate-logic="' . esc_attr( $container_logic ) . '"'
-			. ' data-creatorreactor-user-roles="' . esc_attr( $roles ) . '"'
-			. ' style="display:none" aria-hidden="true"></span>';
-
 		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- shortcode/HTML output (same as post content).
 		echo Shortcodes::apply_enclosing_gate( $tag, $inner );
 	}
@@ -268,6 +262,8 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 	 */
 	abstract class Elementor_Widget_Nested_Shortcode_Gate_Base extends Elementor_Widget_Nested_Single_Slot_Base {
 
+		use Elementor_Widget_Container_Logic_Control_Trait;
+
 		abstract protected function shortcode_tag(): string;
 
 		protected function register_controls() {
@@ -281,45 +277,13 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 				]
 			);
 
-			$this->add_control(
-				'container_logic',
-				[
-					'label'       => __( 'Container visibility logic', 'wp-creatorreactor' ),
-					'type'        => \Elementor\Controls_Manager::SELECT,
-					'default'     => 'and',
-					'options'     => [
-						'and' => __( 'AND (current): hide container if any gate fails', 'wp-creatorreactor' ),
-						'or'  => __( 'OR: show container if any gate passes', 'wp-creatorreactor' ),
-					],
-					'description' => __( 'Block editor: used when multiple gate blocks share a layout container. Elementor: each gate only affects its own widget on the front end.', 'wp-creatorreactor' ),
-				]
-			);
+			$this->add_elementor_container_logic_control();
 
 			$this->end_controls_section();
 		}
 
 		protected function render() {
-			$s = $this->get_settings_for_display();
-			$container_logic = isset( $s['container_logic'] ) ? sanitize_key( (string) $s['container_logic'] ) : 'and';
-			if ( $container_logic !== 'and' && $container_logic !== 'or' ) {
-				$container_logic = 'and';
-			}
-			$roles = Role_Impersonation::get_effective_roles_csv_for_logged_in_user();
-
 			$tag   = $this->shortcode_tag();
-			// Determine gate-match independently from the nested slot's enclosed content.
-			// This ensures container inheritance works even if nested slot content is empty.
-			$probe   = Shortcodes::apply_enclosing_gate( $tag, '__creatorreactor_gate_probe__' );
-			$matched          = trim( (string) $probe ) !== '';
-			$match_str        = $matched ? '1' : '0';
-
-			echo '<span class="creatorreactor-elementor-gate-marker"'
-				. ' data-creatorreactor-gate="' . esc_attr( $tag ) . '"'
-				. ' data-creatorreactor-gate-match="' . esc_attr( $match_str ) . '"'
-				. ' data-creatorreactor-gate-logic="' . esc_attr( $container_logic ) . '"'
-				. ' data-creatorreactor-user-roles="' . esc_attr( $roles ) . '"'
-				. ' style="display:none" aria-hidden="true"></span>';
-
 			$inner = $this->render_inner_html();
 			// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- shortcode/HTML output (same as post content).
 			echo Shortcodes::apply_enclosing_gate( $tag, $inner );
@@ -463,6 +427,8 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 	 */
 	final class Elementor_Widget_Has_Tier_Nested extends Elementor_Widget_Nested_Single_Slot_Base {
 
+		use Elementor_Widget_Container_Logic_Control_Trait;
+
 		public function get_name() {
 			return 'creatorreactor_has_tier';
 		}
@@ -520,19 +486,7 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 				]
 			);
 
-			$this->add_control(
-				'container_logic',
-				[
-					'label'       => __( 'Container visibility logic', 'wp-creatorreactor' ),
-					'type'        => \Elementor\Controls_Manager::SELECT,
-					'default'     => 'and',
-					'options'     => [
-						'and' => __( 'AND (current): hide container if any gate fails', 'wp-creatorreactor' ),
-						'or'  => __( 'OR: show container if any gate passes', 'wp-creatorreactor' ),
-					],
-					'description' => __( 'Block editor: used when multiple gate blocks share a layout container. Elementor: each gate only affects its own widget on the front end.', 'wp-creatorreactor' ),
-				]
-			);
+			$this->add_elementor_container_logic_control();
 
 			$this->end_controls_section();
 
@@ -544,29 +498,6 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 			$inner   = $this->render_inner_html();
 			$tier    = isset( $s['tier'] ) ? trim( sanitize_text_field( (string) $s['tier'] ) ) : '';
 			$product = isset( $s['product'] ) ? trim( sanitize_text_field( (string) $s['product'] ) ) : '';
-			$container_logic = isset( $s['container_logic'] ) ? sanitize_key( (string) $s['container_logic'] ) : 'and';
-			if ( $container_logic !== 'and' && $container_logic !== 'or' ) {
-				$container_logic = 'and';
-			}
-			$roles = Role_Impersonation::get_effective_roles_csv_for_logged_in_user();
-			// Determine match independently from the nested slot's enclosed content.
-			// This ensures container inheritance works even if slot content is empty.
-			$probe = Shortcodes::has_tier(
-				[
-					'tier'    => $tier,
-					'product' => $product,
-				],
-				'__creatorreactor_gate_probe__'
-			);
-
-			$matched   = trim( (string) $probe ) !== '';
-			$match_str = $matched ? '1' : '0';
-			echo '<span class="creatorreactor-elementor-gate-marker"'
-				. ' data-creatorreactor-gate="has_tier"'
-				. ' data-creatorreactor-gate-match="' . esc_attr( $match_str ) . '"'
-				. ' data-creatorreactor-gate-logic="' . esc_attr( $container_logic ) . '"'
-				. ' data-creatorreactor-user-roles="' . esc_attr( $roles ) . '"'
-				. ' style="display:none" aria-hidden="true"></span>';
 
 			// phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped -- Shortcodes::has_tier returns kses-filtered HTML (post-content parity).
 			echo Shortcodes::has_tier(
@@ -630,6 +561,8 @@ final class Elementor_Widget_Logged_In_Legacy extends Elementor_Widget_Shortcode
  */
 final class Elementor_Widget_Has_Tier_Legacy extends \Elementor\Widget_Base {
 
+	use Elementor_Widget_Container_Logic_Control_Trait;
+
 	public function get_name() {
 		return 'creatorreactor_has_tier';
 	}
@@ -691,19 +624,7 @@ final class Elementor_Widget_Has_Tier_Legacy extends \Elementor\Widget_Base {
 			]
 		);
 
-		$this->add_control(
-			'container_logic',
-			[
-				'label'       => __( 'Container visibility logic', 'wp-creatorreactor' ),
-				'type'        => \Elementor\Controls_Manager::SELECT,
-				'default'     => 'and',
-				'options'     => [
-					'and' => __( 'AND (current): hide container if any gate fails', 'wp-creatorreactor' ),
-					'or'  => __( 'OR: show container if any gate passes', 'wp-creatorreactor' ),
-				],
-				'description' => __( 'Block editor: used when multiple gate blocks share a layout container. Elementor: each gate only affects its own widget on the front end.', 'wp-creatorreactor' ),
-			]
-		);
+		$this->add_elementor_container_logic_control();
 
 		$this->end_controls_section();
 	}
@@ -713,30 +634,6 @@ final class Elementor_Widget_Has_Tier_Legacy extends \Elementor\Widget_Base {
 		$inner    = isset( $s['inner_content'] ) ? (string) $s['inner_content'] : '';
 		$tier     = isset( $s['tier'] ) ? trim( sanitize_text_field( (string) $s['tier'] ) ) : '';
 		$product  = isset( $s['product'] ) ? trim( sanitize_text_field( (string) $s['product'] ) ) : '';
-		$container_logic = isset( $s['container_logic'] ) ? sanitize_key( (string) $s['container_logic'] ) : 'and';
-		if ( $container_logic !== 'and' && $container_logic !== 'or' ) {
-			$container_logic = 'and';
-		}
-		$roles = Role_Impersonation::get_effective_roles_csv_for_logged_in_user();
-
-		// Determine match independently from the widget's enclosed content.
-		// This ensures container inheritance works even if widget content is empty.
-		$probe = Shortcodes::has_tier(
-			[
-				'tier'    => $tier,
-				'product' => $product,
-			],
-			'__creatorreactor_gate_probe__'
-		);
-
-		$matched   = trim( (string) $probe ) !== '';
-		$match_str = $matched ? '1' : '0';
-		echo '<span class="creatorreactor-elementor-gate-marker"'
-			. ' data-creatorreactor-gate="has_tier"'
-			. ' data-creatorreactor-gate-match="' . esc_attr( $match_str ) . '"'
-			. ' data-creatorreactor-gate-logic="' . esc_attr( $container_logic ) . '"'
-			. ' data-creatorreactor-user-roles="' . esc_attr( $roles ) . '"'
-			. ' style="display:none" aria-hidden="true"></span>';
 
 		// phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped -- Shortcodes::has_tier returns kses-filtered HTML (post-content parity).
 		echo Shortcodes::has_tier(

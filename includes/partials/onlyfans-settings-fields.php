@@ -3,7 +3,7 @@
  * OnlyFans tab: OAuth + OFAuth Configuration, Login Button Appearance.
  *
  * Expected variables: $option_name, $opts, $api_key_mask, $webhook_secret_mask,
- * $webhook_url, $settings_cancel_url, $onlyfans_ofauth_instructions_expanded (bool).
+ * $webhook_url, $onlyfans_ofauth_instructions_expanded (bool).
  *
  * @package CreatorReactor
  */
@@ -121,10 +121,6 @@ $of_mode = Admin_Settings::get_onlyfans_oauth_button_size_mode();
 			</table>
 		</div>
 	</div>
-	<div class="creatorreactor-settings-actions">
-		<a class="button" href="<?php echo esc_url( $settings_cancel_url ); ?>"><?php esc_html_e( 'Cancel', 'wp-creatorreactor' ); ?></a>
-		<?php submit_button( __( 'Save Settings', 'wp-creatorreactor' ) ); ?>
-	</div>
 </div>
 <div class="creatorreactor-settings-form-card creatorreactor-provider-login-appearance-card creatorreactor-onlyfans-login-appearance-card">
 	<div class="creatorreactor-settings-panel is-active" data-subtab="onlyfans-oauth-appearance">
@@ -142,10 +138,6 @@ $of_mode = Admin_Settings::get_onlyfans_oauth_button_size_mode();
 			);
 			?>
 		</div>
-	</div>
-	<div class="creatorreactor-settings-actions">
-		<a class="button" href="<?php echo esc_url( $settings_cancel_url ); ?>"><?php esc_html_e( 'Cancel', 'wp-creatorreactor' ); ?></a>
-		<?php submit_button( __( 'Save Settings', 'wp-creatorreactor' ) ); ?>
 	</div>
 </div>
 </div>

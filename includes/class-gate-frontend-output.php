@@ -3,9 +3,10 @@
  * Remove gated layout regions from HTML when the current visitor does not match,
  * so paid/restricted content is not present in “View Source” (CSS-only hiding is not security).
  *
- * Elementor: each gate marker is tied to the widget that rendered it. When a gate fails for the
- * current visitor, only that widget’s subtree is stripped (not an entire shared {@see e-con-inner}),
- * so mixed gates in one section (e.g. Follower + Logged out) do not blank each other for guests.
+ * Elementor: gate nodes include hidden markers, optional wrapper data attributes, or bare
+ * `elementor-widget-creatorreactor_*` roots (Elementor omits inner HTML when a gate renders empty).
+ * For CreatorReactor gate widgets, the parent {@see e-con-inner} is cleared so sibling headings/buttons
+ * in the same column are not leaked to guests.
  *
  * @package CreatorReactor
  * @author  Lou Grossi
@@ -48,7 +49,9 @@ final class Gate_Frontend_Output {
 			return $content;
 		}
 		if ( strpos( $content, 'creatorreactor-elementor-gate-marker' ) === false
-			&& strpos( $content, 'creatorreactor-gutenberg-gate-marker' ) === false ) {
+			&& strpos( $content, 'creatorreactor-gutenberg-gate-marker' ) === false
+			&& strpos( $content, 'data-creatorreactor-gate=' ) === false
+			&& strpos( $content, 'elementor-widget-creatorreactor_' ) === false ) {
 			return $content;
 		}
 
@@ -82,7 +85,10 @@ final class Gate_Frontend_Output {
 
 		$xpath = new \DOMXPath( $dom );
 		$nodes = $xpath->query(
-			'//span[contains(@class,"creatorreactor-elementor-gate-marker") or contains(@class,"creatorreactor-gutenberg-gate-marker")]'
+			'//*[contains(@class,"creatorreactor-gutenberg-gate-marker") '
+			. 'or contains(@class,"creatorreactor-elementor-gate-marker") '
+			. 'or (contains(@class,"elementor-widget-creatorreactor_") '
+			. 'and not(contains(@class,"elementor-widget-creatorreactor_fanvue_oauth")))]'
 		);
 		if ( ! $nodes || $nodes->length === 0 ) {
 			return $html;
@@ -107,10 +113,11 @@ final class Gate_Frontend_Output {
 					'markers'   => [],
 				];
 			}
-			$groups[ $oid ]['markers'][] = [
-				'match' => $marker->getAttribute( 'data-creatorreactor-gate-match' ) === '1' ? '1' : '0',
-				'logic' => $marker->getAttribute( 'data-creatorreactor-gate-logic' ) === 'or' ? 'or' : 'and',
-			];
+			$payload = self::resolve_gate_marker_payload( $marker );
+			if ( $payload === null ) {
+				continue;
+			}
+			$groups[ $oid ]['markers'][] = $payload;
 		}
 
 		foreach ( $groups as $group ) {
@@ -162,8 +169,62 @@ final class Gate_Frontend_Output {
 	}
 
 	/**
+	 * @return array{match:string, logic:string}|null
+	 */
+	private static function resolve_gate_marker_payload( \DOMElement $el ): ?array {
+		$class = $el->getAttribute( 'class' );
+		$logic = $el->getAttribute( 'data-creatorreactor-gate-logic' ) === 'or' ? 'or' : 'and';
+
+		if ( strpos( $class, 'creatorreactor-gutenberg-gate-marker' ) !== false
+			|| strpos( $class, 'creatorreactor-elementor-gate-marker' ) !== false ) {
+			$m     = $el->getAttribute( 'data-creatorreactor-gate-match' );
+			$match = $m === '1' ? '1' : '0';
+			return [
+				'match' => $match,
+				'logic' => $logic,
+			];
+		}
+
+		if ( preg_match( '/elementor-widget-(creatorreactor_[a-z0-9_]+)\b/', $class, $wm ) ) {
+			$wname = $wm[1];
+			if ( $wname === 'creatorreactor_fanvue_oauth' ) {
+				return null;
+			}
+			$shortcode_map = [
+				'creatorreactor_follower'             => 'follower',
+				'creatorreactor_subscriber'            => 'subscriber',
+				'creatorreactor_logged_out'          => 'logged_out',
+				'creatorreactor_logged_in'           => 'logged_in',
+				'creatorreactor_fanvue_connected'      => 'fanvue_connected',
+				'creatorreactor_fanvue_not_connected' => 'fanvue_not_connected',
+			];
+			if ( $wname === 'creatorreactor_has_tier' ) {
+				$probe = Shortcodes::has_tier(
+					[
+						'tier'    => '',
+						'product' => '',
+					],
+					'__creatorreactor_gate_probe__'
+				);
+			} elseif ( isset( $shortcode_map[ $wname ] ) ) {
+				$probe = Shortcodes::apply_enclosing_gate( $shortcode_map[ $wname ], '__creatorreactor_gate_probe__' );
+			} else {
+				return null;
+			}
+			$matched = trim( (string) $probe ) !== '';
+			return [
+				'match' => $matched ? '1' : '0',
+				'logic' => $logic,
+			];
+		}
+
+		return null;
+	}
+
+	/**
 	 * Match front-end gate inheritance: Gutenberg walks up (column → group → columns), then block root;
-	 * Elementor uses the CreatorReactor widget wrapper, then legacy fallbacks.
+	 * Elementor span markers use the widget subtree; CreatorReactor gate widgets (class
+	 * {@see elementor-widget-creatorreactor_*}) use the parent {@see e-con-inner} so sibling widgets are stripped.
 	 */
 	private static function resolve_container_for_marker( \DOMElement $marker ): ?\DOMElement {
 		$class = $marker->getAttribute( 'class' );
@@ -173,7 +234,29 @@ final class Gate_Frontend_Output {
 		if ( strpos( $class, 'creatorreactor-elementor-gate-marker' ) !== false ) {
 			return self::resolve_elementor_container( $marker );
 		}
+		if ( strpos( $class, 'elementor-widget-creatorreactor_' ) !== false
+			&& strpos( $class, 'elementor-widget-creatorreactor_fanvue_oauth' ) === false ) {
+			return self::resolve_elementor_container_for_wrapper_gate( $marker );
+		}
 		return null;
+	}
+
+	/**
+	 * Strip the flex column that holds the gate widget plus any sibling Elementor widgets.
+	 */
+	private static function resolve_elementor_container_for_wrapper_gate( \DOMElement $widget ): ?\DOMElement {
+		$el = $widget->parentNode;
+		while ( $el && $el->nodeType === XML_ELEMENT_NODE ) {
+			if ( $el instanceof \DOMElement ) {
+				$c = $el->getAttribute( 'class' );
+				if ( preg_match( '/(^|\s)e-con-inner(\s|$)/', $c ) ) {
+					return $el;
+				}
+			}
+			$el = $el->parentNode;
+		}
+		$fallback = self::dom_closest_creatorreactor_elementor_widget( $widget );
+		return $fallback instanceof \DOMElement ? $fallback : $widget;
 	}
 
 	private static function resolve_gutenberg_container( \DOMElement $marker ): ?\DOMElement {
