@@ -83,6 +83,13 @@ abstract class Elementor_Widget_Shortcode_Wrap extends \Elementor\Widget_Base {
 		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- shortcode/HTML output (same as post content).
 		echo Shortcodes::apply_enclosing_gate( $tag, $inner );
 	}
+
+	/**
+	 * Must stay public: {@see \Elementor\Element_Base::before_render()} is public; a protected override triggers E_COMPILE_ERROR.
+	 */
+	public function before_render() {
+		parent::before_render();
+	}
 }
 
 /**
