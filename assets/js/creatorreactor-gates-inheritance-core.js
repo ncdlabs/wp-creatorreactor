@@ -258,17 +258,23 @@
 		}
 
 		function scanAndHide() {
-			Array.prototype.slice
-				.call(document.querySelectorAll('.' + HIDDEN_CLASS + ',.' + PREHIDE_CLASS))
-				.forEach(function (el) {
-					el.classList.remove(HIDDEN_CLASS);
-					el.classList.remove(PREHIDE_CLASS);
-				});
-
 			var markers = Array.prototype.slice.call(document.querySelectorAll(MARKER_SELECTOR));
 			if (!markers.length) {
 				return;
 			}
+
+			var containersToReset = [];
+			markers.forEach(function (marker) {
+				var c = findPreferredContainer(marker);
+				if (!c || containersToReset.indexOf(c) !== -1) {
+					return;
+				}
+				containersToReset.push(c);
+			});
+			containersToReset.forEach(function (el) {
+				el.classList.remove(HIDDEN_CLASS);
+				el.classList.remove(PREHIDE_CLASS);
+			});
 
 			var hiddenCount = 0;
 			markers.forEach(function (marker) {
@@ -329,7 +335,7 @@
 				setTimeout(function () {
 					scheduled = false;
 					scanAndHide();
-				}, 50);
+				}, 0);
 			};
 
 			if (!('MutationObserver' in global)) {
@@ -360,18 +366,22 @@
 					setTimeout(startObserver, 30);
 					return;
 				}
+				scanAndHide();
 				observer.observe(document.body, { childList: true, subtree: true });
 
 				var attempts = 0;
-				var maxAttempts = 10;
-				var attemptScan = function () {
+				var maxAttempts = 4;
+				var tailRescan = function () {
 					attempts += 1;
-					scanAndHide();
-					if (attempts < maxAttempts) {
-						setTimeout(attemptScan, 60);
+					if (attempts >= maxAttempts) {
+						return;
 					}
+					setTimeout(function () {
+						scanAndHide();
+						tailRescan();
+					}, 120);
 				};
-				attemptScan();
+				setTimeout(tailRescan, 120);
 			};
 			startObserver();
 		}
@@ -393,7 +403,7 @@
 				setTimeout(function () {
 					scheduled = false;
 					scanAndHide();
-				}, 50);
+				}, 0);
 			};
 
 			if (!('MutationObserver' in global)) {
@@ -417,11 +427,11 @@
 			ensureHideCss();
 			hydrateViewerStateFromMarkers();
 			refreshViewerState();
-			scanAndHide();
 			global.addEventListener('load', sealNoGatePageWhenStillEmpty);
 			if (MODE === 'elementor') {
 				mainElementor();
 			} else {
+				scanAndHide();
 				mainGutenberg();
 			}
 		}

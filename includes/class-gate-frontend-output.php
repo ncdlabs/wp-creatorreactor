@@ -6,7 +6,7 @@
  * Elementor: gate nodes include hidden markers, optional wrapper data attributes, or bare
  * `elementor-widget-creatorreactor_*` roots (Elementor omits inner HTML when a gate renders empty).
  * For CreatorReactor gate widgets, the parent {@see e-con-inner} is cleared so sibling headings/buttons
- * in the same column are not leaked to guests.
+ * in the same column are not leaked to visitors who fail the gate (any session; matches shortcode logic).
  *
  * @package CreatorReactor
  * @author  Lou Grossi
@@ -34,11 +34,9 @@ final class Gate_Frontend_Output {
 		if ( ! is_string( $content ) || $content === '' ) {
 			return $content;
 		}
-		// Security target for this pass: prevent gated paid markup from being present for public visitors.
-		// Logged-in responses can involve role/preview states and should not be destructively stripped.
-		if ( is_user_logged_in() || Role_Impersonation::effective_is_logged_in_for_creatorreactor_gates() ) {
-			return $content;
-		}
+		// Remove regions the effective visitor does not match (roles + impersonation use the same
+		// shortcode probes as {@see Shortcodes::apply_enclosing_gate}). Skipping for logged-in users
+		// caused gated HTML to ship and then disappear in JS, which produced layout shift / content flash.
 		if ( is_admin() && ! wp_doing_ajax() ) {
 			return $content;
 		}
