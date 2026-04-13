@@ -38,4 +38,13 @@ final class Gate_Marker {
 			. ' data-creatorreactor-user-roles="' . esc_attr( $roles_csv ) . '"'
 			. ' style="display:none" aria-hidden="true"></span>';
 	}
+
+	/**
+	 * When a gate shortcode yields no HTML, Elementor may omit the widget subtree entirely; siblings in the
+	 * same {@see e-con-inner} would then leak. A minimal inner node keeps the widget wrapper in the document
+	 * so server strip and client inheritance can target the container.
+	 */
+	public static function elementor_empty_gate_inner_placeholder(): string {
+		return '<span class="creatorreactor-elementor-gate-empty" aria-hidden="true"></span>';
+	}
 }

@@ -80,8 +80,14 @@ abstract class Elementor_Widget_Shortcode_Wrap extends \Elementor\Widget_Base {
 		$s     = $this->get_settings_for_display();
 		$inner = isset( $s['inner_content'] ) ? $s['inner_content'] : '';
 		$tag   = $this->shortcode_tag();
+		$out   = Shortcodes::apply_enclosing_gate( $tag, $inner );
+		if ( $out === '' ) {
+			// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static placeholder markup.
+			echo Gate_Marker::elementor_empty_gate_inner_placeholder();
+			return;
+		}
 		// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- shortcode/HTML output (same as post content).
-		echo Shortcodes::apply_enclosing_gate( $tag, $inner );
+		echo $out;
 	}
 
 	/**
@@ -227,7 +233,7 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 				'gate_hint',
 				[
 					'type' => \Elementor\Controls_Manager::RAW_HTML,
-					'raw'  => '<p class="elementor-descriptor">' . esc_html__( 'Add widgets inside this gate widget (nested content area). Images or other widgets placed as separate elements below the gate are not wrapped by the shortcode; move them into this area so they are omitted from the HTML when the visitor does not match. Front-end output matches the matching shortcode.', 'wp-creatorreactor' ) . '</p>',
+					'raw'  => '<p class="elementor-descriptor">' . esc_html__( 'Add widgets inside this gate widget (nested content area), or place other widgets as siblings in the same Elementor container; when the visitor does not match, the whole container is hidden on the front end. Front-end output matches the matching shortcode.', 'wp-creatorreactor' ) . '</p>',
 				]
 			);
 
@@ -292,8 +298,14 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 		protected function render() {
 			$tag   = $this->shortcode_tag();
 			$inner = $this->render_inner_html();
+			$out   = Shortcodes::apply_enclosing_gate( $tag, $inner );
+			if ( $out === '' ) {
+				// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static placeholder markup.
+				echo Gate_Marker::elementor_empty_gate_inner_placeholder();
+				return;
+			}
 			// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- shortcode/HTML output (same as post content).
-			echo Shortcodes::apply_enclosing_gate( $tag, $inner );
+			echo $out;
 		}
 	}
 
@@ -506,14 +518,20 @@ if ( class_exists( '\Elementor\Modules\NestedElements\Base\Widget_Nested_Base' )
 			$tier    = isset( $s['tier'] ) ? trim( sanitize_text_field( (string) $s['tier'] ) ) : '';
 			$product = isset( $s['product'] ) ? trim( sanitize_text_field( (string) $s['product'] ) ) : '';
 
-			// phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped -- Shortcodes::has_tier returns kses-filtered HTML (post-content parity).
-			echo Shortcodes::has_tier(
+			$out = Shortcodes::has_tier(
 				[
 					'tier'    => $tier,
 					'product' => $product,
 				],
 				$inner
 			);
+			if ( trim( (string) $out ) === '' ) {
+				// phpcs:ignore WordPress.Security.EscapeOutput.OutputNotEscaped -- static placeholder markup.
+				echo Gate_Marker::elementor_empty_gate_inner_placeholder();
+				return;
+			}
+			// phpcs:disable WordPress.Security.EscapeOutput.OutputNotEscaped -- Shortcodes::has_tier returns kses-filtered HTML (post-content parity).
+			echo $out;
 			// phpcs:enable WordPress.Security.EscapeOutput.OutputNotEscaped
 		}
 	}
