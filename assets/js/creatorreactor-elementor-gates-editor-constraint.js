@@ -2,29 +2,21 @@
 (function () {
 	'use strict';
 
-	var HIDDEN_CLASS = 'creatorreactor-elementor-gate-hidden';
-	var INVALID_CLASS = 'creatorreactor-elementor-gate-invalid-multi';
+	var CONTAINER_INVALID_CLASS = 'creatorreactor-elementor-gate-container-invalid';
+	var DUPLICATE_WIDGET_CLASS = 'creatorreactor-elementor-gate-widget-duplicate';
 	var BADGE_CLASS = 'creatorreactor-elementor-gate-invalid-badge';
-	var MARKER_SELECTOR = '.creatorreactor-elementor-gate-marker[data-creatorreactor-gate-match]';
+	var MSG_CLASS = 'creatorreactor-elementor-gate-validation-msg';
+	var GATE_WIDGET_SELECTOR = '.elementor-element.elementor-widget[class*="elementor-widget-creatorreactor_"]:not(.elementor-widget-creatorreactor_fanvue_oauth)';
 	var DEBUG = window.CreatorReactorElementorGateEditorConstraintDebug === true;
 	var lastDebugLogMs = 0;
 
-	var warningText = ( window.CreatorReactorElementorGateEditorConstraint
-		&& window.CreatorReactorElementorGateEditorConstraint.warningText ) ? window.CreatorReactorElementorGateEditorConstraint.warningText : '';
-	if ( ! warningText ) {
-		warningText = 'Only one CreatorReactor content gate widget per container is allowed.';
-	}
-
-	function ensureHideCss() {
-		if (document.querySelector('style[data-creatorreactor-elementor-gate-hidden="1"]')) {
-			return;
-		}
-
-		var style = document.createElement('style');
-		style.setAttribute('data-creatorreactor-elementor-gate-hidden', '1');
-		style.textContent = '.' + HIDDEN_CLASS + '{display:none !important;}';
-		document.head.appendChild(style);
-	}
+	var localized = window.CreatorReactorElementorGateEditorConstraint || {};
+	var containerWarningText = typeof localized.containerWarningText === 'string' && localized.containerWarningText
+		? localized.containerWarningText
+		: 'This container has more than one CreatorReactor gate.';
+	var duplicateWidgetText = typeof localized.duplicateWidgetText === 'string' && localized.duplicateWidgetText
+		? localized.duplicateWidgetText
+		: 'Only one CreatorReactor gate is allowed in this container. Remove or move this widget.';
 
 	function ensureEditorConstraintCss() {
 		if (document.querySelector('style[data-creatorreactor-elementor-gate-editor-constraint="1"]')) {
@@ -34,88 +26,119 @@
 		var style = document.createElement('style');
 		style.setAttribute('data-creatorreactor-elementor-gate-editor-constraint', '1');
 		style.textContent = [
-			'.' + INVALID_CLASS + '{outline:3px solid #f59e0b !important; outline-offset:-3px;}',
-			'.' + INVALID_CLASS + ' > .' + BADGE_CLASS + '{position:absolute; top:8px; left:8px; z-index:999999; background:#f59e0b; color:#111827; font-weight:800; font-size:12px; padding:4px 8px; border-radius:6px; box-shadow:0 6px 20px rgba(17,24,39,.18);}',
-			'.' + INVALID_CLASS + '{position:relative;}'
+			'.' + CONTAINER_INVALID_CLASS + '{position:relative; outline:2px solid #f59e0b !important; outline-offset:-2px;}',
+			'.' + BADGE_CLASS + '{position:absolute; top:6px; left:6px; right:6px; z-index:999999; background:#b45309; color:#fff; font-weight:700; font-size:11px; line-height:1.35; padding:6px 8px; border-radius:4px; box-shadow:0 4px 14px rgba(0,0,0,.2);}',
+			'.' + DUPLICATE_WIDGET_CLASS + '{position:relative; outline:3px solid #dc2626 !important; outline-offset:-3px; background:rgba(220,38,38,.08) !important;}',
+			'.' + MSG_CLASS + '{position:absolute; bottom:0; left:0; right:0; z-index:999998; background:#991b1b; color:#fff; font-size:11px; line-height:1.35; padding:6px 8px; font-weight:600;}',
+			'.' + DUPLICATE_WIDGET_CLASS + ' > .elementor-widget-container{padding-bottom:36px !important;}'
 		].join('');
 		document.head.appendChild(style);
 	}
 
-	function findPreferredElementorContainer(marker) {
-		var widget = marker.closest('.elementor-element.elementor-widget');
-		var container = null;
-
-		if (widget) {
-			container = widget.closest('.elementor-element.e-con')
-				|| widget.closest('.elementor-column')
-				|| widget.closest('.elementor-section');
-			if (container) {
-				return container;
-			}
+	function findGateContainerForWidget(widget) {
+		if (!widget || !widget.closest) {
+			return null;
 		}
-
-		// Fallbacks for unexpected markup.
-		container = marker.closest('.elementor-element.e-con')
-			|| marker.closest('.elementor-column')
-			|| marker.closest('.elementor-section')
-			|| marker.closest('.e-con-boxed')
-			|| marker.closest('.e-con-inner')
-			|| marker.closest('.e-con');
-		return container || null;
+		var container = widget.closest('.elementor-element.e-con')
+			|| widget.closest('.elementor-column')
+			|| widget.closest('.elementor-section');
+		if (container) {
+			return container;
+		}
+		return widget.closest('.e-con-inner')
+			|| widget.closest('.e-con')
+			|| null;
 	}
 
-	function clearInvalidBadgesAndClasses() {
-		Array.prototype.slice
-			.call(document.querySelectorAll('.' + INVALID_CLASS))
-			.forEach(function (el) { el.classList.remove(INVALID_CLASS); });
+	function sortWidgetsDocumentOrder(widgets) {
+		return widgets.slice().sort(function (a, b) {
+			var r = a.compareDocumentPosition(b);
+			if (r & Node.DOCUMENT_POSITION_FOLLOWING) {
+				return -1;
+			}
+			if (r & Node.DOCUMENT_POSITION_PRECEDING) {
+				return 1;
+			}
+			return 0;
+		});
+	}
 
+	function clearConstraintUi() {
+		Array.prototype.slice
+			.call(document.querySelectorAll('.' + CONTAINER_INVALID_CLASS))
+			.forEach(function (el) {
+				el.classList.remove(CONTAINER_INVALID_CLASS);
+			});
+		Array.prototype.slice
+			.call(document.querySelectorAll('.' + DUPLICATE_WIDGET_CLASS))
+			.forEach(function (el) {
+				el.classList.remove(DUPLICATE_WIDGET_CLASS);
+			});
 		Array.prototype.slice
 			.call(document.querySelectorAll('.' + BADGE_CLASS))
-			.forEach(function (el) { el.remove(); });
+			.forEach(function (el) {
+				el.remove();
+			});
+		Array.prototype.slice
+			.call(document.querySelectorAll('.' + MSG_CLASS))
+			.forEach(function (el) {
+				el.remove();
+			});
+	}
+
+	function ensureDuplicateMessage(widget) {
+		if (widget.querySelector('.' + MSG_CLASS)) {
+			return;
+		}
+		var msg = document.createElement('div');
+		msg.className = MSG_CLASS;
+		msg.setAttribute('role', 'alert');
+		msg.textContent = duplicateWidgetText;
+		widget.appendChild(msg);
 	}
 
 	function scanAndEnforce() {
-		// Clear prior results for dynamic re-renders.
-		Array.prototype.slice
-			.call(document.querySelectorAll('.' + HIDDEN_CLASS))
-			.forEach(function (el) { el.classList.remove(HIDDEN_CLASS); });
+		clearConstraintUi();
 
-		clearInvalidBadgesAndClasses();
-
-		var markers = Array.prototype.slice.call(document.querySelectorAll(MARKER_SELECTOR));
-		if (!markers.length) {
+		var widgets = Array.prototype.slice.call(document.querySelectorAll(GATE_WIDGET_SELECTOR));
+		if (!widgets.length) {
 			return;
 		}
 
-		var containerToMarkers = new Map();
-		markers.forEach(function (marker) {
-			var container = findPreferredElementorContainer(marker);
+		var containerToWidgets = new Map();
+		widgets.forEach(function (widget) {
+			var container = findGateContainerForWidget(widget);
 			if (!container) {
 				return;
 			}
-
-			if (!containerToMarkers.has(container)) {
-				containerToMarkers.set(container, []);
+			if (!containerToWidgets.has(container)) {
+				containerToWidgets.set(container, []);
 			}
-			containerToMarkers.get(container).push(marker);
+			containerToWidgets.get(container).push(widget);
 		});
 
-		containerToMarkers.forEach(function (containerMarkers, container) {
-			if (containerMarkers.length > 1) {
-				container.classList.add(INVALID_CLASS);
-				// Outline + badge only — do not display:none the container or nested gates vanish in the canvas.
-
-				// Add badge only once per scan.
-				if (!container.querySelector('.' + BADGE_CLASS)) {
-					var badge = document.createElement('div');
-					badge.className = BADGE_CLASS;
-					badge.textContent = warningText;
-					container.appendChild(badge);
-				}
+		containerToWidgets.forEach(function (rawList, container) {
+			if (rawList.length < 2) {
 				return;
 			}
 
-			container.classList.remove(HIDDEN_CLASS);
+			container.classList.add(CONTAINER_INVALID_CLASS);
+			if (!container.querySelector('.' + BADGE_CLASS)) {
+				var badge = document.createElement('div');
+				badge.className = BADGE_CLASS;
+				badge.setAttribute('role', 'status');
+				badge.textContent = containerWarningText;
+				container.appendChild(badge);
+			}
+
+			var ordered = sortWidgetsDocumentOrder(rawList);
+			ordered.forEach(function (widget, index) {
+				if (index === 0) {
+					return;
+				}
+				widget.classList.add(DUPLICATE_WIDGET_CLASS);
+				ensureDuplicateMessage(widget);
+			});
 		});
 
 		if (DEBUG) {
@@ -124,8 +147,8 @@
 				lastDebugLogMs = now;
 				// eslint-disable-next-line no-console
 				console.log('[CreatorReactor] editor gate constraint scan:', {
-					markers: markers.length,
-					containersChecked: containerToMarkers.size
+					gateWidgets: widgets.length,
+					containersWithGates: containerToWidgets.size
 				});
 			}
 		}
@@ -141,7 +164,7 @@
 			setTimeout(function () {
 				scheduled = false;
 				scanAndEnforce();
-			}, 50);
+			}, 0);
 		};
 
 		if (!('MutationObserver' in window)) {
@@ -154,21 +177,18 @@
 		});
 		observer.observe(document.body, { childList: true, subtree: true });
 
-		// Retry scans shortly after load so we catch Elementor's first re-render.
 		var attempts = 0;
-		var maxAttempts = 10;
+		var maxAttempts = 8;
 		var attemptScan = function () {
 			attempts += 1;
 			scanAndEnforce();
 			if (attempts < maxAttempts) {
-				setTimeout(attemptScan, 60);
+				setTimeout(attemptScan, 100);
 			}
 		};
 		attemptScan();
 	}
 
-	ensureHideCss();
 	ensureEditorConstraintCss();
 	main();
 })();
-

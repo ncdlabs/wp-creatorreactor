@@ -55,7 +55,8 @@ final class Elementor_Integration {
 		}
 
 		add_action( 'wp_enqueue_scripts', [ __CLASS__, 'enqueue_frontend_gates_inheritance_assets' ], 20 );
-		add_action( 'admin_enqueue_scripts', [ __CLASS__, 'enqueue_elementor_gates_editor_constraint_assets' ], 20 );
+		// Editor canvas lives in the preview iframe (not admin); {@see enqueue_elementor_gates_editor_constraint_assets()}.
+		add_action( 'elementor/preview/enqueue_scripts', [ __CLASS__, 'enqueue_elementor_gates_editor_constraint_assets' ], 20 );
 		// After {@see \Elementor\Element_Base::add_render_attributes()} — not `elementor/frontend/before_render`,
 		// which runs earlier and would lose attrs when Elementor re-inits `_wrapper`.
 		add_action( 'elementor/element/after_add_attributes', [ __CLASS__, 'inject_creatorreactor_gate_wrapper_attributes' ], 10, 1 );
@@ -174,21 +175,13 @@ final class Elementor_Integration {
 	}
 
 	/**
-	 * Elementor editor: enforce "1 gate widget per container" so the layout doesn't
-	 * become ambiguous for inheritance logic.
-	 *
-	 * This is only loaded on Elementor builder requests: post.php?action=elementor.
+	 * Elementor editor: flag a container when more than one CreatorReactor gate is present
+	 * (ambiguous for server strip / inheritance). Loaded in the preview iframe only.
 	 *
 	 * @return void
 	 */
 	public static function enqueue_elementor_gates_editor_constraint_assets() {
-		if ( ! is_admin() ) {
-			return;
-		}
-		if ( ! class_exists( __NAMESPACE__ . '\\Editor_Context' ) ) {
-			return;
-		}
-		if ( ! Editor_Context::is_elementor_edit_request() ) {
+		if ( ! class_exists( __NAMESPACE__ . '\\Editor_Context' ) || ! Editor_Context::is_elementor_plugin_active() ) {
 			return;
 		}
 
@@ -206,7 +199,8 @@ final class Elementor_Integration {
 			'creatorreactor-elementor-gates-editor-constraint',
 			'CreatorReactorElementorGateEditorConstraint',
 			[
-				'warningText' => __( 'Only one CreatorReactor content gate widget per container is allowed.', 'wp-creatorreactor' ),
+				'containerWarningText' => __( 'This container has more than one CreatorReactor gate.', 'wp-creatorreactor' ),
+				'duplicateWidgetText'  => __( 'Only one CreatorReactor gate is allowed in this container. Remove or move this widget.', 'wp-creatorreactor' ),
 			]
 		);
 	}
