@@ -22,7 +22,8 @@ if ( ! defined( 'ABSPATH' ) ) {
 final class Gate_Frontend_Output {
 
 	public static function init() {
-		add_filter( 'elementor/frontend/the_content', [ __CLASS__, 'strip_unauthorized_gated_regions' ], 50 );
+		// Late priority so stripping runs after Elementor and other filters finish building markup for guests.
+		add_filter( 'elementor/frontend/the_content', [ __CLASS__, 'strip_unauthorized_gated_regions' ], 99999 );
 		add_filter( 'the_content', [ __CLASS__, 'strip_unauthorized_gated_regions' ], 99 );
 	}
 

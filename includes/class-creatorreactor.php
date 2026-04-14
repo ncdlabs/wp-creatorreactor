@@ -52,6 +52,7 @@ class Plugin {
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-privacy.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-metrics-ingest.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-gate-frontend-output.php';
+			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-elementor-gate-document-validator.php';
 
 			Entitlements::maybe_migrate_fanvue_product_key();
 			Entitlements::maybe_migrate_legacy_follower_tier_stored();
@@ -79,6 +80,7 @@ class Plugin {
 			Privacy::init();
 			Metrics_Ingest::init();
 			Gate_Frontend_Output::init();
+			Elementor_Gate_Document_Validator::init();
 
 			add_filter( 'admin_url', [ __CLASS__, 'filter_admin_url_normalize_path_slashes' ], 5, 3 );
 
