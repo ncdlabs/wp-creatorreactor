@@ -197,6 +197,9 @@
 				if (gate === 'logged_out') {
 					return '1';
 				}
+				if (gate === null || gate === '') {
+					return match === '1' || match === '0' ? match : '0';
+				}
 				return '0';
 			}
 

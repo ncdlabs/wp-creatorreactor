@@ -152,6 +152,17 @@ final class Gate_Frontend_Output {
 			}
 			return false;
 		}
+		// Multiple CreatorReactor widgets in the same Elementor inner (editor allows it in practice):
+		// AND would require every gate to match, which is impossible for mutually exclusive states
+		// (e.g. follower + logged_out). Treat as OR for stripping: keep the inner if any gate matches.
+		if ( count( $markers ) > 1 ) {
+			foreach ( $markers as $m ) {
+				if ( ( $m['match'] ?? '0' ) === '1' ) {
+					return true;
+				}
+			}
+			return false;
+		}
 		foreach ( $markers as $m ) {
 			if ( ( $m['match'] ?? '0' ) !== '1' ) {
 				return false;

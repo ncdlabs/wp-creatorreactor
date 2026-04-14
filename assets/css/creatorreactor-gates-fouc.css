@@ -17,7 +17,7 @@ body:not(.creatorreactor-gates-ready) [class*="wp-block-creatorreactor-"]:has(.c
 
 body:not(.creatorreactor-gates-ready) .e-con-inner:has(.creatorreactor-elementor-gate-marker),
 body:not(.creatorreactor-gates-ready) .elementor-container:has(.creatorreactor-elementor-gate-marker),
-body:not(.creatorreactor-gates-ready) .e-con-inner:has([data-widget_type^="creatorreactor_"]:not([data-widget_type^="creatorreactor_fanvue_oauth"])),
-body:not(.creatorreactor-gates-ready) .elementor-container:has([data-widget_type^="creatorreactor_"]:not([data-widget_type^="creatorreactor_fanvue_oauth"])) {
+body:not(.creatorreactor-gates-ready) .e-con-inner:has([data-widget_type^="creatorreactor_"]:not([data-widget_type^="creatorreactor_fanvue_oauth"]):not([data-widget_type^="creatorreactor_logged_out"])),
+body:not(.creatorreactor-gates-ready) .elementor-container:has([data-widget_type^="creatorreactor_"]:not([data-widget_type^="creatorreactor_fanvue_oauth"]):not([data-widget_type^="creatorreactor_logged_out"])) {
 	visibility: hidden !important;
 }
