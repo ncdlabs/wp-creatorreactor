@@ -8,6 +8,10 @@
  * For CreatorReactor gate widgets, the parent {@see e-con-inner} is cleared so sibling headings/buttons
  * in the same column are not leaked to visitors who fail the gate (any session; matches shortcode logic).
  *
+ * Effective guests: when {@see main} contains {@see elementor-widget-creatorreactor_logged_out}, every
+ * {@see e-con-inner} under that main that does not contain that widget is emptied so only the logged-out
+ * column (plus anything co-located in that inner) remains—plain Elementor widgets in other columns are removed.
+ *
  * @package CreatorReactor
  * @author  Lou Grossi
  * @company ncdLabs
@@ -55,7 +59,11 @@ final class Gate_Frontend_Output {
 		}
 
 		$stripped = self::strip_via_dom( $content );
-		return is_string( $stripped ) ? $stripped : $content;
+		if ( ! is_string( $stripped ) ) {
+			return $content;
+		}
+		$stripped = self::strip_guest_main_inners_without_logged_out_gate( $stripped );
+		return $stripped;
 	}
 
 	/**
@@ -353,5 +361,134 @@ final class Gate_Frontend_Output {
 			$el = $el->parentNode;
 		}
 		return null;
+	}
+
+	/**
+	 * For effective guests only: if {@see main} contains a Logged out gate widget, remove every
+	 * `e-con-inner` under that main that does not contain that widget. Clears non–Creator-Reactor
+	 * columns (e.g. stray Elementor buttons) while leaving header/footer outside {@see main} untouched.
+	 *
+	 * @param string $html Full HTML fragment (post-{@see strip_via_dom()}).
+	 * @return string
+	 */
+	private static function strip_guest_main_inners_without_logged_out_gate( string $html ): string {
+		if ( $html === '' ) {
+			return $html;
+		}
+		if ( ! class_exists( __NAMESPACE__ . '\\Role_Impersonation' ) ) {
+			return $html;
+		}
+		if ( Role_Impersonation::effective_is_logged_in_for_creatorreactor_gates() ) {
+			return $html;
+		}
+		if ( strpos( $html, 'elementor-widget-creatorreactor_logged_out' ) === false ) {
+			return $html;
+		}
+		/**
+		 * Whether to strip main-column Elementor inners that lack a Logged out gate for effective guests.
+		 *
+		 * @param bool   $apply Default true.
+		 * @param string $html  HTML.
+		 */
+		if ( ! apply_filters( 'creatorreactor_strip_guest_main_inners_without_logged_out', true, $html ) ) {
+			return $html;
+		}
+		if ( ! class_exists( '\DOMDocument' ) ) {
+			return $html;
+		}
+
+		libxml_use_internal_errors( true );
+		$dom = new \DOMDocument();
+		$dom->encoding = 'UTF-8';
+		$wrapped = '<div id="creatorreactor-guest-logged-out-strip-root">' . $html . '</div>';
+		$loaded  = $dom->loadHTML(
+			'<?xml encoding="utf-8"?>' . $wrapped,
+			LIBXML_HTML_NOIMPLIED | LIBXML_HTML_NODEFDTD
+		);
+		libxml_clear_errors();
+		if ( ! $loaded ) {
+			return $html;
+		}
+
+		$xpath = new \DOMXPath( $dom );
+		$main  = self::dom_find_guest_strip_main_element( $xpath );
+		if ( ! $main instanceof \DOMElement ) {
+			return $html;
+		}
+
+		$logged_out_in_main = $xpath->query(
+			'.//*[contains(concat(" ", normalize-space(@class), " "), " elementor-widget-creatorreactor_logged_out ")]',
+			$main
+		);
+		if ( ! $logged_out_in_main || $logged_out_in_main->length < 1 ) {
+			return $html;
+		}
+
+		$inners = $xpath->query(
+			'.//div[contains(concat(" ", normalize-space(@class), " "), " e-con-inner ")]',
+			$main
+		);
+		if ( ! $inners || $inners->length < 1 ) {
+			return $html;
+		}
+
+		/** @var list<\DOMElement> $to_clear */
+		$to_clear = [];
+		for ( $i = 0; $i < $inners->length; $i++ ) {
+			$inner = $inners->item( $i );
+			if ( ! $inner instanceof \DOMElement ) {
+				continue;
+			}
+			$has_logged = $xpath->query(
+				'.//*[contains(concat(" ", normalize-space(@class), " "), " elementor-widget-creatorreactor_logged_out ")]',
+				$inner
+			);
+			if ( $has_logged && $has_logged->length > 0 ) {
+				continue;
+			}
+			$to_clear[] = $inner;
+		}
+		if ( $to_clear === [] ) {
+			return $html;
+		}
+
+		usort(
+			$to_clear,
+			static function ( \DOMElement $a, \DOMElement $b ): int {
+				return self::dom_element_depth( $b ) <=> self::dom_element_depth( $a );
+			}
+		);
+		foreach ( $to_clear as $inner ) {
+			self::remove_all_child_nodes( $inner );
+		}
+
+		$root = $dom->getElementById( 'creatorreactor-guest-logged-out-strip-root' );
+		if ( ! $root ) {
+			return $html;
+		}
+		$out = '';
+		foreach ( $root->childNodes as $child ) {
+			$out .= $dom->saveHTML( $child );
+		}
+		return $out;
+	}
+
+	private static function dom_find_guest_strip_main_element( \DOMXPath $xpath ): ?\DOMElement {
+		$set = $xpath->query( "//main[@id='content'] | //main[contains(concat(' ', normalize-space(@class), ' '), ' site-main ')]" );
+		if ( $set && $set->length > 0 ) {
+			$n = $set->item( 0 );
+			return $n instanceof \DOMElement ? $n : null;
+		}
+		return null;
+	}
+
+	private static function dom_element_depth( \DOMElement $el ): int {
+		$d   = 0;
+		$cur = $el->parentNode;
+		while ( $cur && $cur->nodeType === XML_ELEMENT_NODE ) {
+			++$d;
+			$cur = $cur->parentNode;
+		}
+		return $d;
 	}
 }
