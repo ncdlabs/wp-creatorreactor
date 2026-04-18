@@ -3,7 +3,7 @@ Contributors: lougrossi
 Tags: oauth, membership, subscribers, elementor, login
 Requires at least: 5.9
 Tested up to: 6.9
-Stable tag: 2.1.2
+Stable tag: 2.1.6
 Requires PHP: 8.1
 License: GPLv2 or later
 License URI: https://www.gnu.org/licenses/gpl-2.0.html
@@ -16,6 +16,7 @@ CreatorReactor connects your WordPress site to creator platforms so you can:
 * Run OAuth (authorization code + PKCE) for the site’s creator account and store tokens securely.
 * Sync subscriber and follower data on a schedule (WP-Cron) into a local entitlements table.
 * Gate content with shortcodes, Gutenberg blocks, or optional Elementor widgets (logged in/out, tiers, onboarding, Fanvue visitor login).
+* Optional **nav menu** CSS classes (`cr-nav-follower`, `cr-nav-subscriber`, `cr-nav-logged-in`) hide WordPress menu links from guests or the wrong tier (Elementor Pro nav menus use the same menus).
 * Use **Creator** (direct API) or **Agency** (configurable broker) authentication modes.
 
 **Third-party services**
@@ -55,6 +56,15 @@ Development repository: https://github.com/ncdlabs/creatorreactor
 
 == Changelog ==
 
+= 2.1.6 =
+* Elementor gate strip: treat flex container columns (`e-con` + `e-child` / `e-parent`) as the strip boundary when `e-con-inner` is absent (e.g. `e-con-full` layouts) so sibling headings and buttons are removed for guests.
+
+= 2.1.5 =
+* Guest + Logged out column strip: when the theme does not wrap filtered HTML in a main landmark (common for Elementor `elementor/frontend/the_content`), apply the same e-con-inner cleanup to the whole fragment so non–logged-out columns (e.g. nav) are not left visible to guests.
+
+= 2.1.4 =
+* Nav menus: optional CSS classes on menu items (`cr-nav-logged-in`, `cr-nav-follower`, `cr-nav-subscriber`) hide links from guests or wrong tier; same role rules as follower/subscriber shortcodes. Filter `creatorreactor_nav_menu_gate_enabled` to disable.
+
 = 2.1.2 =
 * Aligns with WordPress Plugin Check and PHPCS expectations (database prepare patterns, admin input sanitization, shortcode CSS string style).
 * Release workflow: opt into Node.js 24 for GitHub Actions and exclude `phpcs.xml.dist` from Plugin Check scans.
@@ -64,6 +74,15 @@ Development repository: https://github.com/ncdlabs/creatorreactor
 * Includes CreatorReactor Cloud Metrics ingest sync scheduling improvements.
 
 == Upgrade Notice ==
+
+= 2.1.6 =
+Fix for Elementor Container layouts without `e-con-inner`; verify gated columns on staging.
+
+= 2.1.5 =
+Fix for guest layouts using Elementor content filters without a main landmark wrapper; verify logged-out-only pages in staging.
+
+= 2.1.4 =
+Optional behavior: menu items stay visible until you add the new CSS classes in **Appearance → Menus**.
 
 = 2.1.2 =
 Maintenance release; safe to apply after quick staging checks on OAuth and admin settings saves.

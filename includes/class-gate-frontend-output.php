@@ -12,6 +12,9 @@
  * {@see e-con-inner} under that main that does not contain that widget is emptied so only the logged-out
  * column (plus anything co-located in that inner) remains—plain Elementor widgets in other columns are removed.
  *
+ * Regression coverage: {@see GateFrontendOutputStripEndToEndRegressionTest},
+ * {@see GateFrontendOutputGuestMainStripTest}, {@see GateFrontendOutputElementorContainerResolveTest}.
+ *
  * @package CreatorReactor
  * @author  Lou Grossi
  * @company ncdLabs
@@ -270,6 +273,13 @@ final class Gate_Frontend_Output {
 				if ( preg_match( '/(^|\s)e-con-inner(\s|$)/', $c ) ) {
 					return $el;
 				}
+				// Elementor Container “full width” (and similar) often omits {@see e-con-inner}; widgets sit
+				// directly under {@see e-con} {@see e-child} / {@see e-parent}. Strip that flex column so
+				// headings and buttons next to the gate are removed for guests.
+				if ( preg_match( '/(^|\s)e-con(\s|$)/', $c )
+					&& ( preg_match( '/(^|\s)e-child(\s|$)/', $c ) || preg_match( '/(^|\s)e-parent(\s|$)/', $c ) ) ) {
+					return $el;
+				}
 			}
 			$el = $el->parentNode;
 		}
@@ -364,9 +374,9 @@ final class Gate_Frontend_Output {
 	}
 
 	/**
-	 * For effective guests only: if {@see main} contains a Logged out gate widget, remove every
-	 * `e-con-inner` under that main that does not contain that widget. Clears non–Creator-Reactor
-	 * columns (e.g. stray Elementor buttons) while leaving header/footer outside {@see main} untouched.
+	 * For effective guests only: if the HTML contains a Logged out gate widget, remove every
+	 * `e-con-inner` under {@see main} (when present) or under the whole fragment (Elementor often
+	 * filters content without a theme {@see main} wrapper) that does not contain that widget.
 	 *
 	 * @param string $html Full HTML fragment (post-{@see strip_via_dom()}).
 	 * @return string
@@ -412,6 +422,12 @@ final class Gate_Frontend_Output {
 
 		$xpath = new \DOMXPath( $dom );
 		$main  = self::dom_find_guest_strip_main_element( $xpath );
+		if ( ! $main instanceof \DOMElement ) {
+			// Elementor (and similar) often pass only the builder fragment into {@see 'elementor/frontend/the_content'}
+			// without the theme {@see main} wrapper, so scoped stripping would no-op. Fall back to the parse root.
+			$wrap = $dom->getElementById( 'creatorreactor-guest-logged-out-strip-root' );
+			$main = $wrap instanceof \DOMElement ? $wrap : null;
+		}
 		if ( ! $main instanceof \DOMElement ) {
 			return $html;
 		}

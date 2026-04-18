@@ -45,6 +45,7 @@ class Plugin {
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-gated-content-cache.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-entire-post-content-gate.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-role-impersonation.php';
+			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-nav-menu-gate.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-viewer-state.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-activation-timezone-modal.php';
 			require_once CREATORREACTOR_PLUGIN_DIR . 'includes/class-editor-blocks-prompt.php';
@@ -75,6 +76,7 @@ class Plugin {
 			Gated_Content_Cache::init();
 			Entire_Post_Content_Gate::init();
 			Role_Impersonation::init();
+			Nav_Menu_Gate::init();
 			Viewer_State::init();
 			Banner::init();
 			Privacy::init();

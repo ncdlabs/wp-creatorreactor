@@ -71,7 +71,7 @@ done
 # This script packages as: <PLUGIN_SLUG>/creatorreactor.php ...
 #
 # Match PLUGIN_SLUG to the folder under wp-content/plugins/ on the server (must match for updates).
-# This repo deploys as wp-creatorreactor/ (see deploy.sh). Override if your install uses another name:
+# This repo deploys as wp-creatorreactor/ (see README.md and deploy-hostinger.sh). Override if your install uses another name:
 #   PLUGIN_SLUG=creatorreactor ./build-zip.sh
 
 CURRENT_VERSION="$(sed -nE "s/^define\\( 'CREATORREACTOR_VERSION', '([^']+)'.*/\\1/p" creatorreactor.php)"

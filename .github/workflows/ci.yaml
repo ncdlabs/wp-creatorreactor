@@ -1,0 +1,48 @@
+# Runs on every push and pull request so gate-strip and related regressions are caught before release.
+
+name: CI
+
+on:
+  push:
+    branches:
+      - main
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  php:
+    name: PHP lint and tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      FORCE_JAVASCRIPT_ACTIONS_TO_NODE24: true
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Set up PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          coverage: none
+          tools: composer
+
+      - name: Install Composer dependencies
+        uses: ramsey/composer-install@v3
+        with:
+          composer-options: "--prefer-dist --no-progress"
+
+      - name: PHPCS
+        run: composer run lint | cat
+
+      - name: PHPUnit unit
+        run: composer run test:unit | cat
+
+      - name: PHPUnit regression
+        run: composer run test:regression | cat

@@ -2,7 +2,7 @@
 
 WordPress plugin for OAuth, scheduled subscriber/follower sync, and entitlement checks for creator platforms (Fanvue today; additional products such as OnlyFans are supported at the data model level). It also provides shortcodes, Gutenberg blocks, and optional Elementor widgets for tier gates and Fanvue login on the front end.
 
-**Version:** 2.1 (see `creatorreactor.php`)
+**Version:** See the `Version:` line in the `creatorreactor.php` header (and match **Stable tag** in `readme.txt` for WordPress.org releases).
 
 **Author:** Lou Grossi · [ncdLabs](https://ncdlabs.com)
 
@@ -66,6 +66,25 @@ Broker mode: WordPress → Broker (OAuth / token) → Fanvue API via broker prox
 - **Shortcodes** — `[follower]`, `[subscriber]`, `[logged_out]`, `[logged_in]`, `[has_tier]`, `[onboarding_incomplete]`, `[onboarding_complete]`, `[fanvue_connected]`, `[fanvue_not_connected]`, `[fanvue_login_button]` (see **Shortcodes** tab in settings).  
 - **Gutenberg** — Blocks in category **CreatorReactor** for follower/subscriber gates, logged-in/logged-out visibility, tier checks, onboarding status, Fanvue connected state, and Login with Fanvue (same rules as shortcodes).  
 - **Elementor** — Widgets in category **CreatorReactor** for the same gate types plus Fanvue OAuth and onboarding form output.
+
+### Front-end gate output (Elementor and Gutenberg)
+
+For visitors who fail a gate, the plugin can **strip gated regions from the HTML** before it is sent to the browser (so restricted markup is not present in “View Source”). Behavior is covered by PHPUnit (see **Testing** below). In practice this means:
+
+- **Elementor “flex” / container layouts** — Columns built with `e-con` + `e-child` / `e-parent` (for example `e-con-full`) may omit `e-con-inner`. The stripper resolves the column that wraps the gate widget so **sibling headings, images, and buttons** in the same column are removed for the wrong visitor, not only the empty gate node.
+- **Elementor content filters** — Markup passed through `elementor/frontend/the_content` is often a **fragment without** the theme `<main>` wrapper. Logged-out column cleanup falls back to that fragment so **non-logged-out columns** (for example a nav block next to a "logged out" column) are still cleared for effective guests when a Logged out gate is present.
+
+### Nav menus (WordPress / Elementor Pro)
+
+Elementor’s **Nav Menu** widget uses normal WordPress menus. Optional **CSS classes** on each menu item (under **Appearance → Menus**, enable *CSS Classes* in Screen Options) hide links by tier, using the same role rules as shortcodes:
+
+| Class | Visibility |
+| ----- | ---------- |
+| `cr-nav-logged-in` | Effective visitor is logged in for CreatorReactor gates |
+| `cr-nav-follower` | Follower role, not subscriber (same as `[follower]`) |
+| `cr-nav-subscriber` | Subscriber role only (same as `[subscriber]`) |
+
+If several of these classes appear on one item, the link is shown when **any** of them matches. Disable all menu filtering with `add_filter( 'creatorreactor_nav_menu_gate_enabled', '__return_false' );`.
 
 ## WordPress admin
 
@@ -138,55 +157,50 @@ Higher-level wrappers for profile/subscribers/followers (respecting direct vs br
 
 ## Repository layout
 
-Repository root is the plugin directory. Typical install path is `wp-content/plugins/wp-creatorreactor/` (matches release zips and `deploy.sh`). You can use `creatorreactor/` instead if you prefer; the folder name must stay consistent when updating.
+Repository root is the plugin directory. Typical install path is `wp-content/plugins/wp-creatorreactor/` (matches release zips from `build-zip.sh`). You can use another folder name if you prefer; it must stay consistent when updating.
 
 ```
 .
+├── .github/workflows/
+│   ├── ci.yaml                           # Push + PR: PHPCS, PHPUnit unit + regression
+│   └── release.yaml                      # Published releases: full checks + plugin zip
 ├── creatorreactor.php                    # Bootstrap, constants, activation hooks
+├── readme.txt                            # WordPress.org-style readme (Stable tag ↔ Version)
 ├── uninstall.php                         # Optional full cleanup when uninstall + setting enabled
 ├── assets/
-│   └── js/                               # Front-end/admin JS assets
-├── css/                                  # Plugin styles
+│   ├── css/                              # Front-end styles (gates, login, etc.)
+│   └── js/                               # Front-end/admin JS shipped with the plugin
 ├── docs/
 │   └── compliance-dsar-checklist.md      # Privacy/compliance notes
 ├── includes/
 │   ├── partials/                         # Admin HTML fragments (OAuth/Sync by auth mode)
 │   ├── class-admin-settings.php          # Settings UI, options, migrations, tabs
-│   ├── class-creatorreactor-banner.php   # Admin notice/banner flow
-│   ├── class-broker-client.php           # Broker OAuth + API proxy
+│   ├── class-gate-frontend-output.php    # Server-side removal of gated HTML (Elementor/Gutenberg)
+│   ├── class-nav-menu-gate.php           # Optional menu-item CSS classes for tier visibility
 │   ├── class-creatorreactor.php          # Plugin bootstrap, mode helpers, feature init
 │   ├── class-creatorreactor-blocks.php   # Gutenberg block registration
 │   ├── class-creatorreactor-client.php   # Direct API client
 │   ├── class-creatorreactor-elementor.php
 │   ├── class-creatorreactor-elementor-widgets.php
 │   ├── class-creatorreactor-fan-oauth.php # Visitor Fanvue OAuth (REST)
-│   ├── class-creatorreactor-onboarding.php # Onboarding state and flow helpers
-│   ├── class-creatorreactor-oauth.php    # Site/creator OAuth
 │   ├── class-creatorreactor-shortcodes.php
-│   ├── class-creatorreactor-wp-login.php # WordPress login redirect integration
-│   ├── class-cron.php
-│   ├── class-editor-context.php          # Elementor vs block editor detection (developers)
-│   ├── class-editor-blocks-prompt.php
-│   ├── class-privacy.php                 # Privacy policy and data export/erase hooks
-│   └── class-entitlements.php
+│   ├── class-role-impersonation.php      # Effective visitor for gates and previews
+│   └── …                                 # OAuth providers, cron, entitlements, etc.
 ├── img/                                  # Logos and UI images
-├── js/
-│   ├── creatorreactor-blocks-editor.js   # Block editor script
-│   ├── creatorreactor-editor-prompt-modal.js
-│   └── creatorreactor-users-tab.js       # Users tab UI
+├── js/                                   # Admin-only scripts (Users tab, editor prompts, …)
 ├── templates/
 │   └── onboarding-tos-embedded.php       # Onboarding Terms embed template
 ├── tests/
-│   ├── unit/                             # Unit tests
+│   ├── unit/                             # Unit tests (includes gate-strip regressions)
 │   ├── regression/                       # Regression tests
 │   └── TESTING.md                        # Test suite notes
 ├── build-zip.sh                          # Release zip (see below)
-├── deploy.sh                             # Rsync deployment helper
-├── composer.json                         # Test scripts and dev dependencies
+├── deploy-hostinger.sh                   # Example rsync deploy (adjust host/path/key inside)
+├── composer.json                         # `composer test`, `test:unit`, `test:regression`, `lint`
 └── README.md
 ```
 
-What loads at runtime is defined in `creatorreactor.php` and `includes/class-creatorreactor.php` (other files under `includes/` and `js/` may exist for in-progress or auxiliary use).
+What loads at runtime is defined in `creatorreactor.php` and `includes/class-creatorreactor.php` (see those files for the authoritative list of `require_once` targets).
 
 ## Testing
 
@@ -197,9 +211,20 @@ composer install
 composer test
 composer test:unit
 composer test:regression
+composer run lint
 ```
 
 For suite details, see `tests/TESTING.md`.
+
+### Continuous integration (GitHub Actions)
+
+On **push to `main`** and on **pull requests**, `.github/workflows/ci.yaml` runs PHPCS plus the **unit** and **regression** PHPUnit suites so gate-strip and related logic cannot regress silently. Published releases still use `.github/workflows/release.yaml` (full checks and zip upload).
+
+Important gate-strip regression tests (run in `test:unit`):
+
+- `tests/unit/GateFrontendOutputStripEndToEndRegressionTest.php` — full `Gate_Frontend_Output::strip_unauthorized_gated_regions()` pipeline (`e-con-full` columns and Elementor fragments without `<main>`).
+- `tests/unit/GateFrontendOutputGuestMainStripTest.php` — guest logged-out column strip with and without a `<main>` landmark.
+- `tests/unit/GateFrontendOutputElementorContainerResolveTest.php` — which DOM node is treated as the Elementor column for stripping.
 
 ## Building a release zip
 
@@ -220,7 +245,7 @@ If your server uses a different folder (for example `creatorreactor`), build wit
 
 ### Messy admin state (duplicate plugin, or “deleted successfully” but it still shows)
 
-That usually means **two folders** under `wp-content/plugins/` (for example both `creatorreactor/` and `wp-creatorreactor/`), or files left on disk after a failed delete. **Deactivate** the plugin, then **via SFTP or hosting file manager** remove **every** CreatorReactor folder (`creatorreactor`, `wp-creatorreactor`, and any `-old` copies). Confirm none remain, then upload **one** zip built with `./build-zip.sh` (so only `wp-creatorreactor/` exists) and activate. Using **rsync** (`deploy.sh`) avoids the WordPress uploader entirely.
+That usually means **two folders** under `wp-content/plugins/` (for example both `creatorreactor/` and `wp-creatorreactor/`), or files left on disk after a failed delete. **Deactivate** the plugin, then **via SFTP or hosting file manager** remove **every** CreatorReactor folder (`creatorreactor`, `wp-creatorreactor`, and any `-old` copies). Confirm none remain, then upload **one** zip built with `./build-zip.sh` (so only `wp-creatorreactor/` exists) and activate. Using **rsync** (for example `deploy-hostinger.sh` after editing its SSH target) avoids the WordPress uploader entirely.
 
 ## License
 
